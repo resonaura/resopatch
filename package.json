@@ -1,0 +1,19 @@
+{
+  "name": "resopatch",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* --filter=./apps/* run build",
+    "dev:api": "pnpm --filter @resopatch/api dev",
+    "dev:web": "pnpm --filter @resopatch/web dev",
+    "dev:bot": "pnpm --filter @resopatch/bot dev"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  }
+}
