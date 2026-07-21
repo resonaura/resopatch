@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, UsePipes } from '@nestjs/common';
-import { createSetupSchema, updateSetupSchema } from '@resopatch/shared';
+import { autoLayoutSchema, createSetupSchema, updateSetupSchema } from '@resopatch/shared';
 import { AuthGuard } from '../auth/auth.guard';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { SetupsService } from './setups.service';
@@ -32,6 +32,12 @@ export class SetupsController {
   @Get(':id/rider')
   getRider(@Param('id') id: string) {
     return this.setupsService.getRider(id);
+  }
+
+  @Post(':id/auto-layout')
+  @UsePipes(new ZodValidationPipe(autoLayoutSchema))
+  autoLayout(@Param('id') id: string, @Body() body: ReturnType<typeof autoLayoutSchema.parse>) {
+    return this.setupsService.autoLayout(id, body);
   }
 
   @Post()

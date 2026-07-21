@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, Checkbox, Disclosure, Input, Label, ListBox, Select, TextArea, TextField, toast } from '@heroui/react';
+import { Cable as CableIcon, Layers, Plus, StickyNote, Trash2, Zap, type LucideIcon } from 'lucide-react';
 import {
   CableType,
   CurrentType,
@@ -15,14 +17,66 @@ import {
 } from '@resopatch/shared';
 import { api, type GraphCable, type GraphDevice, type GraphResponse } from '../api/client';
 
-const enumOptions = (e: Record<string, string>) => Object.values(e);
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function enumSelect<T extends string>(values: T[], value: T, onChange: (v: T) => void, label: string) {
   return (
-    <label className="field">
-      <span className="field-label">{label}</span>
-      {children}
-    </label>
+    <Select value={value} onChange={(v) => onChange(v as T)}>
+      <Label>{label}</Label>
+      <Select.Trigger>
+        <Select.Value />
+        <Select.Indicator />
+      </Select.Trigger>
+      <Select.Popover>
+        <ListBox>
+          {values.map((t) => (
+            <ListBox.Item key={t} id={t} textValue={t}>
+              {t}
+            </ListBox.Item>
+          ))}
+        </ListBox>
+      </Select.Popover>
+    </Select>
+  );
+}
+
+function optionalEnumSelect<T extends string>(values: T[], value: T | undefined, onChange: (v: T | undefined) => void, label: string) {
+  return (
+    <Select value={value ?? '__none__'} onChange={(v) => onChange(v === '__none__' ? undefined : (v as T))}>
+      <Label>{label}</Label>
+      <Select.Trigger>
+        <Select.Value />
+        <Select.Indicator />
+      </Select.Trigger>
+      <Select.Popover>
+        <ListBox>
+          <ListBox.Item id="__none__" textValue="—">
+            —
+          </ListBox.Item>
+          {values.map((t) => (
+            <ListBox.Item key={t} id={t} textValue={t}>
+              {t}
+            </ListBox.Item>
+          ))}
+        </ListBox>
+      </Select.Popover>
+    </Select>
+  );
+}
+
+function Section({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: React.ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Disclosure isExpanded={open} onExpandedChange={setOpen} className="border-t border-default-200 pt-2">
+      <Disclosure.Heading>
+        <Disclosure.Trigger className="flex w-full items-center gap-1.5 text-left text-xs font-semibold text-default-500">
+          <Icon className="h-3.5 w-3.5" />
+          {title}
+          <Disclosure.Indicator />
+        </Disclosure.Trigger>
+      </Disclosure.Heading>
+      <Disclosure.Content>
+        <div className="flex flex-col gap-3 pt-2">{children}</div>
+      </Disclosure.Content>
+    </Disclosure>
   );
 }
 
@@ -36,11 +90,13 @@ function DeviceForm({ device, setupId }: { device: GraphDevice; setupId: string 
     setForm(device);
     setAttrsText(JSON.stringify(device.attrs, null, 2));
     setAttrsError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [device.id]);
 
   const save = useMutation({
     mutationFn: (dto: UpdateDeviceDto) => api.updateDevice(device.id, dto),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
+    onError: (err) => toast(err instanceof Error ? err.message : 'Не удалось сохранить', { variant: 'danger' }),
   });
   const remove = useMutation({
     mutationFn: () => api.deleteDevice(device.id),
@@ -81,109 +137,62 @@ function DeviceForm({ device, setupId }: { device: GraphDevice; setupId: string 
   };
 
   return (
-    <div className="inspector-body">
-      <Field label="Название">
-        <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} onBlur={() => commitField('name', form.name)} />
-      </Field>
-      <Field label="Тип">
-        <select value={form.type} onChange={(e) => commitField('type', e.target.value as DeviceType)}>
-          {enumOptions(DeviceType).map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Статус в инвентаре">
-        <select value={form.inventoryStatus} onChange={(e) => commitField('inventoryStatus', e.target.value as InventoryStatus)}>
-          {enumOptions(InventoryStatus).map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Владелец / роль">
-        <input
+    <div className="flex flex-col gap-3">
+      <TextField>
+        <Label>Название</Label>
+        <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} onBlur={() => commitField('name', form.name)} />
+      </TextField>
+      {enumSelect(Object.values(DeviceType), form.type, (v) => commitField('type', v), 'Тип')}
+      {enumSelect(Object.values(InventoryStatus), form.inventoryStatus, (v) => commitField('inventoryStatus', v), 'Статус в инвентаре')}
+      <TextField>
+        <Label>Владелец / роль</Label>
+        <Input
           value={form.ownerRole ?? ''}
           onChange={(e) => setForm((f) => ({ ...f, ownerRole: e.target.value }))}
           onBlur={() => commitField('ownerRole', form.ownerRole || undefined)}
           placeholder="Андрей / Даня-вокал / Даня-барабанщик…"
         />
-      </Field>
+      </TextField>
 
-      <details open>
-        <summary>Питание</summary>
-        <Field label="Требует питание">
-          <input type="checkbox" checked={form.powerRequired} onChange={(e) => commitField('powerRequired', e.target.checked)} />
-        </Field>
-        <Field label="Источник питания">
-          <select value={form.powerSourceType} onChange={(e) => commitField('powerSourceType', e.target.value as PowerSourceType)}>
-            {enumOptions(PowerSourceType).map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Тип USB-хоста">
-          <select value={form.hostUsbType} onChange={(e) => commitField('hostUsbType', e.target.value as HostUsbType)}>
-            {enumOptions(HostUsbType).map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <div className="field-row">
-          <Field label="Ток (AC/DC)">
-            <select
-              value={form.power.currentType ?? ''}
-              onChange={(e) => commitField('power', { ...form.power, currentType: (e.target.value || undefined) as CurrentType | undefined })}
-            >
-              <option value="">—</option>
-              {enumOptions(CurrentType).map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Полярность">
-            <select
-              value={form.power.polarity ?? ''}
-              onChange={(e) => commitField('power', { ...form.power, polarity: (e.target.value || undefined) as Polarity | undefined })}
-            >
-              <option value="">—</option>
-              {enumOptions(Polarity).map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
-          </Field>
+      <Section title="Питание" icon={Zap}>
+        <Checkbox isSelected={form.powerRequired} onChange={(v) => commitField('powerRequired', v)}>
+          Требует питание
+        </Checkbox>
+        {enumSelect(Object.values(PowerSourceType), form.powerSourceType, (v) => commitField('powerSourceType', v), 'Источник питания')}
+        {enumSelect(Object.values(HostUsbType), form.hostUsbType, (v) => commitField('hostUsbType', v), 'Тип USB-хоста')}
+        <div className="grid grid-cols-2 gap-2">
+          {optionalEnumSelect(
+            Object.values(CurrentType),
+            form.power.currentType,
+            (v) => commitField('power', { ...form.power, currentType: v }),
+            'Ток (AC/DC)',
+          )}
+          {optionalEnumSelect(Object.values(Polarity), form.power.polarity, (v) => commitField('power', { ...form.power, polarity: v }), 'Полярность')}
         </div>
-        <div className="field-row">
-          <Field label="Напряжение, В">
-            <input
+        <div className="grid grid-cols-2 gap-2">
+          <TextField>
+            <Label>Напряжение, В</Label>
+            <Input
               type="number"
               value={form.power.voltageV ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, power: { ...f.power, voltageV: e.target.value === '' ? undefined : Number(e.target.value) } }))}
               onBlur={() => commitField('power', form.power)}
             />
-          </Field>
-          <Field label="Ток, мА">
-            <input
+          </TextField>
+          <TextField>
+            <Label>Ток, мА</Label>
+            <Input
               type="number"
               value={form.power.currentMA ?? ''}
               onChange={(e) => setForm((f) => ({ ...f, power: { ...f.power, currentMA: e.target.value === '' ? undefined : Number(e.target.value) } }))}
               onBlur={() => commitField('power', form.power)}
             />
-          </Field>
+          </TextField>
         </div>
-        <div className="field-row">
-          <Field label="Макс. отдача, мА">
-            <input
+        <div className="grid grid-cols-2 gap-2">
+          <TextField>
+            <Label>Макс. отдача, мА</Label>
+            <Input
               type="number"
               value={form.power.maxOutputCurrentMA ?? ''}
               onChange={(e) =>
@@ -191,9 +200,10 @@ function DeviceForm({ device, setupId }: { device: GraphDevice; setupId: string 
               }
               onBlur={() => commitField('power', form.power)}
             />
-          </Field>
-          <Field label="Макс. отдача, Вт">
-            <input
+          </TextField>
+          <TextField>
+            <Label>Макс. отдача, Вт</Label>
+            <Input
               type="number"
               value={form.power.maxOutputPowerW ?? ''}
               onChange={(e) =>
@@ -201,51 +211,39 @@ function DeviceForm({ device, setupId }: { device: GraphDevice; setupId: string 
               }
               onBlur={() => commitField('power', form.power)}
             />
-          </Field>
+          </TextField>
         </div>
         {powerBudget.data && (
-          <div className={`power-budget ${powerBudget.data.overBudget ? 'over' : 'ok'}`}>
+          <div className={`rounded-lg border p-2.5 text-xs ${powerBudget.data.overBudget ? 'border-danger text-danger' : 'border-success'}`}>
             <div>
               Нагрузка: {powerBudget.data.drawnPowerW.toFixed(1)}W
               {powerBudget.data.maxOutputPowerW != null ? ` / ${powerBudget.data.maxOutputPowerW}W` : ''}
               {powerBudget.data.overBudget ? ' — ПРЕВЫШЕНО' : ''}
             </div>
             {powerBudget.data.unresolvedLoads.length > 0 && (
-              <div className="muted">Без указанного потребления: {powerBudget.data.unresolvedLoads.map((l) => l.deviceName).join(', ')}</div>
+              <div className="text-default-500">Без указанного потребления: {powerBudget.data.unresolvedLoads.map((l) => l.deviceName).join(', ')}</div>
             )}
           </div>
         )}
-      </details>
+      </Section>
 
       {form.type === DeviceType.PEDAL && (
-        <details open>
-          <summary>Педаль</summary>
-          <div className="field-row">
-            <Field label="Стерео вход">
-              <input
-                type="checkbox"
-                checked={form.pedal?.isStereoIn ?? false}
-                onChange={(e) => commitField('pedal', { ...(form.pedal ?? {}), isStereoIn: e.target.checked })}
-              />
-            </Field>
-            <Field label="Стерео выход">
-              <input
-                type="checkbox"
-                checked={form.pedal?.isStereoOut ?? false}
-                onChange={(e) => commitField('pedal', { ...(form.pedal ?? {}), isStereoOut: e.target.checked })}
-              />
-            </Field>
+        <Section title="Педаль" icon={Layers}>
+          <div className="grid grid-cols-2 gap-2">
+            <Checkbox isSelected={form.pedal?.isStereoIn ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoIn: v })}>
+              Стерео вход
+            </Checkbox>
+            <Checkbox isSelected={form.pedal?.isStereoOut ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoOut: v })}>
+              Стерео выход
+            </Checkbox>
           </div>
-          <div className="field-row">
-            <Field label="Есть пресеты">
-              <input
-                type="checkbox"
-                checked={form.pedal?.hasPresets ?? false}
-                onChange={(e) => commitField('pedal', { ...(form.pedal ?? {}), hasPresets: e.target.checked })}
-              />
-            </Field>
-            <Field label="Кол-во пресетов">
-              <input
+          <div className="grid grid-cols-2 gap-2 items-end">
+            <Checkbox isSelected={form.pedal?.hasPresets ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasPresets: v })}>
+              Есть пресеты
+            </Checkbox>
+            <TextField>
+              <Label>Кол-во пресетов</Label>
+              <Input
                 type="number"
                 value={form.pedal?.presetCount ?? ''}
                 onChange={(e) =>
@@ -253,17 +251,14 @@ function DeviceForm({ device, setupId }: { device: GraphDevice; setupId: string 
                 }
                 onBlur={() => commitField('pedal', form.pedal ?? undefined)}
               />
-            </Field>
+            </TextField>
           </div>
-          <Field label="MIDI-управление пресетами">
-            <input
-              type="checkbox"
-              checked={form.pedal?.hasMidiControl ?? false}
-              onChange={(e) => commitField('pedal', { ...(form.pedal ?? {}), hasMidiControl: e.target.checked })}
-            />
-          </Field>
-          <Field label="Smart-режимы (через запятую)">
-            <input
+          <Checkbox isSelected={form.pedal?.hasMidiControl ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasMidiControl: v })}>
+            MIDI-управление пресетами
+          </Checkbox>
+          <TextField>
+            <Label>Smart-режимы (через запятую)</Label>
+            <Input
               value={(form.pedal?.smartModes ?? []).join(', ')}
               onChange={(e) =>
                 setForm((f) => ({
@@ -273,23 +268,20 @@ function DeviceForm({ device, setupId }: { device: GraphDevice; setupId: string 
               }
               onBlur={() => commitField('pedal', form.pedal ?? undefined)}
             />
-          </Field>
-        </details>
+          </TextField>
+        </Section>
       )}
 
-      <details>
-        <summary>Порты ({device.ports.length})</summary>
+      <Section title={`Порты (${device.ports.length})`} icon={CableIcon}>
         {device.ports.map((port) => (
-          <div key={port.id} className="port-row-editor">
-            <input
-              defaultValue={port.name}
-              onBlur={(e) => e.target.value !== port.name && updatePort.mutate({ id: port.id, dto: { name: e.target.value } })}
-            />
+          <div key={port.id} className="grid grid-cols-[1fr_1fr_70px_auto] items-center gap-1.5">
+            <Input defaultValue={port.name} onBlur={(e) => e.target.value !== port.name && updatePort.mutate({ id: port.id, dto: { name: e.target.value } })} />
             <select
               defaultValue={port.portType}
+              className="select__trigger h-9 rounded-lg border border-default-200 bg-surface-secondary px-2 text-xs"
               onChange={(e) => updatePort.mutate({ id: port.id, dto: { portType: e.target.value as PortType } })}
             >
-              {enumOptions(PortType).map((t) => (
+              {Object.values(PortType).map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
@@ -297,50 +289,55 @@ function DeviceForm({ device, setupId }: { device: GraphDevice; setupId: string 
             </select>
             <select
               defaultValue={port.direction}
+              className="select__trigger h-9 rounded-lg border border-default-200 bg-surface-secondary px-2 text-xs"
               onChange={(e) => updatePort.mutate({ id: port.id, dto: { direction: e.target.value as PortDirection } })}
             >
-              {enumOptions(PortDirection).map((t) => (
+              {Object.values(PortDirection).map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
               ))}
             </select>
-            <button className="btn-danger-mini" onClick={() => deletePort.mutate(port.id)}>
-              ×
-            </button>
+            <Button isIconOnly size="sm" variant="danger" onPress={() => deletePort.mutate(port.id)}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
           </div>
         ))}
-        <button className="btn-secondary" onClick={() => addPort.mutate()}>
-          + Порт
-        </button>
-      </details>
+        <Button size="sm" variant="secondary" onPress={() => addPort.mutate()}>
+          <Plus className="h-3.5 w-3.5" />
+          Порт
+        </Button>
+      </Section>
 
-      <details>
-        <summary>Заметки и доп. поля</summary>
-        <Field label="Заметки">
-          <textarea
+      <Section title="Заметки и доп. поля" icon={StickyNote}>
+        <TextField>
+          <Label>Заметки</Label>
+          <TextArea
             value={form.notes ?? ''}
             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
             onBlur={() => commitField('notes', form.notes || undefined)}
             rows={3}
           />
-        </Field>
-        <Field label="Изображение (URL)">
-          <input
+        </TextField>
+        <TextField>
+          <Label>Изображение (URL)</Label>
+          <Input
             value={form.imageUrl ?? ''}
             onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
             onBlur={() => commitField('imageUrl', form.imageUrl || undefined)}
           />
-        </Field>
-        <Field label="Произвольные атрибуты (JSON)">
-          <textarea value={attrsText} onChange={(e) => setAttrsText(e.target.value)} onBlur={commitAttrs} rows={6} className="mono" />
-        </Field>
-        {attrsError && <div className="error-text">{attrsError}</div>}
-      </details>
+        </TextField>
+        <TextField>
+          <Label>Произвольные атрибуты (JSON)</Label>
+          <TextArea value={attrsText} onChange={(e) => setAttrsText(e.target.value)} onBlur={commitAttrs} rows={6} className="font-mono text-xs" />
+        </TextField>
+        {attrsError && <p className="text-sm text-danger">{attrsError}</p>}
+      </Section>
 
-      <button className="btn-danger" onClick={() => remove.mutate()}>
+      <Button variant="danger" fullWidth onPress={() => remove.mutate()} className="mt-2">
+        <Trash2 className="h-3.5 w-3.5" />
         Удалить устройство
-      </button>
+      </Button>
     </div>
   );
 }
@@ -350,7 +347,7 @@ function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: stri
   const save = useMutation({
     mutationFn: (dto: UpdateCableDto) => api.updateCable(cable.id, dto),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
-    onError: (err) => alert(err instanceof Error ? err.message : 'Ошибка'),
+    onError: (err) => toast(err instanceof Error ? err.message : 'Ошибка', { variant: 'danger' }),
   });
   const remove = useMutation({
     mutationFn: () => api.deleteCable(cable.id),
@@ -363,41 +360,36 @@ function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: stri
   const targetPort = targetDevice?.ports.find((p) => p.id === cable.targetPortId);
 
   return (
-    <div className="inspector-body">
-      <div className="cable-endpoints">
+    <div className="flex flex-col gap-3">
+      <div className="rounded-lg border border-default-200 bg-surface-secondary p-2.5 text-xs">
         <div>
           {sourceDevice?.name} — {sourcePort?.name}
         </div>
-        <div className="muted">↓</div>
+        <div className="text-default-500">↓</div>
         <div>
           {targetDevice?.name} — {targetPort?.name}
         </div>
       </div>
-      <Field label="Тип кабеля">
-        <select defaultValue={cable.cableType} onChange={(e) => save.mutate({ cableType: e.target.value as CableType })}>
-          {enumOptions(CableType).map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Длина, м">
-        <input type="number" step="0.1" defaultValue={cable.length} onBlur={(e) => save.mutate({ length: Number(e.target.value) })} />
-      </Field>
-      <Field label="Цвет">
-        <input defaultValue={cable.color ?? ''} onBlur={(e) => save.mutate({ color: e.target.value || undefined })} />
-      </Field>
-      <Field label="Патч-кабель">
-        <input type="checkbox" defaultChecked={cable.isPatchCable} onChange={(e) => save.mutate({ isPatchCable: e.target.checked })} />
-      </Field>
-      <Field label="Наш кабель (не площадки)">
-        <input type="checkbox" defaultChecked={cable.isUserOwned} onChange={(e) => save.mutate({ isUserOwned: e.target.checked })} />
-      </Field>
-      {cable.adapterName && <div className="muted">Через переходник: {cable.adapterName}</div>}
-      <button className="btn-danger" onClick={() => remove.mutate()}>
+      {enumSelect(Object.values(CableType), cable.cableType, (v) => save.mutate({ cableType: v }), 'Тип кабеля')}
+      <TextField>
+        <Label>Длина, м</Label>
+        <Input type="number" step="0.1" defaultValue={cable.length} onBlur={(e) => save.mutate({ length: Number(e.target.value) })} />
+      </TextField>
+      <TextField>
+        <Label>Цвет</Label>
+        <Input defaultValue={cable.color ?? ''} onBlur={(e) => save.mutate({ color: e.target.value || undefined })} />
+      </TextField>
+      <Checkbox isSelected={cable.isPatchCable} onChange={(v) => save.mutate({ isPatchCable: v })}>
+        Патч-кабель
+      </Checkbox>
+      <Checkbox isSelected={cable.isUserOwned} onChange={(v) => save.mutate({ isUserOwned: v })}>
+        Наш кабель (не площадки)
+      </Checkbox>
+      {cable.adapterName && <p className="text-xs text-default-500">Через переходник: {cable.adapterName}</p>}
+      <Button variant="danger" fullWidth onPress={() => remove.mutate()} className="mt-2">
+        <Trash2 className="h-3.5 w-3.5" />
         Удалить кабель
-      </button>
+      </Button>
     </div>
   );
 }
@@ -407,15 +399,13 @@ export type Selection = { kind: 'device'; id: string } | { kind: 'cable'; id: st
 export default function Inspector({ graph, selection, setupId }: { graph: GraphResponse; selection: Selection; setupId: string }) {
   if (!selection) {
     return (
-      <div className="inspector">
-        <div className="inspector-empty">
-          Выбери устройство или кабель на канвасе.
-          <br />
-          <br />
-          Устройств: {graph.devices.length}
-          <br />
-          Кабелей: {graph.cables.length}
-        </div>
+      <div className="min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-4 text-sm text-default-500">
+        Выбери устройство или кабель на канвасе.
+        <br />
+        <br />
+        Устройств: {graph.devices.length}
+        <br />
+        Кабелей: {graph.cables.length}
       </div>
     );
   }
@@ -424,8 +414,8 @@ export default function Inspector({ graph, selection, setupId }: { graph: GraphR
     const device = graph.devices.find((d) => d.id === selection.id);
     if (!device) return null;
     return (
-      <div className="inspector">
-        <h3>{device.name}</h3>
+      <div className="min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
+        <h3 className="mb-2.5 text-sm font-semibold">{device.name}</h3>
         <DeviceForm key={device.id} device={device} setupId={setupId} />
       </div>
     );
@@ -434,8 +424,8 @@ export default function Inspector({ graph, selection, setupId }: { graph: GraphR
   const cable = graph.cables.find((c) => c.id === selection.id);
   if (!cable) return null;
   return (
-    <div className="inspector">
-      <h3>Кабель</h3>
+    <div className="min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
+      <h3 className="mb-2.5 text-sm font-semibold">Кабель</h3>
       <CableForm key={cable.id} cable={cable} setupId={setupId} graph={graph} />
     </div>
   );

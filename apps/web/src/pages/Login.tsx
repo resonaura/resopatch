@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { Button, Card, Input, Label, TextField } from '@heroui/react';
 import { api } from '../api/client';
 
 export default function Login({ onSuccess }: { onSuccess: () => void }) {
@@ -21,21 +22,26 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <div className="center-screen">
-      <form className="login-card" onSubmit={submit}>
-        <h1>Resopatch</h1>
-        <p className="muted">Конструктор сценического сетапа Resonaura</p>
-        <input
-          type="password"
-          placeholder="Пароль"
-          value={passphrase}
-          onChange={(e) => setPassphrase(e.target.value)}
-          autoFocus
-        />
-        {error && <div className="error-text">{error}</div>}
-        <button type="submit" disabled={busy || !passphrase}>
-          {busy ? 'Входим…' : 'Войти'}
-        </button>
+    <div className="flex h-full items-center justify-center">
+      <form onSubmit={submit}>
+        <Card className="w-80">
+          <Card.Header>
+            <Card.Title>Resopatch</Card.Title>
+            <Card.Description>Конструктор сценического сетапа Resonaura</Card.Description>
+          </Card.Header>
+          <Card.Content className="flex flex-col gap-3">
+            <TextField autoFocus isRequired>
+              <Label>Пароль</Label>
+              <Input type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
+            </TextField>
+            {error && <p className="text-sm text-danger">{error}</p>}
+          </Card.Content>
+          <Card.Footer>
+            <Button type="submit" fullWidth isDisabled={busy || !passphrase} isPending={busy}>
+              Войти
+            </Button>
+          </Card.Footer>
+        </Card>
       </form>
     </div>
   );

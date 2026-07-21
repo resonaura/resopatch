@@ -15,13 +15,16 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CABLE_COLORS, CableType } from '@resopatch/shared';
+import { Button, Table, Tabs } from '@heroui/react';
+import { ClipboardList, LayoutGrid, ListMusic, LogOut, Settings, Wand2 } from 'lucide-react';
+import { CABLE_COLORS, CableType, type InputListRow, type RiderRow } from '@resopatch/shared';
 import { api } from '../api/client';
 import DeviceNode, { type DeviceNodeData } from '../components/DeviceNode';
 import Sidebar from '../components/Sidebar';
 import Inspector, { type Selection } from '../components/Inspector';
 import NewDeviceModal from '../components/NewDeviceModal';
 import NewCableModal from '../components/NewCableModal';
+import SettingsModal from '../components/SettingsModal';
 
 const nodeTypes = { device: DeviceNode };
 
@@ -32,6 +35,7 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
 
   const [selection, setSelection] = useState<Selection>(null);
   const [showNewDevice, setShowNewDevice] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
   const [view, setView] = useState<'canvas' | 'input-list' | 'rider'>('canvas');
 
@@ -89,6 +93,24 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
     onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
   });
 
+  const autoLayout = useMutation({
+    mutationFn: (sizes: Record<string, { width: number; height: number }>) => api.autoLayout(setupId, sizes),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
+  });
+
+  const runAutoLayout = useCallback(() => {
+    // React Flow measures each node's real rendered size via ResizeObserver and reflects it
+    // back onto `node.measured` — using that (instead of guessing dimensions server-side) is
+    // what keeps the packed layout from overlapping nodes with more ports / longer names.
+    const sizes: Record<string, { width: number; height: number }> = {};
+    for (const n of nodes) {
+      const width = n.measured?.width ?? n.width;
+      const height = n.measured?.height ?? n.height;
+      if (width && height) sizes[n.id] = { width, height };
+    }
+    autoLayout.mutate(sizes);
+  }, [nodes, autoLayout]);
+
   const onNodeDragStop = useCallback(
     (_: unknown, node: Node) => {
       movePosition.mutate({ id: node.id, position: { x: node.position.x, y: node.position.y } });
@@ -105,8 +127,8 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
   const onEdgeClick: EdgeMouseHandler = useCallback((_, edge) => setSelection({ kind: 'cable', id: edge.id }), []);
   const onPaneClick = useCallback(() => setSelection(null), []);
 
-  if (graphQuery.isLoading) return <div className="center-screen">Загрузка сетапа…</div>;
-  if (graphQuery.isError || !graph) return <div className="center-screen">Не удалось загрузить сетап.</div>;
+  if (graphQuery.isLoading) return <div className="flex h-full items-center justify-center text-default-500">Загрузка сетапа…</div>;
+  if (graphQuery.isError || !graph) return <div className="flex h-full items-center justify-center text-default-500">Не удалось загрузить сетап.</div>;
 
   const pendingSourcePort = pendingConnection ? graph.devices.flatMap((d) => d.ports).find((p) => p.id === pendingConnection.sourceHandle) : null;
   const pendingTargetPort = pendingConnection ? graph.devices.flatMap((d) => d.ports).find((p) => p.id === pendingConnection.targetHandle) : null;
@@ -114,35 +136,66 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
   const pendingTargetDevice = pendingConnection ? graph.devices.find((d) => d.id === pendingConnection.target) : null;
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <h1>Resopatch</h1>
-        <span className="muted">{setupName}</span>
-        <nav className="view-tabs">
-          <button className={view === 'canvas' ? 'active' : ''} onClick={() => setView('canvas')}>
-            Схема
-          </button>
-          <button className={view === 'input-list' ? 'active' : ''} onClick={() => setView('input-list')}>
-            Input List
-          </button>
-          <button className={view === 'rider' ? 'active' : ''} onClick={() => setView('rider')}>
-            Райдер
-          </button>
-        </nav>
-        <button
-          className="btn-secondary"
-          onClick={async () => {
+    <div className="flex h-full flex-col">
+      <header className="flex items-center gap-3 border-b border-default-200 bg-surface px-4 py-2">
+        <h1 className="text-sm font-semibold">Resopatch</h1>
+        <span className="text-xs text-default-500">{setupName}</span>
+        <Tabs
+          selectedKey={view}
+          onSelectionChange={(key) => setView(key as typeof view)}
+          variant="secondary"
+          className="ml-auto"
+        >
+          <Tabs.ListContainer>
+            <Tabs.List aria-label="Вид">
+              <Tabs.Tab id="canvas">
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Схема
+              </Tabs.Tab>
+              <Tabs.Tab id="input-list">
+                <Tabs.Separator />
+                <ListMusic className="h-3.5 w-3.5" />
+                Input List
+              </Tabs.Tab>
+              <Tabs.Tab id="rider">
+                <Tabs.Separator />
+                <ClipboardList className="h-3.5 w-3.5" />
+                Райдер
+              </Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
+        </Tabs>
+        {view === 'canvas' && (
+          <Button size="sm" variant="secondary" onPress={runAutoLayout} isPending={autoLayout.isPending}>
+            <Wand2 className="h-3.5 w-3.5" />
+            Упорядочить
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onPress={() => setShowSettings(true)}>
+          <Settings className="h-3.5 w-3.5" />
+          Настройки
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onPress={async () => {
             await api.logout();
             location.reload();
           }}
         >
+          <LogOut className="h-3.5 w-3.5" />
           Выйти
-        </button>
+        </Button>
       </header>
-      <div className="app-body">
-        <Sidebar devices={graph.devices} selectedId={selection?.kind === 'device' ? selection.id : null} onSelect={(id) => setSelection({ kind: 'device', id })} onNewDevice={() => setShowNewDevice(true)} />
+      <div className="grid min-h-0 flex-1 grid-cols-[260px_1fr_320px]">
+        <Sidebar
+          devices={graph.devices}
+          selectedId={selection?.kind === 'device' ? selection.id : null}
+          onSelect={(id) => setSelection({ kind: 'device', id })}
+          onNewDevice={() => setShowNewDevice(true)}
+        />
         {view === 'canvas' && (
-          <div className="canvas-wrap">
+          <div className="relative min-h-0">
             <ReactFlowProvider>
               <ReactFlow
                 nodes={nodes}
@@ -165,11 +218,12 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
             </ReactFlowProvider>
           </div>
         )}
-        {view === 'input-list' && <ListView kind="input-list" setupId={setupId} />}
-        {view === 'rider' && <ListView kind="rider" setupId={setupId} />}
+        {view === 'input-list' && <InputListTable setupId={setupId} />}
+        {view === 'rider' && <RiderTable setupId={setupId} />}
         <Inspector graph={graph} selection={selection} setupId={setupId} />
       </div>
       {showNewDevice && <NewDeviceModal setupId={setupId} onClose={() => setShowNewDevice(false)} />}
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {pendingConnection && pendingSourcePort && pendingTargetPort && pendingSourceDevice && pendingTargetDevice && (
         <NewCableModal
           setupId={setupId}
@@ -186,74 +240,77 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
   );
 }
 
-function ListView({ kind, setupId }: { kind: 'input-list' | 'rider'; setupId: string }) {
-  return kind === 'input-list' ? <InputListTable setupId={setupId} /> : <RiderTable setupId={setupId} />;
-}
-
 function InputListTable({ setupId }: { setupId: string }) {
   const query = useQuery({ queryKey: ['input-list', setupId], queryFn: () => api.getInputList(setupId) });
-  if (query.isLoading) return <div className="list-view">Загрузка…</div>;
-  if (query.isError || !query.data) return <div className="list-view">Ошибка загрузки.</div>;
+  if (query.isLoading) return <div className="overflow-auto p-4 text-sm text-default-500">Загрузка…</div>;
+  if (query.isError || !query.data) return <div className="overflow-auto p-4 text-sm text-default-500">Ошибка загрузки.</div>;
+
+  const columns: { key: keyof InputListRow; label: string }[] = [
+    { key: 'channel', label: 'CH' },
+    { key: 'sourceName', label: 'Источник' },
+    { key: 'connector', label: 'Разъём' },
+    { key: 'routing', label: 'Маршрут' },
+    { key: 'zone', label: 'Зона' },
+    { key: 'owner', label: 'Владелец' },
+  ];
 
   return (
-    <div className="list-view">
-      <table>
-        <thead>
-          <tr>
-            <th>CH</th>
-            <th>Источник</th>
-            <th>Разъём</th>
-            <th>Маршрут</th>
-            <th>Зона</th>
-            <th>Владелец</th>
-          </tr>
-        </thead>
-        <tbody>
-          {query.data.map((r) => (
-            <tr key={r.channel}>
-              <td>{r.channel}</td>
-              <td>{r.sourceName}</td>
-              <td>{r.connector}</td>
-              <td>{r.routing}</td>
-              <td>{r.zone}</td>
-              <td>{r.owner}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="min-h-0 overflow-auto p-4">
+      <Table>
+        <Table.ScrollContainer>
+          <Table.Content aria-label="Input list">
+            <Table.Header>
+              {columns.map((c) => (
+                <Table.Column key={c.key}>{c.label}</Table.Column>
+              ))}
+            </Table.Header>
+            <Table.Body>
+              {query.data.map((r) => (
+                <Table.Row key={r.channel}>
+                  {columns.map((c) => (
+                    <Table.Cell key={c.key}>{String(r[c.key])}</Table.Cell>
+                  ))}
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Content>
+        </Table.ScrollContainer>
+      </Table>
     </div>
   );
 }
 
 function RiderTable({ setupId }: { setupId: string }) {
   const query = useQuery({ queryKey: ['rider', setupId], queryFn: () => api.getRider(setupId) });
-  if (query.isLoading) return <div className="list-view">Загрузка…</div>;
-  if (query.isError || !query.data) return <div className="list-view">Ошибка загрузки.</div>;
+  if (query.isLoading) return <div className="overflow-auto p-4 text-sm text-default-500">Загрузка…</div>;
+  if (query.isError || !query.data) return <div className="overflow-auto p-4 text-sm text-default-500">Ошибка загрузки.</div>;
 
   return (
-    <div className="list-view">
-      <table>
-        <thead>
-          <tr>
-            <th>Категория</th>
-            <th>Наименование</th>
-            <th>Кол-во</th>
-            <th>Чьё</th>
-            <th>Заметка</th>
-          </tr>
-        </thead>
-        <tbody>
-          {query.data.map((r, i) => (
-            <tr key={i}>
-              <td>{r.category}</td>
-              <td>{r.name}</td>
-              <td>{r.quantity}</td>
-              <td>{r.isUserOwned ? 'наше' : 'площадка'}</td>
-              <td>{r.note ?? ''}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="min-h-0 overflow-auto p-4">
+      <Table>
+        <Table.ScrollContainer>
+          <Table.Content aria-label="Rider">
+            <Table.Header>
+              <Table.Column>Категория</Table.Column>
+              <Table.Column>Наименование</Table.Column>
+              <Table.Column>Кол-во</Table.Column>
+              <Table.Column>Чьё</Table.Column>
+              <Table.Column>Заметка</Table.Column>
+            </Table.Header>
+            <Table.Body>
+              {query.data.map((r: RiderRow, i: number) => (
+                <Table.Row key={i}>
+                  <Table.Cell>{r.category}</Table.Cell>
+                  <Table.Cell>{r.name}</Table.Cell>
+                  <Table.Cell>{r.quantity}</Table.Cell>
+                  <Table.Cell>{r.isUserOwned ? 'наше' : 'площадка'}</Table.Cell>
+                  <Table.Cell>{r.note ?? ''}</Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Content>
+        </Table.ScrollContainer>
+      </Table>
     </div>
   );
 }

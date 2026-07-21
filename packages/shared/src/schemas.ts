@@ -118,3 +118,16 @@ export const loginSchema = z.object({
   passphrase: z.string().min(1),
 });
 export type LoginDto = z.infer<typeof loginSchema>;
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(4),
+});
+export type ChangePasswordDto = z.infer<typeof changePasswordSchema>;
+
+/** Real rendered pixel size of each device's canvas node, as measured by the browser — the
+ *  auto-layout algorithm packs devices using these instead of guessing dimensions server-side. */
+export const autoLayoutSchema = z.object({
+  sizes: z.record(z.string(), z.object({ width: z.number().positive(), height: z.number().positive() })).default({}),
+});
+export type AutoLayoutDto = z.infer<typeof autoLayoutSchema>;

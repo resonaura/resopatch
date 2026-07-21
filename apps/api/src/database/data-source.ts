@@ -8,6 +8,7 @@ import { Port } from './entities/port.entity';
 import { Adapter } from './entities/adapter.entity';
 import { Cable } from './entities/cable.entity';
 import { Furniture } from './entities/furniture.entity';
+import { AuthCredential } from './entities/auth-credential.entity';
 
 export const sqlitePath = process.env.SQLITE_PATH
   ? path.resolve(process.cwd(), process.env.SQLITE_PATH)
@@ -15,7 +16,7 @@ export const sqlitePath = process.env.SQLITE_PATH
 
 fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
 
-export const entities = [Setup, Device, Port, Adapter, Cable, Furniture];
+export const entities = [Setup, Device, Port, Adapter, Cable, Furniture, AuthCredential];
 
 export const dataSourceOptions: DataSourceOptions = {
   type: 'better-sqlite3',

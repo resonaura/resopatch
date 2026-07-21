@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, Input, Label, ListBox, Modal, Select, TextField, toast } from '@heroui/react';
+import { Cable as CableIcon } from 'lucide-react';
 import { CableType, POWER_PORT_TYPES, PortType, type CreateCableDto, type PortDto } from '@resopatch/shared';
 import { api } from '../api/client';
 
@@ -33,8 +35,8 @@ export default function NewCableModal({
 }) {
   const qc = useQueryClient();
   const [cableType, setCableType] = useState<CableType>(() => guessCableType(sourcePort, targetPort));
-  const [length, setLength] = useState(1);
-  const [adapterId, setAdapterId] = useState<string>('');
+  const [length, setLength] = useState('1');
+  const [adapterId, setAdapterId] = useState<string>('__none__');
   const [color, setColor] = useState('');
 
   const adapters = useQuery({ queryKey: ['adapters'], queryFn: api.listAdapters });
@@ -45,6 +47,7 @@ export default function NewCableModal({
       qc.invalidateQueries({ queryKey: ['graph', setupId] });
       onClose();
     },
+    onError: (err) => toast(err instanceof Error ? err.message : 'Не удалось создать кабель', { variant: 'danger' }),
   });
 
   const submit = () => {
@@ -52,68 +55,89 @@ export default function NewCableModal({
       sourcePortId,
       targetPortId,
       cableType,
-      length,
-      adapterId: adapterId || undefined,
+      length: Number(length) || 1,
+      adapterId: adapterId === '__none__' ? undefined : adapterId,
       color: color || undefined,
       isUserOwned: true,
       isPatchCable: false,
     });
   };
 
-  const relevantAdapters = useMemo(() => adapters.data ?? [], [adapters.data]);
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>Новый кабель</h3>
-        <div className="cable-endpoints">
-          <div>
-            {sourceDeviceName} — {sourcePort.name} ({sourcePort.portType})
-          </div>
-          <div className="muted">→</div>
-          <div>
-            {targetDeviceName} — {targetPort.name} ({targetPort.portType})
-          </div>
-        </div>
-        <label className="field">
-          <span className="field-label">Тип кабеля</span>
-          <select value={cableType} onChange={(e) => setCableType(e.target.value as CableType)}>
-            {Object.values(CableType).map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span className="field-label">Длина, м</span>
-          <input type="number" step="0.1" value={length} onChange={(e) => setLength(Number(e.target.value))} />
-        </label>
-        <label className="field">
-          <span className="field-label">Переходник (если нужен)</span>
-          <select value={adapterId} onChange={(e) => setAdapterId(e.target.value)}>
-            <option value="">— без переходника —</option>
-            {relevantAdapters.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({a.inputType} → {a.outputType})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span className="field-label">Цвет кабеля</span>
-          <input value={color} onChange={(e) => setColor(e.target.value)} placeholder="красный / синий / зелёный…" />
-        </label>
-        {create.isError && <div className="error-text">{(create.error as Error).message}</div>}
-        <div className="modal-actions">
-          <button className="btn-secondary" onClick={onClose}>
-            Отмена
-          </button>
-          <button className="btn-primary" onClick={submit} disabled={create.isPending}>
-            Соединить
-          </button>
-        </div>
-      </div>
-    </div>
+    <Modal>
+      <Modal.Backdrop isOpen onOpenChange={(open) => !open && onClose()}>
+        <Modal.Container>
+          <Modal.Dialog>
+            <Modal.CloseTrigger />
+            <Modal.Header>
+              <Modal.Heading>Новый кабель</Modal.Heading>
+            </Modal.Header>
+            <Modal.Body className="flex flex-col gap-3">
+              <div className="rounded-lg border border-default-200 bg-surface-secondary p-2.5 text-xs">
+                <div>
+                  {sourceDeviceName} — {sourcePort.name} ({sourcePort.portType})
+                </div>
+                <div className="text-default-500">→</div>
+                <div>
+                  {targetDeviceName} — {targetPort.name} ({targetPort.portType})
+                </div>
+              </div>
+              <Select value={cableType} onChange={(v) => setCableType(v as CableType)}>
+                <Label>Тип кабеля</Label>
+                <Select.Trigger>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    {Object.values(CableType).map((t) => (
+                      <ListBox.Item key={t} id={t} textValue={t}>
+                        {t}
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+              <TextField>
+                <Label>Длина, м</Label>
+                <Input type="number" step="0.1" value={length} onChange={(e) => setLength(e.target.value)} />
+              </TextField>
+              <Select value={adapterId} onChange={(v) => setAdapterId(v as string)}>
+                <Label>Переходник (если нужен)</Label>
+                <Select.Trigger>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    <ListBox.Item id="__none__" textValue="без переходника">
+                      — без переходника —
+                    </ListBox.Item>
+                    {(adapters.data ?? []).map((a) => (
+                      <ListBox.Item key={a.id} id={a.id} textValue={a.name}>
+                        {a.name} ({a.inputType} → {a.outputType})
+                      </ListBox.Item>
+                    ))}
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+              <TextField>
+                <Label>Цвет кабеля</Label>
+                <Input value={color} onChange={(e) => setColor(e.target.value)} placeholder="красный / синий / зелёный…" />
+              </TextField>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onPress={onClose}>
+                Отмена
+              </Button>
+              <Button onPress={submit} isPending={create.isPending}>
+                <CableIcon className="h-3.5 w-3.5" />
+                Соединить
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }

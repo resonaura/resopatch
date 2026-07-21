@@ -1,6 +1,7 @@
-import { Body, Controller, HttpCode, Post, Res, UsePipes } from '@nestjs/common';
+import { Body, Controller, HttpCode, Patch, Post, Res, UseGuards, UsePipes } from '@nestjs/common';
 import { Response } from 'express';
-import { loginSchema } from '@resopatch/shared';
+import { changePasswordSchema, loginSchema } from '@resopatch/shared';
+import { AuthGuard } from './auth.guard';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { AuthService } from './auth.service';
 
@@ -11,8 +12,8 @@ export class AuthController {
   @Post('login')
   @HttpCode(200)
   @UsePipes(new ZodValidationPipe(loginSchema))
-  login(@Body() body: { passphrase: string }, @Res({ passthrough: true }) res: Response) {
-    const token = this.authService.login(body);
+  async login(@Body() body: ReturnType<typeof loginSchema.parse>, @Res({ passthrough: true }) res: Response) {
+    const token = await this.authService.login(body);
     res.cookie('token', token, {
       httpOnly: true,
       sameSite: 'lax',
@@ -25,6 +26,14 @@ export class AuthController {
   @HttpCode(200)
   logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie('token');
+    return { ok: true };
+  }
+
+  @UseGuards(AuthGuard)
+  @Patch('password')
+  @UsePipes(new ZodValidationPipe(changePasswordSchema))
+  async changePassword(@Body() body: ReturnType<typeof changePasswordSchema.parse>) {
+    await this.authService.changePassword(body);
     return { ok: true };
   }
 }

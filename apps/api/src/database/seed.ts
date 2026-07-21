@@ -16,6 +16,7 @@
  */
 import 'dotenv/config';
 import 'reflect-metadata';
+import bcrypt from 'bcryptjs';
 import {
   CableType,
   CreateAdapterDto,
@@ -40,6 +41,7 @@ import { Port } from './entities/port.entity';
 import { Adapter } from './entities/adapter.entity';
 import { Cable } from './entities/cable.entity';
 import { Furniture } from './entities/furniture.entity';
+import { AuthCredential } from './entities/auth-credential.entity';
 import { applyAdapterDto, applyCableDto, applyDeviceDto, applyFurnitureDto, applyPortDto } from './mappers';
 
 async function main() {
@@ -53,6 +55,11 @@ async function main() {
   const adapterRepo = AppDataSource.getRepository(Adapter);
   const cableRepo = AppDataSource.getRepository(Cable);
   const furnitureRepo = AppDataSource.getRepository(Furniture);
+  const authRepo = AppDataSource.getRepository(AuthCredential);
+
+  // Reseeding also resets the dashboard login back to the known default — useful if it's ever
+  // forgotten. Change it from the settings panel in the app once you're in.
+  await authRepo.save(authRepo.create({ passphraseHash: bcrypt.hashSync('admin', 10), role: 'admin' }));
 
   const setup = await setupRepo.save(
     setupRepo.create({
@@ -401,6 +408,7 @@ async function main() {
     notes: 'Наш (не площадки) — на площадках это ненадёжно (docs/stage-setup.md §0).',
   });
   const danyaVMicOut = await mkPort(danyaVMic, { name: 'Out', portType: PortType.XLR_M, direction: PortDirection.OUT });
+  await mkFurniture({ deviceId: danyaVMic.id, kind: FurnitureKind.MIC_STAND, isVenueProvided: true });
 
   const volt276 = await mkDevice({
     name: 'Universal Audio Volt 276',
@@ -526,6 +534,7 @@ async function main() {
     notes: 'Целевое состояние по rider.md (CH11) — не успели поставить на первом лайве, обкатать вживую (docs/stage-setup.md §2.2).',
   });
   const e835sOut = await mkPort(e835s, { name: 'Out', portType: PortType.XLR_M, direction: PortDirection.OUT });
+  await mkFurniture({ deviceId: e835s.id, kind: FurnitureKind.MIC_STAND, isVenueProvided: true });
 
   // ---------------------------------------------------------------------------------------
   // Даня-барабанщик + плейбеки — сзади сцены. Ноут → MOTU → стейджбокс (6 каналов) + клик
@@ -620,8 +629,10 @@ async function main() {
   await mkCable({ sourcePortId: motuOutPercR.id, targetPortId: ch04.id, cableType: CableType.AUDIO_BALANCED, length: 3, adapterId: adapterTrsToXlr.id });
   await mkCable({ sourcePortId: motuOutSynthL.id, targetPortId: ch05.id, cableType: CableType.AUDIO_BALANCED, length: 3, adapterId: adapterTrsToXlr.id });
   await mkCable({ sourcePortId: motuOutSynthR.id, targetPortId: ch06.id, cableType: CableType.AUDIO_BALANCED, length: 3, adapterId: adapterTrsToXlr.id });
-  await mkCable({ sourcePortId: fex800OutL.id, targetPortId: ch07.id, cableType: CableType.AUDIO_UNBALANCED, length: 5 });
-  await mkCable({ sourcePortId: fex800OutR.id, targetPortId: ch08.id, cableType: CableType.AUDIO_UNBALANCED, length: 5 });
+  // isUserOwned: false — doc §12.7: cables for Volt276's output run aren't guaranteed to be ours yet
+  // ("важно, чтобы предоставила площадка... свой хотя бы один пока не гарантирован").
+  await mkCable({ sourcePortId: fex800OutL.id, targetPortId: ch07.id, cableType: CableType.AUDIO_UNBALANCED, length: 5, isUserOwned: false });
+  await mkCable({ sourcePortId: fex800OutR.id, targetPortId: ch08.id, cableType: CableType.AUDIO_UNBALANCED, length: 5, isUserOwned: false });
   await mkCable({ sourcePortId: umcOutL.id, targetPortId: ch09.id, cableType: CableType.AUDIO_BALANCED, length: 6, color: 'blue' });
   await mkCable({ sourcePortId: umcOutR.id, targetPortId: ch10.id, cableType: CableType.AUDIO_BALANCED, length: 6, color: 'green' });
   await mkCable({ sourcePortId: e835sOut.id, targetPortId: ch11.id, cableType: CableType.AUDIO_BALANCED, length: 5 });

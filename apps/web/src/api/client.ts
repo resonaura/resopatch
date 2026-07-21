@@ -1,6 +1,7 @@
 import type {
   AdapterDto,
   CableDto,
+  ChangePasswordDto,
   CreateAdapterDto,
   CreateCableDto,
   CreateDeviceDto,
@@ -71,12 +72,15 @@ export interface GraphResponse {
 export const api = {
   login: (passphrase: string) => request<{ ok: true }>('/auth/login', { method: 'POST', body: JSON.stringify({ passphrase }) }),
   logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
+  changePassword: (dto: ChangePasswordDto) => request<{ ok: true }>('/auth/password', { method: 'PATCH', body: JSON.stringify(dto) }),
 
   listSetups: () => request<SetupDto[]>('/setups'),
   createSetup: (dto: CreateSetupDto) => request<SetupDto>('/setups', { method: 'POST', body: JSON.stringify(dto) }),
   getGraph: (setupId: string) => request<GraphResponse>(`/setups/${setupId}/graph`),
   getInputList: (setupId: string) => request<InputListRow[]>(`/setups/${setupId}/input-list`),
   getRider: (setupId: string) => request<RiderRow[]>(`/setups/${setupId}/rider`),
+  autoLayout: (setupId: string, sizes: Record<string, { width: number; height: number }>) =>
+    request<{ updated: number }>(`/setups/${setupId}/auto-layout`, { method: 'POST', body: JSON.stringify({ sizes }) }),
 
   createDevice: (dto: CreateDeviceDto) => request<DeviceDto>('/devices', { method: 'POST', body: JSON.stringify(dto) }),
   updateDevice: (id: string, dto: UpdateDeviceDto) => request<DeviceDto>(`/devices/${id}`, { method: 'PATCH', body: JSON.stringify(dto) }),
