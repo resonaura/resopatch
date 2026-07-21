@@ -209,6 +209,9 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
                 onEdgeClick={onEdgeClick}
                 onPaneClick={onPaneClick}
                 fitView
+                fitViewOptions={{ padding: 0.15, minZoom: 0.02, maxZoom: 1 }}
+                minZoom={0.02}
+                maxZoom={2}
                 colorMode="dark"
               >
                 <Background gap={24} />

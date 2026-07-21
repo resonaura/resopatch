@@ -17,6 +17,7 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import bcrypt from 'bcryptjs';
+import { In } from 'typeorm';
 import {
   CableType,
   CreateAdapterDto,
@@ -43,6 +44,7 @@ import { Cable } from './entities/cable.entity';
 import { Furniture } from './entities/furniture.entity';
 import { AuthCredential } from './entities/auth-credential.entity';
 import { applyAdapterDto, applyCableDto, applyDeviceDto, applyFurnitureDto, applyPortDto } from './mappers';
+import { computeAutoLayout } from '../setups/layout';
 
 async function main() {
   await AppDataSource.initialize();
@@ -129,9 +131,20 @@ async function main() {
   });
 
   // ---------------------------------------------------------------------------------------
-  // Power infrastructure: two Anker strips (one per side of stage) + Andrey's isolated
-  // pedalboard PSU. See docs/stage-setup.md §5.
+  // Power infrastructure: the venue's own wall outlet (root of the whole power graph — both
+  // Ankers plug into it, or into whatever the venue actually gives us on the day), two Anker
+  // strips (one per side of stage), + Andrey's isolated pedalboard PSU. See docs/stage-setup.md §5.
   // ---------------------------------------------------------------------------------------
+  const venueOutlet = await mkDevice({
+    name: 'Розетка площадки',
+    type: DeviceType.POWER_STRIP,
+    inventoryStatus: InventoryStatus.VENUE_PROVIDED,
+    position: { x: -600, y: 850 },
+    notes: 'Стена/щиток площадки — куда физически втыкаются оба удлинителя Anker. Количество и тип розеток на месте не гарантированы (docs/stage-setup.md §5.1).',
+  });
+  const venueOutlet1 = await mkPort(venueOutlet, { name: 'Розетка 1 (→ Anker, сторона Андрея)', portType: PortType.POWER_SCHUKO, direction: PortDirection.OUT, power: { currentType: CurrentType.AC } });
+  const venueOutlet2 = await mkPort(venueOutlet, { name: 'Розетка 2 (→ Anker, сторона Дани-вокала)', portType: PortType.POWER_SCHUKO, direction: PortDirection.OUT, power: { currentType: CurrentType.AC } });
+
   const anker1 = await mkDevice({
     name: 'Anker Surge Protector 2000J — сторона Андрея',
     type: DeviceType.POWER_STRIP,
@@ -145,6 +158,7 @@ async function main() {
       outlets: 8,
     },
   });
+  const anker1Plug = await mkPort(anker1, { name: 'Вилка (в розетку площадки)', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN, power: { currentType: CurrentType.AC } });
   const anker1SchukoOuts: Port[] = [];
   for (let i = 1; i <= 8; i++) {
     anker1SchukoOuts.push(
@@ -178,6 +192,7 @@ async function main() {
       outlets: 8,
     },
   });
+  const anker2Plug = await mkPort(anker2, { name: 'Вилка (в розетку площадки)', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN, power: { currentType: CurrentType.AC } });
   const anker2SchukoOuts: Port[] = [];
   for (let i = 1; i <= 8; i++) {
     anker2SchukoOuts.push(
@@ -187,6 +202,9 @@ async function main() {
   await mkPort(anker2, { name: 'USB-A #1 (резерв — план: микшер Дани-вокала)', portType: PortType.USB_A, direction: PortDirection.OUT, power: { maxOutputPowerW: 12 } });
   await mkPort(anker2, { name: 'USB-A #2', portType: PortType.USB_A, direction: PortDirection.OUT, power: { maxOutputPowerW: 12 } });
   await mkPort(anker2, { name: 'USB-C (PD)', portType: PortType.USB_C, direction: PortDirection.OUT, power: { maxOutputPowerW: 20 } });
+
+  await mkCable({ sourcePortId: venueOutlet1.id, targetPortId: anker1Plug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'white' });
+  await mkCable({ sourcePortId: venueOutlet2.id, targetPortId: anker2Plug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'white' });
 
   const iso12pro = await mkDevice({
     name: 'Harley Benton PowerPlant ISO-12 Pro',
@@ -705,6 +723,36 @@ async function main() {
     hostUsbType: HostUsbType.USB_C,
   });
   await mkPort(secondLaptop, { name: 'USB-C', portType: PortType.USB_C, direction: PortDirection.BI });
+
+  // Lay everything out instead of leaving the arbitrary hand-picked x/y above as the persisted
+  // state — same algorithm the dashboard's "Упорядочить" button calls, just with sizes estimated
+  // from each device's port count (mirroring DeviceNode.tsx's actual box model) since there's no
+  // browser here to measure real ones. The button remains available to re-run with exact sizes
+  // any time — this just means the app isn't a pile of overlapping boxes on first load.
+  const allDevices = await deviceRepo.find({ where: { setupId: setup.id } });
+  const allPorts = allDevices.length ? await portRepo.find({ where: { deviceId: In(allDevices.map((d) => d.id)) } }) : [];
+  const allCables = allPorts.length ? await cableRepo.find({ where: { sourcePortId: In(allPorts.map((p) => p.id)) } }) : [];
+
+  const portCountByDevice = new Map<string, number>();
+  for (const p of allPorts) portCountByDevice.set(p.deviceId, (portCountByDevice.get(p.deviceId) ?? 0) + 1);
+
+  const estimatedSizes = new Map<string, { width: number; height: number }>();
+  for (const d of allDevices) {
+    const portCount = portCountByDevice.get(d.id) ?? 0;
+    const ownerRow = d.ownerRole ? 20 : 0;
+    const portsBlock = portCount > 0 ? 1 + portCount * 23 : 0;
+    estimatedSizes.set(d.id, { width: 220, height: 2 + 28 + 30 + ownerRow + portsBlock });
+  }
+
+  const { positions } = computeAutoLayout(allDevices, allPorts, allCables, estimatedSizes);
+  for (const d of allDevices) {
+    const pos = positions.get(d.id);
+    if (pos) {
+      d.positionX = pos.x;
+      d.positionY = pos.y;
+    }
+  }
+  await deviceRepo.save(allDevices);
 
   console.log(`Seeded setup ${setup.id} ("${setup.name}")`);
 }
