@@ -64,11 +64,46 @@ export default function ContainerInsideModal({
     return map;
   }, [allDevices]);
 
+  // Compute clean, non-overlapping grid positions for pedals inside the container
+  const positionedChildDevices = useMemo(() => {
+    const power = childDevices.filter((d) => d.type === DeviceType.POWER_SUPPLY || d.type === DeviceType.POWER_SPLITTER || d.type === DeviceType.POWER_STRIP);
+    const signal = childDevices.filter((d) => d.type !== DeviceType.POWER_SUPPLY && d.type !== DeviceType.POWER_SPLITTER && d.type !== DeviceType.POWER_STRIP);
+
+    const COLS = 4;
+    const GAP_X = 320; // 240px card + 80px gap
+    const ROW_HEIGHT = 280; // 220px card + 60px gap
+
+    const result: GraphDevice[] = [];
+
+    signal.forEach((d, i) => {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      result.push({
+        ...d,
+        position: { x: col * GAP_X, y: row * ROW_HEIGHT },
+      });
+    });
+
+    const signalRows = Math.ceil(signal.length / COLS);
+    const powerStartY = Math.max(1, signalRows) * ROW_HEIGHT;
+    power.forEach((d, i) => {
+      result.push({
+        ...d,
+        position: { x: i * GAP_X, y: powerStartY },
+      });
+    });
+
+    return result;
+  }, [childDevices]);
+
   // Find external cables connected to children inside this container
   const { boundaryNodes, boundaryCables } = useMemo(() => {
     const bNodes: GraphDevice[] = [];
     const bCables: GraphCable[] = [];
     const createdBoundaryDevices = new Map<string, GraphDevice>();
+
+    let leftCount = 0;
+    let rightCount = 0;
 
     for (const cable of allCables) {
       const sourceDev = allPortToDevice.get(cable.sourcePortId);
@@ -78,7 +113,6 @@ export default function ContainerInsideModal({
       const sourceInChild = childIds.has(sourceDev.id);
       const targetInChild = childIds.has(targetDev.id);
 
-      // Boundary cable: one end in container, one end outside (or container itself)
       if (sourceInChild !== targetInChild) {
         const extDev = sourceInChild ? targetDev : sourceDev;
         const extPort = sourceInChild ? allPortById.get(cable.targetPortId) : allPortById.get(cable.sourcePortId);
@@ -86,6 +120,10 @@ export default function ContainerInsideModal({
 
         let virtualDev = createdBoundaryDevices.get(extDev.id);
         if (!virtualDev) {
+          const isLeft = !sourceInChild; // If target is in child, connection enters from left
+          const posX = isLeft ? -360 : 1340;
+          const posY = (isLeft ? leftCount++ : rightCount++) * 240;
+
           const newVirtualDev = {
             id: `virtual-ext-${extDev.id}`,
             setupId: containerDevice.setupId,
@@ -95,7 +133,7 @@ export default function ContainerInsideModal({
             inventoryStatus: InventoryStatus.OWNED_ACTIVE,
             ownerRole: extDev.ownerRole,
             parentDeviceId: null,
-            position: { x: sourceInChild ? 1200 : -320, y: bNodes.length * 140 },
+            position: { x: posX, y: posY },
             ports: [extPort],
             powerRequired: false,
             powerSourceType: 'NONE',
@@ -116,7 +154,7 @@ export default function ContainerInsideModal({
     return { boundaryNodes: bNodes, boundaryCables: bCables };
   }, [allCables, allPortToDevice, allPortById, childIds, containerDevice.setupId]);
 
-  const displayedDevices = useMemo(() => [...childDevices, ...boundaryNodes], [childDevices, boundaryNodes]);
+  const displayedDevices = useMemo(() => [...positionedChildDevices, ...boundaryNodes], [positionedChildDevices, boundaryNodes]);
   const displayedCables = useMemo(() => [...internalCables, ...boundaryCables], [internalCables, boundaryCables]);
 
   const portToNodeId = useMemo(() => {
@@ -170,13 +208,13 @@ export default function ContainerInsideModal({
   return (
     <Modal>
       <Modal.Backdrop isOpen onOpenChange={(open) => !open && onClose()}>
-        <Modal.Container className="w-[98vw] h-[94vh] max-w-none">
-          <Modal.Dialog className="flex h-full w-full flex-col p-0 overflow-hidden bg-surface border border-default-200 shadow-2xl">
+        <Modal.Container className="w-[98vw] max-w-[98vw] h-[95vh] max-h-[95vh] mx-auto overflow-hidden !w-[98vw] !max-w-[98vw]">
+          <Modal.Dialog className="flex h-full w-full flex-col p-0 overflow-hidden bg-surface border border-default-200 shadow-2xl rounded-xl !w-full !max-w-none">
             <Modal.CloseTrigger />
             <div className="flex items-center justify-between border-b border-default-200 px-5 py-3 bg-surface">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15 text-accent">
-                  <Layers className="h-4 w-4" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 min-w-10 min-h-10 shrink-0 aspect-square items-center justify-center rounded-lg bg-accent/15 text-accent">
+                  <Layers className="h-5 w-5 shrink-0 aspect-square" />
                 </div>
                 <div>
                   <h2 className="text-base font-semibold text-foreground">{containerDevice.name} — Внутренняя схема</h2>
@@ -214,7 +252,7 @@ export default function ContainerInsideModal({
                   onConnect={onConnect}
                   onNodeMoved={onNodeMoved}
                   minimap={false}
-                  fitPadding={0.08}
+                  fitPadding={0.06}
                 />
               )}
             </div>

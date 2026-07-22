@@ -76,6 +76,7 @@ function DeviceThumb({ device, className }: { device: Pick<GraphDevice, 'imageUr
 function DeviceNodeImpl({ data, selected }: NodeProps) {
   const { device, children, boundaryPorts, onSelectChild, onOpenInside } = data as unknown as DeviceNodeData;
   const ports = device.ports;
+  const isVirtual = device.id.startsWith('virtual-ext-');
   const inactive = device.inventoryStatus !== InventoryStatus.OWNED_ACTIVE && device.inventoryStatus !== InventoryStatus.VENUE_PROVIDED;
   const portedChildren = children.filter((c) => c.ports.length > 0);
   const plainChildren = children.filter((c) => c.ports.length === 0);
@@ -83,9 +84,13 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`w-[240px] rounded-lg border bg-surface-secondary text-xs shadow-lg ${
-        selected ? 'border-accent ring-2 ring-accent/40' : 'border-default-200'
-      } ${inactive ? 'border-dashed opacity-70' : ''}`}
+      className={`w-[240px] rounded-lg border text-xs shadow-lg transition-opacity ${
+        selected
+          ? 'border-accent ring-2 ring-accent/40 bg-surface-secondary'
+          : isVirtual
+          ? 'border-dashed border-default-300 bg-surface/40 opacity-60 hover:opacity-100'
+          : 'border-default-200 bg-surface-secondary'
+      } ${inactive && !isVirtual ? 'border-dashed opacity-70' : ''}`}
     >
       <div className="flex items-center gap-1.5 px-2.5 pt-2">
         <DeviceThumb device={device} className="h-4 w-4" />
