@@ -27,6 +27,8 @@ export interface EdgeRouteSpec {
   targetNodeId: string;
   start: { x: number; y: number };
   end: { x: number; y: number };
+  sourceDir?: 'left' | 'right';
+  targetDir?: 'left' | 'right';
 }
 
 export type Point = { x: number; y: number };
@@ -42,7 +44,7 @@ const OBSTACLE_PADDING = 16;
 // against the corner — and, in the common case, long enough that the first bend clears the
 // connector and its own device card before it happens, instead of turning right on top of them.
 const STUB = 64;
-const TURN_PENALTY = 26;
+const TURN_PENALTY = 8;
 const MAX_EXPANSIONS = 40000;
 // Gap between adjacent lanes when parallel runs get separated. Wide enough that two cables are
 // still visibly two cables (not one fused line) after zooming out to fit a whole stage on screen.
@@ -102,13 +104,6 @@ class MinHeap<T> {
   }
 }
 
-const DIRS = [
-  { dx: 1, dy: 0 },
-  { dx: -1, dy: 0 },
-  { dx: 0, dy: 1 },
-  { dx: 0, dy: -1 },
-];
-
 interface GridBounds {
   minCx: number;
   maxCx: number;
@@ -117,34 +112,40 @@ interface GridBounds {
 }
 
 function astar(
-  start: [number, number],
-  end: [number, number],
+  startCell: [number, number],
+  endCell: [number, number],
   isBlocked: (cx: number, cy: number) => boolean,
   bounds: GridBounds,
 ): [number, number][] | null {
-  const heuristic = (cx: number, cy: number) => Math.abs(cx - end[0]) + Math.abs(cy - end[1]);
+  const [sx, sy] = startCell;
+  const [ex, ey] = endCell;
+
+  const stateKey = (cx: number, cy: number, dir: number) => `${cx},${cy},${dir}`;
+  const heuristic = (cx: number, cy: number) => Math.abs(cx - ex) + Math.abs(cy - ey);
+
+  const DIRS = [
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 },
+  ];
+
+  const heap = new MinHeap<{ cx: number; cy: number; dir: number }>();
   const gScore = new Map<string, number>();
   const cameFrom = new Map<string, string>();
-  const heap = new MinHeap<{ cx: number; cy: number; dir: number }>();
-  const stateKey = (cx: number, cy: number, dir: number) => `${cx},${cy},${dir}`;
 
-  for (let d = 0; d < DIRS.length; d++) {
-    const k = stateKey(start[0], start[1], d);
+  for (let d = 0; d < 4; d++) {
+    const k = stateKey(sx, sy, d);
     gScore.set(k, 0);
-    heap.push(heuristic(start[0], start[1]), { cx: start[0], cy: start[1], dir: d });
+    heap.push(heuristic(sx, sy), { cx: sx, cy: sy, dir: d });
   }
 
-  let expansions = 0;
-  while (heap.size > 0) {
-    if (expansions++ > MAX_EXPANSIONS) return null;
+  let steps = 0;
+  while (heap.size > 0 && steps++ < MAX_EXPANSIONS) {
     const current = heap.pop()!;
-    const curKey = stateKey(current.cx, current.cy, current.dir);
-    const curG = gScore.get(curKey);
-    if (curG === undefined) continue;
-
-    if (current.cx === end[0] && current.cy === end[1]) {
+    if (current.cx === ex && current.cy === ey) {
       const path: [number, number][] = [];
-      let k: string | undefined = curKey;
+      let k: string | undefined = stateKey(current.cx, current.cy, current.dir);
       while (k) {
         const parts = k.split(',');
         path.push([Number(parts[0]), Number(parts[1])]);
@@ -153,6 +154,9 @@ function astar(
       path.reverse();
       return path;
     }
+
+    const curKey = stateKey(current.cx, current.cy, current.dir);
+    const curG = gScore.get(curKey)!;
 
     for (let d = 0; d < DIRS.length; d++) {
       const { dx, dy } = DIRS[d];
@@ -211,11 +215,9 @@ export function segmentCrossesRect(p1: Point, p2: Point, rect: RectObstacle, pad
 export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[] {
   const { start, end } = spec;
 
-  // Fast path: source and target already share a row or column, and nothing else sits between
-  // them — skip the grid machinery entirely rather than route it through A* just to have the
-  // stub-to-grid-line snap (see below) introduce a purely cosmetic jitter into what should be a
-  // single dead-straight run. This is also the single most common shape (two devices roughly
-  // level with each other), so it's worth short-circuiting even ignoring the jitter.
+  const sSign = spec.sourceDir === 'left' ? -1 : 1;
+  const tSign = spec.targetDir === 'right' ? 1 : -1;
+
   const otherObstacles = obstacles.filter((o) => o.id !== spec.sourceNodeId && o.id !== spec.targetNodeId);
   const clearOfOthers = (p1: Point, p2: Point) => otherObstacles.every((o) => !segmentCrossesRect(p1, p2, o, OBSTACLE_PADDING));
   if (start.y === end.y || start.x === end.x) {
@@ -236,24 +238,13 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
     }
   }
 
-  // The stub anchors are snapped to whichever grid cell the A* search actually starts/ends from
-  // — not the raw unrounded pixel a fixed-length offset would land on. Those two are subtly
-  // different pixels (ports don't generally sit on a multiple of the cell size); stitching them
-  // together naively produces a short genuinely-diagonal segment. Snapping the stub itself means
-  // that never happens — the only unavoidable rounding is a short vertical hop from the port's
-  // exact row onto its grid row, isolated to the very first/last segment where it reads as part
-  // of the connector, not a stray kink mid-route.
-  const startCellX = cellOf(start.x + STUB);
+  const startCellX = cellOf(start.x + sSign * STUB);
   const startCellY = cellOf(start.y);
-  const endCellX = cellOf(end.x - STUB);
+  const endCellX = cellOf(end.x + tSign * STUB);
   const endCellY = cellOf(end.y);
   const stubStart = { x: startCellX * cell, y: startCellY * cell };
   const stubEnd = { x: endCellX * cell, y: endCellY * cell };
 
-  // A cable is only ever allowed to touch its own source/target device along the exact row it
-  // exits/enters on (the straight stub segment right at its own port) — never anywhere else on
-  // that card. Excluding the *whole* device footprint would let every cable on a multi-port card
-  // (e.g. an 8-outlet power strip) cut straight across its neighbours' rows on the same card.
   const corridor = new Set<string>();
   const carveHorizontal = (cxa: number, cxb: number, cy: number) => {
     const cx0 = Math.min(cxa, cxb);
@@ -282,7 +273,15 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
 
   if (found) {
     const cellPoints = found.slice(1, -1).map(([cx, cy]) => ({ x: cx * cell, y: cy * cell }));
-    return simplifyColinear([start, { x: start.x, y: stubStart.y }, stubStart, ...cellPoints, stubEnd, { x: end.x, y: stubEnd.y }, end]);
+    return simplifyColinear([
+      start,
+      { x: start.x, y: stubStart.y },
+      stubStart,
+      ...cellPoints,
+      stubEnd,
+      { x: end.x, y: stubEnd.y },
+      end,
+    ]);
   }
 
   // Genuinely no path found even at the coarsest, widest-margin attempt (pathologically boxed
@@ -426,7 +425,7 @@ export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObs
     const hitsAnything = pts.slice(0, -1).some((p, i) =>
       obstacles.some((o) => {
         const isOwnDevice = spec != null && (o.id === spec.sourceNodeId || o.id === spec.targetNodeId);
-        return segmentCrossesRect(p, pts[i + 1], o, isOwnDevice ? 0 : OBSTACLE_PADDING);
+        return segmentCrossesRect(p, pts[i + 1], o, isOwnDevice ? 0 : 2);
       }),
     );
     if (hitsAnything) working.set(edgeId, original.map((p) => ({ ...p })));

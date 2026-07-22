@@ -103,7 +103,15 @@ function CableRouter({
         x: tgtInternal.internals.positionAbsolute.x + tHandle.x + (tHandle.position === 'right' ? tHandle.width : 0),
         y: tgtInternal.internals.positionAbsolute.y + tHandle.y + tHandle.height / 2,
       };
-      specs.push({ id: e.id, sourceNodeId: e.source, targetNodeId: e.target, start, end });
+      specs.push({
+        id: e.id,
+        sourceNodeId: e.source,
+        targetNodeId: e.target,
+        start,
+        end,
+        sourceDir: sHandle.position as 'left' | 'right',
+        targetDir: tHandle.position as 'left' | 'right',
+      });
     }
 
     const routes = computeRoutes(obstacles, specs);

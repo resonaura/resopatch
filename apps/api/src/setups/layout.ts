@@ -118,17 +118,64 @@ function layoutZone(zoneDevices: Device[], cables: Cable[], portToDevice: Map<st
     return new Map(chain.map((d) => [d.id, denseIndex.get(rawRankOf.get(d.id)!)!]));
   };
 
-  const powerChain = placeChain(power, densify(power), sizeOf, 0);
-  const signalX = powerChain.width + (power.length > 0 && signal.length > 0 ? CHAIN_GAP_X : 0);
-  const signalChain = placeChain(signal, densify(signal), sizeOf, signalX);
+  // Group signal devices into independent connected chains (e.g. Vocal Chain vs. Guitar Chain)
+  const signalIds = new Set(signal.map((d) => d.id));
+  const adj = new Map<string, Set<string>>();
+  for (const d of signal) adj.set(d.id, new Set());
+  for (const c of cables) {
+    const s = portToDevice.get(c.sourcePortId);
+    const t = portToDevice.get(c.targetPortId);
+    if (s && t && s !== t && signalIds.has(s) && signalIds.has(t)) {
+      adj.get(s)!.add(t);
+      adj.get(t)!.add(s);
+    }
+  }
 
-  for (const [id, pos] of powerChain.positions) positions.set(id, pos);
-  for (const [id, pos] of signalChain.positions) positions.set(id, pos);
+  const visited = new Set<string>();
+  const signalComponents: Device[][] = [];
+  for (const d of signal) {
+    if (visited.has(d.id)) continue;
+    const comp: Device[] = [];
+    const queue = [d.id];
+    visited.add(d.id);
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      const dev = signal.find((x) => x.id === curr);
+      if (dev) comp.push(dev);
+      for (const neighbor of adj.get(curr) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+    comp.sort((a, b) => rawRankOf.get(a.id)! - rawRankOf.get(b.id)!);
+    signalComponents.push(comp);
+  }
+
+  let currentX = 0;
+  let maxHeight = 0;
+
+  if (power.length > 0) {
+    const powerChain = placeChain(power, densify(power), sizeOf, currentX);
+    for (const [id, pos] of powerChain.positions) positions.set(id, pos);
+    currentX += powerChain.width + CHAIN_GAP_X;
+    maxHeight = Math.max(maxHeight, powerChain.height);
+  }
+
+  for (const comp of signalComponents) {
+    const compChain = placeChain(comp, densify(comp), sizeOf, currentX);
+    for (const [id, pos] of compChain.positions) positions.set(id, pos);
+    currentX += compChain.width + CHAIN_GAP_X;
+    maxHeight = Math.max(maxHeight, compChain.height);
+  }
+
+  const totalWidth = Math.max(0, currentX - (currentX > 0 ? CHAIN_GAP_X : 0));
 
   return {
     positions,
-    width: Math.max(powerChain.width, signalX + signalChain.width),
-    height: Math.max(powerChain.height, signalChain.height),
+    width: totalWidth,
+    height: maxHeight,
   };
 }
 
