@@ -5,7 +5,7 @@ import type { Connection } from '@xyflow/react';
 import type { GraphCable, GraphDevice } from '../api/client';
 import { containerInternalGraph } from '../lib/containerGraph';
 import PatchCanvas from './PatchCanvas';
-import { CABLE_COLORS, CABLE_DASH, CABLE_WIDTH_SCALE, CableType } from '@resopatch/shared';
+import { CABLE_COLORS, CABLE_DASH, CABLE_WIDTH_SCALE, CableType, DeviceType, InventoryStatus } from '@resopatch/shared';
 import type { Node, Edge } from '@xyflow/react';
 import type { DeviceNodeData } from './DeviceNode';
 
@@ -46,38 +46,114 @@ export default function ContainerInsideModal({
     return map;
   }, [allDevices]);
 
-  const portToDevice = useMemo(() => {
+  const childIds = useMemo(() => new Set(childDevices.map((d) => d.id)), [childDevices]);
+
+  const allPortToDevice = useMemo(() => {
+    const map = new Map<string, GraphDevice>();
+    for (const d of allDevices) {
+      for (const p of d.ports) map.set(p.id, d);
+    }
+    return map;
+  }, [allDevices]);
+
+  const allPortById = useMemo(() => {
+    const map = new Map<string, GraphDevice['ports'][number]>();
+    for (const d of allDevices) {
+      for (const p of d.ports) map.set(p.id, p);
+    }
+    return map;
+  }, [allDevices]);
+
+  // Find external cables connected to children inside this container
+  const { boundaryNodes, boundaryCables } = useMemo(() => {
+    const bNodes: GraphDevice[] = [];
+    const bCables: GraphCable[] = [];
+    const createdBoundaryDevices = new Map<string, GraphDevice>();
+
+    for (const cable of allCables) {
+      const sourceDev = allPortToDevice.get(cable.sourcePortId);
+      const targetDev = allPortToDevice.get(cable.targetPortId);
+      if (!sourceDev || !targetDev) continue;
+
+      const sourceInChild = childIds.has(sourceDev.id);
+      const targetInChild = childIds.has(targetDev.id);
+
+      // Boundary cable: one end in container, one end outside (or container itself)
+      if (sourceInChild !== targetInChild) {
+        const extDev = sourceInChild ? targetDev : sourceDev;
+        const extPort = sourceInChild ? allPortById.get(cable.targetPortId) : allPortById.get(cable.sourcePortId);
+        if (!extDev || !extPort) continue;
+
+        let virtualDev = createdBoundaryDevices.get(extDev.id);
+        if (!virtualDev) {
+          const newVirtualDev = {
+            id: `virtual-ext-${extDev.id}`,
+            setupId: containerDevice.setupId,
+            name: `Внешний: ${extDev.name}`,
+            type: extDev.type,
+            notes: `Внешнее устройство: ${extDev.name}`,
+            inventoryStatus: InventoryStatus.OWNED_ACTIVE,
+            ownerRole: extDev.ownerRole,
+            parentDeviceId: null,
+            position: { x: sourceInChild ? 1200 : -320, y: bNodes.length * 140 },
+            ports: [extPort],
+            powerRequired: false,
+            powerSourceType: 'NONE',
+            hostUsbType: 'NONE',
+            imageUrl: extDev.imageUrl,
+            furniture: null,
+          } as GraphDevice;
+          createdBoundaryDevices.set(extDev.id, newVirtualDev);
+          bNodes.push(newVirtualDev);
+        } else {
+          if (!virtualDev.ports.some((p) => p.id === extPort.id)) {
+            virtualDev.ports.push(extPort);
+          }
+        }
+        bCables.push(cable);
+      }
+    }
+    return { boundaryNodes: bNodes, boundaryCables: bCables };
+  }, [allCables, allPortToDevice, allPortById, childIds, containerDevice.setupId]);
+
+  const displayedDevices = useMemo(() => [...childDevices, ...boundaryNodes], [childDevices, boundaryNodes]);
+  const displayedCables = useMemo(() => [...internalCables, ...boundaryCables], [internalCables, boundaryCables]);
+
+  const portToNodeId = useMemo(() => {
     const map = new Map<string, string>();
-    for (const d of childDevices) {
+    for (const d of displayedDevices) {
       for (const p of d.ports) map.set(p.id, d.id);
     }
     return map;
-  }, [childDevices]);
+  }, [displayedDevices]);
 
   const nodes: Node[] = useMemo(
     () =>
-      childDevices.map((device) => ({
-        id: device.id,
-        type: 'device',
-        position: device.position,
-        data: {
-          device,
-          children: childrenByParent.get(device.id) ?? [],
-          boundaryPorts: [],
-          onSelectChild,
-          onOpenInside: () => {},
-        } satisfies DeviceNodeData,
-      })),
-    [childDevices, childrenByParent, onSelectChild],
+      displayedDevices.map((device) => {
+        const isVirtual = device.id.startsWith('virtual-ext-');
+        return {
+          id: device.id,
+          type: 'device',
+          position: device.position,
+          data: {
+            device,
+            children: isVirtual ? [] : childrenByParent.get(device.id) ?? [],
+            boundaryPorts: [],
+            onSelectChild,
+            onOpenInside: () => {},
+          } satisfies DeviceNodeData,
+        };
+      }),
+    [displayedDevices, childrenByParent, onSelectChild],
   );
 
   const edges: Edge[] = useMemo(
     () =>
-      internalCables.map((cable) => ({
+      displayedCables.map((cable) => ({
         id: cable.id,
-        source: portToDevice.get(cable.sourcePortId) ?? '',
+        source: portToNodeId.get(cable.sourcePortId) ?? '',
         sourceHandle: cable.sourcePortId,
-        target: portToDevice.get(cable.targetPortId) ?? '',
+        target: portToNodeId.get(cable.targetPortId) ?? '',
         targetHandle: cable.targetPortId,
         label: cable.color ?? undefined,
         type: 'routed',
@@ -88,13 +164,13 @@ export default function ContainerInsideModal({
         },
         animated: cable.cableType === CableType.CONTROL_LINK,
       })),
-    [internalCables, portToDevice],
+    [displayedCables, portToNodeId],
   );
 
   return (
     <Modal>
       <Modal.Backdrop isOpen onOpenChange={(open) => !open && onClose()}>
-        <Modal.Container className="max-w-[92vw] h-[85vh] w-full">
+        <Modal.Container className="w-[98vw] h-[94vh] max-w-none">
           <Modal.Dialog className="flex h-full w-full flex-col p-0 overflow-hidden bg-surface border border-default-200 shadow-2xl">
             <Modal.CloseTrigger />
             <div className="flex items-center justify-between border-b border-default-200 px-5 py-3 bg-surface">
@@ -104,7 +180,9 @@ export default function ContainerInsideModal({
                 </div>
                 <div>
                   <h2 className="text-base font-semibold text-foreground">{containerDevice.name} — Внутренняя схема</h2>
-                  <p className="text-xs text-default-500">Компоненты борда, патч-кабели и внутреннее питание ({childDevices.length} устройств)</p>
+                  <p className="text-xs text-default-500">
+                    Компоненты борда ({childDevices.length} устройств), внешние подключения ({boundaryNodes.length} разьёмов) и внутреннее питание
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -136,6 +214,7 @@ export default function ContainerInsideModal({
                   onConnect={onConnect}
                   onNodeMoved={onNodeMoved}
                   minimap={false}
+                  fitPadding={0.08}
                 />
               )}
             </div>

@@ -34,7 +34,8 @@ const LUCIDE_ICON: Partial<Record<string, LucideIcon>> = {
 
 export function DeviceTypeIcon({ type, className }: { type: string; className?: string }) {
   const fontaudioIcon = FONTAUDIO_ICON[type];
-  if (fontaudioIcon) return <Icon icon={fontaudioIcon} className={className ?? 'h-3.5 w-3.5'} />;
+  const combinedClass = `shrink-0 aspect-square inline-block ${className ?? 'h-3.5 w-3.5'}`;
+  if (fontaudioIcon) return <Icon icon={fontaudioIcon} className={combinedClass} />;
   const LucideFallback = LUCIDE_ICON[type] ?? Mic2;
-  return <LucideFallback className={className ?? 'h-3.5 w-3.5'} strokeWidth={2} />;
+  return <LucideFallback className={combinedClass} strokeWidth={2} />;
 }

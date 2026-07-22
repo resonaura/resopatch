@@ -46,20 +46,19 @@ const STATUS_COLOR: Record<string, 'success' | 'default' | 'warning' | 'accent'>
 };
 
 function PortRow({ port, subtitle }: { port: GraphDevice['ports'][number]; subtitle?: string }) {
-  const showLeft = port.direction === PortDirection.IN || port.direction === PortDirection.BI;
-  const showRight = port.direction === PortDirection.OUT || port.direction === PortDirection.BI;
   const channelColor = portChannelColor(port.name);
   return (
-    <div className="relative flex items-center gap-1.5 border-b border-white/5 px-3.5 py-1 last:border-b-0">
-      {showLeft && <Handle type="target" position={Position.Left} id={port.id} />}
-      {showLeft && <PortTypeIcon portType={port.portType} />}
+    <div className="relative flex items-center gap-1.5 border-b border-white/5 px-3.5 py-1.5 last:border-b-0">
+      <Handle type="target" position={Position.Left} id={port.id} />
+      <Handle type="source" position={Position.Left} id={`${port.id}-src-left`} />
       {channelColor && <span className="h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-black/40" style={{ backgroundColor: channelColor }} />}
-      <span className="block min-w-0 flex-1 truncate pr-1 text-[10.5px] text-default-500" title={`${port.name}${subtitle ? ` · ${subtitle}` : ''} (${port.portType})`}>
+      <PortTypeIcon portType={port.portType} />
+      <span className="block min-w-0 flex-1 truncate text-[10.5px] text-default-500" title={`${port.name}${subtitle ? ` · ${subtitle}` : ''} (${port.portType})`}>
         {port.name}
         {subtitle && <span className="block truncate text-[9px] text-default-500/70">{subtitle}</span>}
       </span>
-      {showRight && <PortTypeIcon portType={port.portType} />}
-      {showRight && <Handle type="source" position={Position.Right} id={port.id} />}
+      <Handle type="source" position={Position.Right} id={port.id} />
+      <Handle type="target" position={Position.Right} id={`${port.id}-tgt-right`} />
     </div>
   );
 }
@@ -69,9 +68,9 @@ function PortRow({ port, subtitle }: { port: GraphDevice['ports'][number]; subti
  *  so callers never need an `if (imageUrl)` branch of their own. */
 function DeviceThumb({ device, className }: { device: Pick<GraphDevice, 'imageUrl' | 'type'>; className: string }) {
   if (device.imageUrl) {
-    return <img src={device.imageUrl} alt="" className={`shrink-0 rounded object-cover ${className}`} />;
+    return <img src={device.imageUrl} alt="" className={`shrink-0 aspect-square rounded object-contain object-center ${className}`} />;
   }
-  return <DeviceTypeIcon type={device.type} className={`shrink-0 text-default-500 ${className}`} />;
+  return <DeviceTypeIcon type={device.type} className={`shrink-0 aspect-square text-default-500 ${className}`} />;
 }
 
 function DeviceNodeImpl({ data, selected }: NodeProps) {
@@ -84,7 +83,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`w-[220px] rounded-lg border bg-surface-secondary text-xs shadow-lg ${
+      className={`w-[240px] rounded-lg border bg-surface-secondary text-xs shadow-lg ${
         selected ? 'border-accent ring-2 ring-accent/40' : 'border-default-200'
       } ${inactive ? 'border-dashed opacity-70' : ''}`}
     >

@@ -1,36 +1,68 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Connection, Edge, Node } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Table, Tabs } from '@heroui/react';
-import { ChevronLeft, ChevronRight, ClipboardList, LayoutGrid, ListMusic, LogOut, Settings, Wand2 } from 'lucide-react';
-import { CABLE_COLORS, CABLE_DASH, CABLE_WIDTH_SCALE, CableType, type InputListRow, type PortDto, type RiderRow } from '@resopatch/shared';
-import { api, type GraphDevice } from '../api/client';
-import type { DeviceNodeData } from '../components/DeviceNode';
-import PatchCanvas from '../components/PatchCanvas';
-import Sidebar from '../components/Sidebar';
-import Inspector, { type Selection } from '../components/Inspector';
-import NewDeviceModal from '../components/NewDeviceModal';
-import NewCableModal from '../components/NewCableModal';
-import SettingsModal from '../components/SettingsModal';
-import ContainerInsideModal from '../components/ContainerInsideModal';
-import { splitMainCanvasGraph } from '../lib/containerGraph';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Connection, Edge, Node } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button, Table, Tabs } from "@heroui/react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  LayoutGrid,
+  ListMusic,
+  LogOut,
+  Settings,
+  Wand2,
+} from "lucide-react";
+import {
+  CABLE_COLORS,
+  CABLE_DASH,
+  CABLE_WIDTH_SCALE,
+  CableType,
+  type InputListRow,
+  type PortDto,
+  type RiderRow,
+} from "@resopatch/shared";
+import { api, type GraphDevice } from "../api/client";
+import type { DeviceNodeData } from "../components/DeviceNode";
+import PatchCanvas from "../components/PatchCanvas";
+import Sidebar from "../components/Sidebar";
+import Inspector, { type Selection } from "../components/Inspector";
+import NewDeviceModal from "../components/NewDeviceModal";
+import NewCableModal from "../components/NewCableModal";
+import SettingsModal from "../components/SettingsModal";
+import ContainerInsideModal from "../components/ContainerInsideModal";
+import { splitMainCanvasGraph } from "../lib/containerGraph";
 
-export default function Constructor({ setupId, setupName }: { setupId: string; setupName: string }) {
+export default function Constructor({
+  setupId,
+  setupName,
+}: {
+  setupId: string;
+  setupName: string;
+}) {
   const qc = useQueryClient();
-  const graphQuery = useQuery({ queryKey: ['graph', setupId], queryFn: () => api.getGraph(setupId) });
+  const graphQuery = useQuery({
+    queryKey: ["graph", setupId],
+    queryFn: () => api.getGraph(setupId),
+  });
   const graph = graphQuery.data;
 
   const [selection, setSelection] = useState<Selection>(null);
   const [showNewDevice, setShowNewDevice] = useState(false);
-  const [newDeviceParentId, setNewDeviceParentId] = useState<string | null>(null);
+  const [newDeviceParentId, setNewDeviceParentId] = useState<string | null>(
+    null,
+  );
   const [showSettings, setShowSettings] = useState(false);
-  const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
-  const [view, setView] = useState<'canvas' | 'input-list' | 'rider'>('canvas');
+  const [pendingConnection, setPendingConnection] = useState<Connection | null>(
+    null,
+  );
+  const [view, setView] = useState<"canvas" | "input-list" | "rider">("canvas");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
 
-  const [insideContainerId, setInsideContainerId] = useState<string | null>(null);
+  const [insideContainerId, setInsideContainerId] = useState<string | null>(
+    null,
+  );
 
   const childrenByParent = useMemo(() => {
     const map = new Map<string, GraphDevice[]>();
@@ -44,7 +76,12 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
   }, [graph]);
 
   const mainGraph = useMemo(() => {
-    if (!graph) return { externalCables: [], internalCableIds: new Set<string>(), boundaryPortsByContainer: new Map() };
+    if (!graph)
+      return {
+        externalCables: [],
+        internalCableIds: new Set<string>(),
+        boundaryPortsByContainer: new Map(),
+      };
     return splitMainCanvasGraph(graph.devices, graph.cables);
   }, [graph]);
 
@@ -56,7 +93,10 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
     return map;
   }, [graph]);
 
-  const onSelectChild = useCallback((id: string) => setSelection({ kind: 'device', id }), []);
+  const onSelectChild = useCallback(
+    (id: string) => setSelection({ kind: "device", id }),
+    [],
+  );
 
   useEffect(() => {
     if (selection) setInspectorOpen(true);
@@ -67,14 +107,15 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
       (graph?.devices ?? [])
         .filter((device) => !device.parentDeviceId)
         .map((device) => {
-          const boundaryPortDtos = mainGraph.boundaryPortsByContainer.get(device.id) ?? [];
+          const boundaryPortDtos =
+            mainGraph.boundaryPortsByContainer.get(device.id) ?? [];
           const boundaryPorts = boundaryPortDtos.map((port: PortDto) => ({
             port,
-            deviceName: deviceByPortId.get(port.id)?.name ?? '',
+            deviceName: deviceByPortId.get(port.id)?.name ?? "",
           }));
           return {
             id: device.id,
-            type: 'device',
+            type: "device",
             position: device.position,
             data: {
               device,
@@ -83,10 +124,18 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
               onSelectChild,
               onOpenInside: (id: string) => setInsideContainerId(id),
             } satisfies DeviceNodeData,
-            selected: selection?.kind === 'device' && selection.id === device.id,
+            selected:
+              selection?.kind === "device" && selection.id === device.id,
           };
         }),
-    [graph, mainGraph, childrenByParent, deviceByPortId, onSelectChild, selection],
+    [
+      graph,
+      mainGraph,
+      childrenByParent,
+      deviceByPortId,
+      onSelectChild,
+      selection,
+    ],
   );
 
   const portToDevice = useMemo(() => {
@@ -112,56 +161,85 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
     () =>
       mainGraph.externalCables.map((cable) => ({
         id: cable.id,
-        source: portToDevice.get(cable.sourcePortId) ?? '',
+        source: portToDevice.get(cable.sourcePortId) ?? "",
         sourceHandle: cable.sourcePortId,
-        target: portToDevice.get(cable.targetPortId) ?? '',
+        target: portToDevice.get(cable.targetPortId) ?? "",
         targetHandle: cable.targetPortId,
         label: cable.color ?? undefined,
-        selected: selection?.kind === 'cable' && selection.id === cable.id,
-        type: 'routed',
+        selected: selection?.kind === "cable" && selection.id === cable.id,
+        type: "routed",
         style: {
           stroke: CABLE_COLORS[cable.cableType],
-          strokeWidth: (selection?.kind === 'cable' && selection.id === cable.id ? 3 : 1.5) * CABLE_WIDTH_SCALE[cable.cableType],
+          strokeWidth:
+            (selection?.kind === "cable" && selection.id === cable.id
+              ? 3
+              : 1.5) * CABLE_WIDTH_SCALE[cable.cableType],
           strokeDasharray: CABLE_DASH[cable.cableType],
         },
         animated: cable.cableType === CableType.CONTROL_LINK,
-        zIndex: selection?.kind === 'cable' && selection.id === cable.id ? 1 : 0,
+        zIndex:
+          selection?.kind === "cable" && selection.id === cable.id ? 1 : 0,
       })),
     [mainGraph.externalCables, portToDevice, selection],
   );
 
   const movePosition = useMutation({
-    mutationFn: (vars: { id: string; position: { x: number; y: number } }) => api.updateDevice(vars.id, { position: vars.position }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
+    mutationFn: (vars: { id: string; position: { x: number; y: number } }) =>
+      api.updateDevice(vars.id, { position: vars.position }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["graph", setupId] }),
   });
 
   const autoLayout = useMutation({
-    mutationFn: (sizes: Record<string, { width: number; height: number }>) => api.autoLayout(setupId, sizes),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
+    mutationFn: (sizes: Record<string, { width: number; height: number }>) =>
+      api.autoLayout(setupId, sizes),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["graph", setupId] }),
   });
 
+  const getMeasuredSizesRef = useRef<
+    (() => Record<string, { width: number; height: number }>) | null
+  >(null);
+
   const runAutoLayout = useCallback(() => {
-    const sizes: Record<string, { width: number; height: number }> = {};
-    for (const n of initialNodes) {
-      const width = (n as any).measured?.width ?? n.width;
-      const height = (n as any).measured?.height ?? n.height;
-      if (width && height) sizes[n.id] = { width, height };
-    }
+    const sizes = getMeasuredSizesRef.current
+      ? getMeasuredSizesRef.current()
+      : {};
     autoLayout.mutate(sizes);
-  }, [initialNodes, autoLayout]);
+  }, [autoLayout]);
 
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.sourceHandle || !connection.targetHandle) return;
     setPendingConnection(connection);
   }, []);
 
-  if (graphQuery.isLoading) return <div className="flex h-full items-center justify-center text-default-500">Загрузка сетапа…</div>;
-  if (graphQuery.isError || !graph) return <div className="flex h-full items-center justify-center text-default-500">Не удалось загрузить сетап.</div>;
+  if (graphQuery.isLoading)
+    return (
+      <div className="flex h-full items-center justify-center text-default-500">
+        Загрузка сетапа…
+      </div>
+    );
+  if (graphQuery.isError || !graph)
+    return (
+      <div className="flex h-full items-center justify-center text-default-500">
+        Не удалось загрузить сетап.
+      </div>
+    );
 
-  const pendingSourcePort = pendingConnection ? graph.devices.flatMap((d) => d.ports).find((p) => p.id === pendingConnection.sourceHandle) : null;
-  const pendingTargetPort = pendingConnection ? graph.devices.flatMap((d) => d.ports).find((p) => p.id === pendingConnection.targetHandle) : null;
-  const pendingSourceDevice = pendingConnection ? graph.devices.find((d) => d.id === pendingConnection.source) : null;
-  const pendingTargetDevice = pendingConnection ? graph.devices.find((d) => d.id === pendingConnection.target) : null;
+  const pendingSourcePort = pendingConnection
+    ? graph.devices
+        .flatMap((d) => d.ports)
+        .find((p) => p.id === pendingConnection.sourceHandle)
+    : null;
+  const pendingTargetPort = pendingConnection
+    ? graph.devices
+        .flatMap((d) => d.ports)
+        .find((p) => p.id === pendingConnection.targetHandle)
+    : null;
+  const pendingSourceDevice = pendingConnection
+    ? graph.devices.find((d) => d.id === pendingConnection.source)
+    : null;
+  const pendingTargetDevice = pendingConnection
+    ? graph.devices.find((d) => d.id === pendingConnection.target)
+    : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -193,8 +271,13 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
             </Tabs.List>
           </Tabs.ListContainer>
         </Tabs>
-        {view === 'canvas' && (
-          <Button size="sm" variant="secondary" onPress={runAutoLayout} isPending={autoLayout.isPending}>
+        {view === "canvas" && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onPress={runAutoLayout}
+            isPending={autoLayout.isPending}
+          >
             <Wand2 className="h-3.5 w-3.5" />
             Упорядочить
           </Button>
@@ -216,11 +299,13 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
         </Button>
       </header>
       <div className="flex min-h-0 flex-1">
-        <div className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${sidebarOpen ? 'w-[260px]' : 'w-0'}`}>
+        <div
+          className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${sidebarOpen ? "w-[260px]" : "w-0"}`}
+        >
           <Sidebar
             devices={graph.devices}
-            selectedId={selection?.kind === 'device' ? selection.id : null}
-            onSelect={(id) => setSelection({ kind: 'device', id })}
+            selectedId={selection?.kind === "device" ? selection.id : null}
+            onSelect={(id) => setSelection({ kind: "device", id })}
             onNewDevice={() => {
               setNewDeviceParentId(null);
               setShowNewDevice(true);
@@ -230,37 +315,52 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
         <button
           type="button"
           onClick={() => setSidebarOpen((v) => !v)}
-          title={sidebarOpen ? 'Скрыть инвентарь' : 'Показать инвентарь'}
+          title={sidebarOpen ? "Скрыть инвентарь" : "Показать инвентарь"}
           className="flex w-5 flex-none items-center justify-center border-r border-default-200 bg-surface text-default-500 hover:bg-surface-secondary hover:text-foreground"
         >
-          {sidebarOpen ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          {sidebarOpen ? (
+            <ChevronLeft className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" />
+          )}
         </button>
 
         <div className="relative min-h-0 flex-1">
-          {view === 'canvas' && (
+          {view === "canvas" && (
             <PatchCanvas
               nodes={initialNodes}
               edges={initialEdges}
-              onNodeClick={(id) => setSelection({ kind: 'device', id })}
-              onEdgeClick={(id) => setSelection({ kind: 'cable', id })}
+              onNodeClick={(id) => setSelection({ kind: "device", id })}
+              onEdgeClick={(id) => setSelection({ kind: "cable", id })}
               onPaneClick={() => setSelection(null)}
               onConnect={onConnect}
-              onNodeMoved={(id, position) => movePosition.mutate({ id, position })}
+              onNodeMoved={(id, position) =>
+                movePosition.mutate({ id, position })
+              }
+              onGetMeasuredSizes={(getter) => {
+                getMeasuredSizesRef.current = getter;
+              }}
             />
           )}
-          {view === 'input-list' && <InputListTable setupId={setupId} />}
-          {view === 'rider' && <RiderTable setupId={setupId} />}
+          {view === "input-list" && <InputListTable setupId={setupId} />}
+          {view === "rider" && <RiderTable setupId={setupId} />}
         </div>
 
         <button
           type="button"
           onClick={() => setInspectorOpen((v) => !v)}
-          title={inspectorOpen ? 'Скрыть инспектор' : 'Показать инспектор'}
+          title={inspectorOpen ? "Скрыть инспектор" : "Показать инспектор"}
           className="flex w-5 flex-none items-center justify-center border-l border-default-200 bg-surface text-default-500 hover:bg-surface-secondary hover:text-foreground"
         >
-          {inspectorOpen ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+          {inspectorOpen ? (
+            <ChevronRight className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronLeft className="h-3.5 w-3.5" />
+          )}
         </button>
-        <div className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${inspectorOpen ? 'w-[320px]' : 'w-0'}`}>
+        <div
+          className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${inspectorOpen ? "w-[320px]" : "w-0"}`}
+        >
           <Inspector
             graph={graph}
             selection={selection}
@@ -269,21 +369,27 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
               setNewDeviceParentId(parentId);
               setShowNewDevice(true);
             }}
-            onSelectDevice={(id) => setSelection({ kind: 'device', id })}
+            onSelectDevice={(id) => setSelection({ kind: "device", id })}
           />
         </div>
       </div>
       {showNewDevice && (
-        <NewDeviceModal setupId={setupId} defaultParentId={newDeviceParentId} onClose={() => setShowNewDevice(false)} />
+        <NewDeviceModal
+          setupId={setupId}
+          defaultParentId={newDeviceParentId}
+          onClose={() => setShowNewDevice(false)}
+        />
       )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {insideContainerId && graph && (
         <ContainerInsideModal
-          containerDevice={graph.devices.find((d) => d.id === insideContainerId)!}
+          containerDevice={
+            graph.devices.find((d) => d.id === insideContainerId)!
+          }
           allDevices={graph.devices}
           allCables={graph.cables}
           onClose={() => setInsideContainerId(null)}
-          onSelectChild={(id) => setSelection({ kind: 'device', id })}
+          onSelectChild={(id) => setSelection({ kind: "device", id })}
           onAddChild={(containerId) => {
             setNewDeviceParentId(containerId);
             setShowNewDevice(true);
@@ -292,34 +398,51 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
           onNodeMoved={(id, position) => movePosition.mutate({ id, position })}
         />
       )}
-      {pendingConnection && pendingSourcePort && pendingTargetPort && pendingSourceDevice && pendingTargetDevice && (
-        <NewCableModal
-          setupId={setupId}
-          sourcePortId={pendingSourcePort.id}
-          targetPortId={pendingTargetPort.id}
-          sourcePort={pendingSourcePort}
-          targetPort={pendingTargetPort}
-          sourceDeviceName={pendingSourceDevice.name}
-          targetDeviceName={pendingTargetDevice.name}
-          onClose={() => setPendingConnection(null)}
-        />
-      )}
+      {pendingConnection &&
+        pendingSourcePort &&
+        pendingTargetPort &&
+        pendingSourceDevice &&
+        pendingTargetDevice && (
+          <NewCableModal
+            setupId={setupId}
+            sourcePortId={pendingSourcePort.id}
+            targetPortId={pendingTargetPort.id}
+            sourcePort={pendingSourcePort}
+            targetPort={pendingTargetPort}
+            sourceDeviceName={pendingSourceDevice.name}
+            targetDeviceName={pendingTargetDevice.name}
+            onClose={() => setPendingConnection(null)}
+          />
+        )}
     </div>
   );
 }
 
 function InputListTable({ setupId }: { setupId: string }) {
-  const query = useQuery({ queryKey: ['input-list', setupId], queryFn: () => api.getInputList(setupId) });
-  if (query.isLoading) return <div className="overflow-auto p-4 text-sm text-default-500">Загрузка…</div>;
-  if (query.isError || !query.data) return <div className="overflow-auto p-4 text-sm text-default-500">Ошибка загрузки.</div>;
+  const query = useQuery({
+    queryKey: ["input-list", setupId],
+    queryFn: () => api.getInputList(setupId),
+  });
+  if (query.isLoading)
+    return (
+      <div className="overflow-auto p-4 text-sm text-default-500">
+        Загрузка…
+      </div>
+    );
+  if (query.isError || !query.data)
+    return (
+      <div className="overflow-auto p-4 text-sm text-default-500">
+        Ошибка загрузки.
+      </div>
+    );
 
   const columns: { key: keyof InputListRow; label: string }[] = [
-    { key: 'channel', label: 'CH' },
-    { key: 'sourceName', label: 'Источник' },
-    { key: 'connector', label: 'Разъём' },
-    { key: 'routing', label: 'Маршрут' },
-    { key: 'zone', label: 'Зона' },
-    { key: 'owner', label: 'Владелец' },
+    { key: "channel", label: "CH" },
+    { key: "sourceName", label: "Источник" },
+    { key: "connector", label: "Разъём" },
+    { key: "routing", label: "Маршрут" },
+    { key: "zone", label: "Зона" },
+    { key: "owner", label: "Владелец" },
   ];
 
   return (
@@ -349,9 +472,22 @@ function InputListTable({ setupId }: { setupId: string }) {
 }
 
 function RiderTable({ setupId }: { setupId: string }) {
-  const query = useQuery({ queryKey: ['rider', setupId], queryFn: () => api.getRider(setupId) });
-  if (query.isLoading) return <div className="overflow-auto p-4 text-sm text-default-500">Загрузка…</div>;
-  if (query.isError || !query.data) return <div className="overflow-auto p-4 text-sm text-default-500">Ошибка загрузки.</div>;
+  const query = useQuery({
+    queryKey: ["rider", setupId],
+    queryFn: () => api.getRider(setupId),
+  });
+  if (query.isLoading)
+    return (
+      <div className="overflow-auto p-4 text-sm text-default-500">
+        Загрузка…
+      </div>
+    );
+  if (query.isError || !query.data)
+    return (
+      <div className="overflow-auto p-4 text-sm text-default-500">
+        Ошибка загрузки.
+      </div>
+    );
 
   return (
     <div className="min-h-0 overflow-auto p-4">
@@ -371,8 +507,8 @@ function RiderTable({ setupId }: { setupId: string }) {
                   <Table.Cell>{r.category}</Table.Cell>
                   <Table.Cell>{r.name}</Table.Cell>
                   <Table.Cell>{r.quantity}</Table.Cell>
-                  <Table.Cell>{r.isUserOwned ? 'наше' : 'площадка'}</Table.Cell>
-                  <Table.Cell>{r.note ?? ''}</Table.Cell>
+                  <Table.Cell>{r.isUserOwned ? "наше" : "площадка"}</Table.Cell>
+                  <Table.Cell>{r.note ?? ""}</Table.Cell>
                 </Table.Row>
               ))}
             </Table.Body>

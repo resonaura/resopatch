@@ -52,21 +52,56 @@ function CableRouter({
       obstacles.push({ id, x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y, width, height });
     }
 
+    const findClosestHandle = (node: Node, handleId: string, type: 'source' | 'target', otherCenter: { x: number; y: number }) => {
+      const internalNode = node as any;
+      const handles: any[] = internalNode.internals?.handleBounds?.[type] ?? [];
+      const baseId = handleId.replace(/-(src|tgt)-(left|right)$/, '');
+      const matches = handles.filter((h: any) => h.id === baseId || (h.id && h.id.includes(baseId)));
+      if (matches.length === 0) return null;
+
+      let best = matches[0];
+      let minDistance = Infinity;
+      for (const h of matches) {
+        const hX = internalNode.internals.positionAbsolute.x + h.x + h.width / 2;
+        const hY = internalNode.internals.positionAbsolute.y + h.y + h.height / 2;
+        const dist = Math.hypot(hX - otherCenter.x, hY - otherCenter.y);
+        if (dist < minDistance) {
+          minDistance = dist;
+          best = h;
+        }
+      }
+      return best;
+    };
+
     const specs: EdgeRouteSpec[] = [];
     for (const e of edges) {
       const sourceNode = nodeLookup.get(e.source);
       const targetNode = nodeLookup.get(e.target);
       if (!sourceNode || !targetNode || !e.sourceHandle || !e.targetHandle) continue;
-      const sHandle = sourceNode.internals.handleBounds?.source?.find((h) => h.id === e.sourceHandle);
-      const tHandle = targetNode.internals.handleBounds?.target?.find((h) => h.id === e.targetHandle);
+
+      const srcInternal = sourceNode as any;
+      const tgtInternal = targetNode as any;
+
+      const targetCenter = {
+        x: tgtInternal.internals.positionAbsolute.x + (targetNode.measured?.width ?? targetNode.width ?? 240) / 2,
+        y: tgtInternal.internals.positionAbsolute.y + (targetNode.measured?.height ?? targetNode.height ?? 100) / 2,
+      };
+      const sourceCenter = {
+        x: srcInternal.internals.positionAbsolute.x + (sourceNode.measured?.width ?? sourceNode.width ?? 240) / 2,
+        y: srcInternal.internals.positionAbsolute.y + (sourceNode.measured?.height ?? sourceNode.height ?? 100) / 2,
+      };
+
+      const sHandle = findClosestHandle(sourceNode, e.sourceHandle, 'source', targetCenter);
+      const tHandle = findClosestHandle(targetNode, e.targetHandle, 'target', sourceCenter);
       if (!sHandle || !tHandle) continue;
+
       const start = {
-        x: sourceNode.internals.positionAbsolute.x + sHandle.x + sHandle.width,
-        y: sourceNode.internals.positionAbsolute.y + sHandle.y + sHandle.height / 2,
+        x: srcInternal.internals.positionAbsolute.x + sHandle.x + (sHandle.position === 'right' ? sHandle.width : 0),
+        y: srcInternal.internals.positionAbsolute.y + sHandle.y + sHandle.height / 2,
       };
       const end = {
-        x: targetNode.internals.positionAbsolute.x + tHandle.x,
-        y: targetNode.internals.positionAbsolute.y + tHandle.y + tHandle.height / 2,
+        x: tgtInternal.internals.positionAbsolute.x + tHandle.x + (tHandle.position === 'right' ? tHandle.width : 0),
+        y: tgtInternal.internals.positionAbsolute.y + tHandle.y + tHandle.height / 2,
       };
       specs.push({ id: e.id, sourceNodeId: e.source, targetNodeId: e.target, start, end });
     }
@@ -94,7 +129,9 @@ export default function PatchCanvas({
   onPaneClick,
   onConnect,
   onNodeMoved,
+  onGetMeasuredSizes,
   minimap = true,
+  fitPadding,
 }: {
   nodes: Node[];
   edges: Edge[];
@@ -103,7 +140,9 @@ export default function PatchCanvas({
   onPaneClick: () => void;
   onConnect: (connection: Connection) => void;
   onNodeMoved: (id: string, position: { x: number; y: number }) => void;
+  onGetMeasuredSizes?: (getter: () => Record<string, { width: number; height: number }>) => void;
   minimap?: boolean;
+  fitPadding?: number;
 }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -115,12 +154,20 @@ export default function PatchCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialNodes, initialEdges]);
 
-  // Cable routes are recomputed by CableRouter (a grid-based A*) whenever `routeVersion` changes
-  // — never on every React Flow position event directly, which fires far more often than the
-  // browser can usefully repaint. `requestRouteRecompute` collapses any number of those events
-  // within one animation frame into a single bump, so routing (including cables NOT attached to
-  // the node being dragged, which still need to dodge it) tracks the drag live instead of only
-  // snapping into place on drop.
+  // Expose measured sizes callback for autoLayout
+  useEffect(() => {
+    if (!onGetMeasuredSizes) return;
+    onGetMeasuredSizes(() => {
+      const sizes: Record<string, { width: number; height: number }> = {};
+      for (const n of nodes) {
+        const width = n.measured?.width ?? n.width ?? 240;
+        const height = n.measured?.height ?? n.height ?? 100;
+        sizes[n.id] = { width, height };
+      }
+      return sizes;
+    });
+  }, [nodes, onGetMeasuredSizes]);
+
   const [routes, setRoutes] = useState<Map<string, Point[]>>(new Map());
   const [routeVersion, setRouteVersion] = useState(0);
   const routeRafRef = useRef<number | null>(null);
@@ -142,9 +189,16 @@ export default function PatchCanvas({
 
   const renderEdges = useMemo(() => edges.map((e) => ({ ...e, data: { ...(e.data ?? {}), points: routes.get(e.id) } })), [edges, routes]);
 
-  // Fires continuously while a node is being dragged (React Flow calls this on every pointer-move
-  // frame) — throttled by requestRouteRecompute to at most one full reroute per animation frame.
-  const handleNodeDrag = useCallback(() => requestRouteRecompute(), [requestRouteRecompute]);
+  // Throttle continuous drag rerouting to max once per 100ms so node dragging stays 60 FPS smooth.
+  const lastDragTimeRef = useRef<number>(0);
+  const handleNodeDrag = useCallback(() => {
+    const now = Date.now();
+    if (now - lastDragTimeRef.current > 100) {
+      lastDragTimeRef.current = now;
+      requestRouteRecompute();
+    }
+  }, [requestRouteRecompute]);
+
   const handleNodeDragStop = useCallback(
     (_: unknown, node: Node) => {
       onNodeMoved(node.id, { x: node.position.x, y: node.position.y });
@@ -172,9 +226,9 @@ export default function PatchCanvas({
         onEdgeClick={handleEdgeClick}
         onPaneClick={onPaneClick}
         fitView
-        fitViewOptions={{ padding: 0.15, minZoom: 0.02, maxZoom: 1 }}
-        minZoom={0.02}
-        maxZoom={2}
+        fitViewOptions={{ padding: fitPadding ?? 0.15, minZoom: 0.45, maxZoom: 1.1 }}
+        minZoom={0.15}
+        maxZoom={2.5}
         colorMode="dark"
         connectionLineType={ConnectionLineType.SmoothStep}
         elevateEdgesOnSelect

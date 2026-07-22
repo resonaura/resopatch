@@ -4,30 +4,19 @@ import { Device } from '../database/entities/device.entity';
 import { Cable } from '../database/entities/cable.entity';
 import { Port } from '../database/entities/port.entity';
 
-const FALLBACK_WIDTH = 220;
+const FALLBACK_WIDTH = 240;
 const FALLBACK_HEIGHT = 90;
-const COLUMN_GAP = 120;
-const ROW_GAP = 60;
-const CHAIN_GAP_X = 160;
-const ZONE_GAP_X = 420;
-const ZONE_GAP_Y = 280;
+const COLUMN_GAP = 140;
+const ROW_GAP = 100;
+const CHAIN_GAP_X = 180;
+const ZONE_GAP_X = 480;
+const ZONE_GAP_Y = 400;
 
 type ZoneName = 'andrey' | 'barabanschik' | 'vokal' | 'service' | 'inactive';
 
-/** Not a signal-flow diagram — a stage map. Each band member gets their own independent
- *  top-to-bottom chain (own dagre pass, not sharing rank with anyone else's), and the four
- *  islands sit where they'd actually stand: Andrey stage left, Даня-барабанщик upstage centre
- *  (drawn top since he's furthest from the audience), Даня-вокал downstage centre (drawn
- *  underneath him — closest to the audience), and a service column stage right for gear that
- *  isn't any one person's (stage box, venue outlet, the playback laptop + its audio interface).
- *  Inactive/planned gear isn't part of the stage at all, so it gets its own shelf below
- *  everything instead of a spot in the floor plan. */
 function zoneOf(device: Device): ZoneName {
   if (device.inventoryStatus === InventoryStatus.OWNED_INACTIVE || device.inventoryStatus === InventoryStatus.PLANNED_NOT_OWNED) return 'inactive';
   if (device.type === DeviceType.STAGE_BOX) return 'service';
-  // The playback rig (laptop + its audio interface) travels as one unit and should sit together
-  // in the service column — not split, with the interface stranded in the drummer's personal
-  // lane while the laptop it's cabled to sits three columns away.
   if (device.ownerRole === 'Даня-барабанщик' && (device.type === DeviceType.LAPTOP || device.type === DeviceType.AUDIO_INTERFACE)) return 'service';
   if (device.ownerRole === 'Андрей') return 'andrey';
   if (device.ownerRole === 'Даня-барабанщик') return 'barabanschik';
@@ -35,11 +24,6 @@ function zoneOf(device: Device): ZoneName {
   return 'service';
 }
 
-/** Pure power-distribution infrastructure (wall strips, isolated PSUs, splitters) — the "current
- *  path" drawn as its own block underneath each zone's "signal path" (instruments, interfaces,
- *  effects, mics — everything else, even though most of it also needs power via one of its own
- *  ports). A device that merely *has* a power port doesn't qualify; its whole reason for existing
- *  has to be distributing power. */
 function isPowerInfra(device: Device): boolean {
   return device.type === DeviceType.POWER_SUPPLY || device.type === DeviceType.POWER_SPLITTER || device.type === DeviceType.POWER_STRIP;
 }
@@ -60,43 +44,48 @@ interface ZoneLayout {
   height: number;
 }
 
-/**
- * Places one already-ranked chain (either the zone's power block or its signal block) top-to-
- * bottom starting at a given x offset: row = dense rank (how many hops down that chain), column =
- * a collision index that only increments when two devices land on the same rank (parallel
- * branches, or nothing connecting them at all). Column width and row height are each one fixed
- * size for the whole chain (the largest device in it, plus a generous gap), so spacing is uniform
- * and predictable rather than packed as tight as each device's actual pixel size allows.
- */
+/** Places one chain of devices vertically, accumulating real device heights per rank so no overlaps ever occur. */
 function placeChain(chain: Device[], rankOf: Map<string, number>, sizeOf: (id: string) => SizedDevice, xOffset: number): ZoneLayout {
   const positions = new Map<string, { x: number; y: number }>();
   if (chain.length === 0) return { positions, width: 0, height: 0 };
 
   const sized: SizedDevice[] = chain.map((d) => sizeOf(d.id));
   const columnWidth = Math.max(...sized.map((d) => d.width), FALLBACK_WIDTH) + COLUMN_GAP;
-  const rowHeight = Math.max(...sized.map((d) => d.height), FALLBACK_HEIGHT) + ROW_GAP;
-  const colsUsedAtRank = new Map<number, number>();
+  
   let maxRank = 0;
-  let chainWidth = 0;
+  const rankDevices = new Map<number, SizedDevice[]>();
   for (const d of sized) {
     const rank = rankOf.get(d.id)!;
     maxRank = Math.max(maxRank, rank);
+    const list = rankDevices.get(rank) ?? [];
+    list.push(d);
+    rankDevices.set(rank, list);
+  }
+
+  const rankY = new Map<number, number>();
+  let currentY = 0;
+  for (let r = 0; r <= maxRank; r++) {
+    rankY.set(r, currentY);
+    const devicesInRank = rankDevices.get(r) ?? [];
+    const maxH = devicesInRank.length > 0 ? Math.max(...devicesInRank.map((d) => d.height)) : FALLBACK_HEIGHT;
+    currentY += maxH + ROW_GAP;
+  }
+
+  const colsUsedAtRank = new Map<number, number>();
+  let chainWidth = 0;
+  for (const d of sized) {
+    const rank = rankOf.get(d.id)!;
     const col = colsUsedAtRank.get(rank) ?? 0;
     colsUsedAtRank.set(rank, col + 1);
     const x = xOffset + col * columnWidth;
-    positions.set(d.id, { x, y: rank * rowHeight });
+    const y = rankY.get(rank) ?? 0;
+    positions.set(d.id, { x, y });
     chainWidth = Math.max(chainWidth, x - xOffset + d.width);
   }
 
-  return { positions, width: chainWidth, height: (maxRank + 1) * rowHeight - ROW_GAP };
+  return { positions, width: chainWidth, height: currentY - ROW_GAP };
 }
 
-/**
- * Lays out one zone as two independent top-to-bottom chains side by side: the "power" chain
- * (extension cords, isolated PSUs — the electrical path) on the left, the "signal" chain
- * (instruments, interfaces, effects, mics — the audio path) on the right, each ranked by its own
- * cables *within this zone only* via dagre so each column reads as its own sequential flow.
- */
 function layoutZone(zoneDevices: Device[], cables: Cable[], portToDevice: Map<string, string>, sizeOf: (id: string) => SizedDevice): ZoneLayout {
   const positions = new Map<string, { x: number; y: number }>();
   if (zoneDevices.length === 0) return { positions, width: 0, height: 0 };
@@ -117,10 +106,6 @@ function layoutZone(zoneDevices: Device[], cables: Cable[], portToDevice: Map<st
   }
   dagre.layout(g);
 
-  // dagre's rank numbers frequently have gaps (e.g. 0, 2, 4, 6 — it reserves extra rank slots
-  // for edge routing internally) — using them as-is would leave huge empty rows. Only the
-  // *relative order* matters here, so densify to consecutive integers, separately per chain below
-  // (power and signal are visually independent columns, each restarting at row 0).
   const rawRankOf = new Map<string, number>();
   for (const d of zoneDevices) rawRankOf.set(d.id, g.node(d.id).rank ?? 0);
 
@@ -147,21 +132,42 @@ function layoutZone(zoneDevices: Device[], cables: Cable[], portToDevice: Map<st
   };
 }
 
-/**
- * `sizes` are real rendered pixel dimensions when available (React Flow's measured node size,
- * sent by the "Упорядочить" button) — the seed script instead passes estimated sizes, since
- * there's no browser at seed time to measure real ones.
- */
+function layoutContainerChildren(
+  children: Device[],
+  sizeOf: (id: string) => SizedDevice,
+): Map<string, { x: number; y: number }> {
+  const positions = new Map<string, { x: number; y: number }>();
+  if (children.length === 0) return positions;
+
+  const power = children.filter(isPowerInfra);
+  const signal = children.filter((d) => !isPowerInfra(d));
+
+  const COLS = 4;
+  const GAP_X = 340;
+
+  let currentY = 0;
+  for (let i = 0; i < signal.length; i += COLS) {
+    const rowDevices = signal.slice(i, i + COLS);
+    const maxRowH = Math.max(...rowDevices.map((d) => sizeOf(d.id).height), FALLBACK_HEIGHT);
+    rowDevices.forEach((d, colIndex) => {
+      positions.set(d.id, { x: colIndex * GAP_X, y: currentY });
+    });
+    currentY += maxRowH + 100;
+  }
+
+  power.forEach((d, i) => {
+    positions.set(d.id, { x: i * GAP_X, y: currentY });
+  });
+
+  return positions;
+}
+
 export function computeAutoLayout(
   devices: Device[],
   ports: Port[],
   cables: Cable[],
   sizes: Map<string, { width: number; height: number }>,
 ): LayoutResult {
-  // A device with a parent always renders nested inside that parent's card instead of as its own
-  // node — see DeviceNode.tsx — even if it has real ports of its own (e.g. a power brick strapped
-  // to a pedalboard): those ports render as a row *inside the parent's card*, so for layout
-  // purposes every port belongs to the nearest ancestor that actually gets positioned.
   const deviceById = new Map(devices.map((d) => [d.id, d]));
   const topAncestorId = (device: Device): string => {
     let current = device;
@@ -197,7 +203,6 @@ export function computeAutoLayout(
     for (const [id, pos] of zone.positions) positions.set(id, { x: pos.x + anchorX, y: pos.y + anchorY });
   };
 
-  // Left: Andrey. Centre column: Даня-барабанщик on top, Даня-вокал underneath. Right: service.
   place(andrey, 0, 0);
   const centerX = andrey.width + ZONE_GAP_X;
   place(barabanschik, centerX, 0);
@@ -206,9 +211,21 @@ export function computeAutoLayout(
   const serviceX = centerX + centerWidth + ZONE_GAP_X;
   place(service, serviceX, 0);
 
-  // Not part of the stage at all — a shelf below the tallest column, not a spot in the floor plan.
   const tallestColumn = Math.max(andrey.height, barabanschik.height + ZONE_GAP_Y + vokal.height, service.height);
   place(inactive, 0, tallestColumn + ZONE_GAP_Y);
+
+  const childrenByParent = new Map<string, Device[]>();
+  for (const d of devices) {
+    if (!d.parentDeviceId) continue;
+    const list = childrenByParent.get(d.parentDeviceId) ?? [];
+    list.push(d);
+    childrenByParent.set(d.parentDeviceId, list);
+  }
+
+  for (const [, children] of childrenByParent) {
+    const childPositions = layoutContainerChildren(children, sizedOf);
+    for (const [id, pos] of childPositions) positions.set(id, pos);
+  }
 
   return { positions };
 }
