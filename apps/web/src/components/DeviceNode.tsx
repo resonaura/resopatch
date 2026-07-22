@@ -1,21 +1,33 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Chip } from '@heroui/react';
+import { Layers } from 'lucide-react';
 import { InventoryStatus, PortDirection } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { portChannelColor } from '../lib/portChannel';
 import { PortTypeIcon } from '../lib/portIcons';
 
+/** A descendant's port that needs a Handle proxied onto this (collapsed) container card because
+ *  something outside the container plugs into it — see containerGraph.ts for how this set is
+ *  computed. `deviceName` is shown as a subtitle so "Mono In" is still identifiable once it's no
+ *  longer nested under its own pedal's mini-header. */
+export interface BoundaryPort {
+  port: GraphDevice['ports'][number];
+  deviceName: string;
+}
+
 export interface DeviceNodeData {
   device: GraphDevice;
-  /** Devices with parentDeviceId === this node's device — accessories (straps, tuner, velcro,
-   *  cases) travel as a plain nested list with no ports of their own worth drawing cables to.
-   *  A child that *does* have its own ports (e.g. a power brick strapped to a pedalboard) still
-   *  nests visually the same way, but renders its ports as their own row with a real Handle —
-   *  see `PortedChild` below — so it never becomes a second floating node on the canvas. */
+  /** Devices with parentDeviceId === this node's device. Ones with no ports of their own
+   *  (accessories: straps, tuner, velcro, cases) render as a plain nested list. Ones *with* ports
+   *  (e.g. a pedalboard's 11 pedals + PSU) are never rendered inline here at all — that's exactly
+   *  what used to clutter this card and tangle cables on top of it. Instead the card collapses to
+   *  its `boundaryPorts` plus a button that opens their own scoped canvas (ContainerInsideModal). */
   children: GraphDevice[];
+  boundaryPorts: BoundaryPort[];
   onSelectChild: (id: string) => void;
+  onOpenInside: (deviceId: string) => void;
   [key: string]: unknown;
 }
 
@@ -33,7 +45,7 @@ const STATUS_COLOR: Record<string, 'success' | 'default' | 'warning' | 'accent'>
   [InventoryStatus.VENUE_PROVIDED]: 'accent',
 };
 
-function PortRow({ port }: { port: GraphDevice['ports'][number] }) {
+function PortRow({ port, subtitle }: { port: GraphDevice['ports'][number]; subtitle?: string }) {
   const showLeft = port.direction === PortDirection.IN || port.direction === PortDirection.BI;
   const showRight = port.direction === PortDirection.OUT || port.direction === PortDirection.BI;
   const channelColor = portChannelColor(port.name);
@@ -42,8 +54,9 @@ function PortRow({ port }: { port: GraphDevice['ports'][number] }) {
       {showLeft && <Handle type="target" position={Position.Left} id={port.id} />}
       {showLeft && <PortTypeIcon portType={port.portType} />}
       {channelColor && <span className="h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-black/40" style={{ backgroundColor: channelColor }} />}
-      <span className="block min-w-0 flex-1 truncate pr-1 text-[10.5px] text-default-500" title={`${port.name} (${port.portType})`}>
+      <span className="block min-w-0 flex-1 truncate pr-1 text-[10.5px] text-default-500" title={`${port.name}${subtitle ? ` · ${subtitle}` : ''} (${port.portType})`}>
         {port.name}
+        {subtitle && <span className="block truncate text-[9px] text-default-500/70">{subtitle}</span>}
       </span>
       {showRight && <PortTypeIcon portType={port.portType} />}
       {showRight && <Handle type="source" position={Position.Right} id={port.id} />}
@@ -61,36 +74,13 @@ function DeviceThumb({ device, className }: { device: Pick<GraphDevice, 'imageUr
   return <DeviceTypeIcon type={device.type} className={`shrink-0 text-default-500 ${className}`} />;
 }
 
-/** A nested device that has real ports (e.g. PowerPlant ISO-12 Pro strapped to the pedalboard):
- *  its own mini header plus its own port rows, still inside the parent card — physically it
- *  travels as one unit with the parent, so visually it never gets a second box on the canvas. */
-function PortedChild({ child, onSelectChild }: { child: GraphDevice; onSelectChild: (id: string) => void }) {
-  return (
-    <div className="border-t border-default-200">
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onSelectChild(child.id);
-        }}
-        className="flex w-full items-center gap-1.5 bg-black/10 px-2.5 py-1 text-left hover:bg-white/10"
-        title={child.notes ?? child.name}
-      >
-        <DeviceThumb device={child} className="h-3 w-3" />
-        <span className="truncate text-[10.5px] font-medium text-default-400">{child.name}</span>
-      </button>
-      {child.ports.map((port) => (
-        <PortRow key={port.id} port={port} />
-      ))}
-    </div>
-  );
-}
-
 function DeviceNodeImpl({ data, selected }: NodeProps) {
-  const { device, children, onSelectChild } = data as unknown as DeviceNodeData;
+  const { device, children, boundaryPorts, onSelectChild, onOpenInside } = data as unknown as DeviceNodeData;
   const ports = device.ports;
   const inactive = device.inventoryStatus !== InventoryStatus.OWNED_ACTIVE && device.inventoryStatus !== InventoryStatus.VENUE_PROVIDED;
   const portedChildren = children.filter((c) => c.ports.length > 0);
   const plainChildren = children.filter((c) => c.ports.length === 0);
+  const isContainer = portedChildren.length > 0;
 
   return (
     <div
@@ -117,9 +107,29 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
           ))}
         </div>
       )}
-      {portedChildren.map((child) => (
-        <PortedChild key={child.id} child={child} onSelectChild={onSelectChild} />
-      ))}
+      {isContainer && (
+        <>
+          {boundaryPorts.length > 0 && (
+            <div className="border-t border-default-200">
+              {boundaryPorts.map((b) => (
+                <PortRow key={b.port.id} port={b.port} subtitle={b.deviceName} />
+              ))}
+            </div>
+          )}
+          <div className="border-t border-default-200 p-1.5">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenInside(device.id);
+              }}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent/10 px-2 py-1.5 text-[11px] font-medium text-accent hover:bg-accent/20"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              Показать внутри ({portedChildren.length})
+            </button>
+          </div>
+        </>
+      )}
       {plainChildren.length > 0 && (
         <div className="border-t border-default-200 bg-black/10 px-2 py-1.5">
           <div className="mb-1 text-[9px] font-medium uppercase tracking-wide text-default-500">Комплект / аксессуары</div>

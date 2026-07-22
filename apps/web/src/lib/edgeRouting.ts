@@ -281,17 +281,6 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
   }
 
   if (found) {
-    // found[0] and found[last] are exactly stubStart/stubEnd (same cell, by construction) — skip
-    // the duplicates and thread the short exact-pixel-to-grid hop in as its own clean segment.
-    //
-    // That hop is deliberately kept glued to the port (not moved further out along the exit row)
-    // even though that reads slightly less smooth up close: it's what keeps this segment pinned to
-    // the *exact* port pixel and excluded from lane offsetting (resolveOverlaps never touches the
-    // first/last segment). Moving it further out was tried and reverted — it turns this into an
-    // *eligible* segment keyed by the device's edge x, which is identical for every cable landing
-    // on that device from the same side, so any two cables sharing a target row collide here in a
-    // way resolveOverlaps can never fix. STUB and the corner radius (see RoutedEdge.tsx) are the
-    // actual knobs for "turn happens further from the port, with a smoother bend".
     const cellPoints = found.slice(1, -1).map(([cx, cy]) => ({ x: cx * cell, y: cy * cell }));
     return simplifyColinear([start, { x: start.x, y: stubStart.y }, stubStart, ...cellPoints, stubEnd, { x: end.x, y: stubEnd.y }, end]);
   }
