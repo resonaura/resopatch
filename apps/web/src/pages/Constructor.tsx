@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Background,
   ConnectionLineType,
@@ -7,7 +7,9 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
+  useNodesInitialized,
   useNodesState,
+  useStoreApi,
   type Connection,
   type Edge,
   type Node,
@@ -17,27 +19,78 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Table, Tabs } from '@heroui/react';
-import { ClipboardList, LayoutGrid, ListMusic, LogOut, Settings, Wand2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ClipboardList, LayoutGrid, ListMusic, LogOut, Settings, Wand2 } from 'lucide-react';
 import { CABLE_COLORS, CableType, type InputListRow, type RiderRow } from '@resopatch/shared';
 import { api, type GraphDevice } from '../api/client';
 import DeviceNode, { type DeviceNodeData } from '../components/DeviceNode';
+import RoutedEdge from '../components/RoutedEdge';
 import Sidebar from '../components/Sidebar';
 import Inspector, { type Selection } from '../components/Inspector';
 import NewDeviceModal from '../components/NewDeviceModal';
 import NewCableModal from '../components/NewCableModal';
 import SettingsModal from '../components/SettingsModal';
+import { computeRoutes, type EdgeRouteSpec, type Point, type RectObstacle } from '../lib/edgeRouting';
 
 const nodeTypes = { device: DeviceNode };
+const edgeTypes = { routed: RoutedEdge };
 
-/** Deterministic per-edge jitter for the smoothstep "offset" (how far a path overshoots its
- *  source/target before turning). Two cables that happen to run the same rectilinear route — e.g.
- *  several mics all heading to the same stage box — would otherwise trace the exact same corner
- *  points and read as one line; staggering the overshoot fans their elbows out just enough to
- *  keep each cable visually distinct. */
-function edgeOffset(id: string, min = 14, max = 58): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
-  return min + (hash % (max - min));
+/** Lives inside <ReactFlow> so it can read exact, per-handle pixel positions (including nested
+ *  ports like PowerPlant's, which share their parent's node) straight from the store — the same
+ *  data React Flow's own built-in edges use internally. Recomputing a grid-based route is too
+ *  expensive to do on every drag frame, so this only runs when `version` changes (drag-stop /
+ *  graph reload), not on every node-position update. */
+function CableRouter({
+  edges,
+  version,
+  onRoutes,
+}: {
+  edges: Edge[];
+  version: number;
+  onRoutes: (routes: Map<string, Point[]>) => void;
+}) {
+  const storeApi = useStoreApi();
+  const nodesInitialized = useNodesInitialized();
+
+  useEffect(() => {
+    if (!nodesInitialized) return;
+    const { nodeLookup } = storeApi.getState();
+
+    const obstacles: RectObstacle[] = [];
+    for (const [id, n] of nodeLookup) {
+      const width = n.measured?.width ?? n.width;
+      const height = n.measured?.height ?? n.height;
+      if (!width || !height) continue;
+      obstacles.push({ id, x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y, width, height });
+    }
+
+    const specs: EdgeRouteSpec[] = [];
+    for (const e of edges) {
+      const sourceNode = nodeLookup.get(e.source);
+      const targetNode = nodeLookup.get(e.target);
+      if (!sourceNode || !targetNode || !e.sourceHandle || !e.targetHandle) continue;
+      const sHandle = sourceNode.internals.handleBounds?.source?.find((h) => h.id === e.sourceHandle);
+      const tHandle = targetNode.internals.handleBounds?.target?.find((h) => h.id === e.targetHandle);
+      if (!sHandle || !tHandle) continue;
+      const start = {
+        x: sourceNode.internals.positionAbsolute.x + sHandle.x + sHandle.width,
+        y: sourceNode.internals.positionAbsolute.y + sHandle.y + sHandle.height / 2,
+      };
+      const end = {
+        x: targetNode.internals.positionAbsolute.x + tHandle.x,
+        y: targetNode.internals.positionAbsolute.y + tHandle.y + tHandle.height / 2,
+      };
+      specs.push({ id: e.id, sourceNodeId: e.source, targetNodeId: e.target, start, end });
+    }
+
+    const routes = computeRoutes(obstacles, specs);
+    (window as unknown as { __debugRouting?: unknown }).__debugRouting = { obstacles, specs, routes };
+    onRoutes(routes);
+    // Intentionally not depending on `edges`/`onRoutes` identity — recompute is gated by
+    // `version` (bumped explicitly on drag-stop / graph reload), not by every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodesInitialized, version]);
+
+  return null;
 }
 
 export default function Constructor({ setupId, setupName }: { setupId: string; setupName: string }) {
@@ -51,6 +104,10 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
   const [showSettings, setShowSettings] = useState(false);
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
   const [view, setView] = useState<'canvas' | 'input-list' | 'rider'>('canvas');
+  // Both side panels start collapsed — the canvas is the point of the app, the panels are tools
+  // you reach for, not a permanent fixture of the layout.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
 
   const childrenByParent = useMemo(() => {
     const map = new Map<string, GraphDevice[]>();
@@ -65,13 +122,20 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
 
   const onSelectChild = useCallback((id: string) => setSelection({ kind: 'device', id }), []);
 
+  // The inspector is collapsed by default, but picking something on the canvas or in the
+  // inventory should still surface its details rather than silently doing nothing.
+  useEffect(() => {
+    if (selection) setInspectorOpen(true);
+  }, [selection]);
+
   const initialNodes: Node[] = useMemo(
     () =>
       (graph?.devices ?? [])
-        // A device with a parent nests inside that parent's card instead of getting its own node
-        // — unless it has real ports of its own (e.g. a power brick strapped to a pedalboard),
-        // in which case its cables still need somewhere to land.
-        .filter((device) => !device.parentDeviceId || device.ports.length > 0)
+        // A device with a parent always nests inside that parent's card instead of getting its
+        // own node — even if it has real ports of its own (e.g. a power brick strapped to a
+        // pedalboard), in which case those ports render as a nested row *inside the parent's
+        // card* (see DeviceNode.tsx) so their cables still have exact pixel handles to land on.
+        .filter((device) => !device.parentDeviceId)
         .map((device) => ({
           id: device.id,
           type: 'device',
@@ -84,8 +148,24 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
   );
 
   const portToDevice = useMemo(() => {
+    const deviceById = new Map((graph?.devices ?? []).map((d) => [d.id, d]));
+    // Every port lands on the nearest ancestor that actually renders as its own React Flow node
+    // — i.e. walk up parentDeviceId until there isn't one — since a ported child (PowerPlant on
+    // the pedalboard) no longer gets a node of its own; its Handles live inside the ancestor's.
+    const topAncestorId = (device: GraphDevice): string => {
+      let current = device;
+      while (current.parentDeviceId) {
+        const parent = deviceById.get(current.parentDeviceId);
+        if (!parent) break;
+        current = parent;
+      }
+      return current.id;
+    };
     const map = new Map<string, string>();
-    for (const d of graph?.devices ?? []) for (const p of d.ports) map.set(p.id, d.id);
+    for (const d of graph?.devices ?? []) {
+      const nodeId = topAncestorId(d);
+      for (const p of d.ports) map.set(p.id, nodeId);
+    }
     return map;
   }, [graph]);
 
@@ -99,11 +179,9 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
         targetHandle: cable.targetPortId,
         label: cable.color ?? undefined,
         selected: selection?.kind === 'cable' && selection.id === cable.id,
-        // Right-angle routing hugs node edges instead of cutting diagonally across the canvas —
-        // with devices already grid-aligned by the zone layout, that keeps parallel runs visually
-        // distinct instead of bundling into an X of crossing bezier curves.
-        type: 'smoothstep',
-        pathOptions: { borderRadius: 10, offset: edgeOffset(cable.id) },
+        // Grid-routed: CableRouter (below) computes an obstacle-avoiding path per cable and
+        // stashes it on `data.points`; RoutedEdge just draws whatever it finds there.
+        type: 'routed',
         style: {
           stroke: CABLE_COLORS[cable.cableType],
           strokeWidth: selection?.kind === 'cable' && selection.id === cable.id ? 3 : 1.5,
@@ -124,6 +202,18 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
     setEdges(initialEdges);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialNodes, initialEdges]);
+
+  // Cable routes are recomputed by <CableRouter> (a grid-based A* — too expensive to rerun every
+  // drag frame) whenever `routeVersion` changes, not on every position update. Bumped explicitly
+  // below: once per graph (re)load, once per drag-stop.
+  const [routes, setRoutes] = useState<Map<string, Point[]>>(new Map());
+  const [routeVersion, setRouteVersion] = useState(0);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setRouteVersion((v) => v + 1));
+    return () => cancelAnimationFrame(raf);
+  }, [initialNodes, initialEdges]);
+
+  const renderEdges = useMemo(() => edges.map((e) => ({ ...e, data: { ...(e.data ?? {}), points: routes.get(e.id) } })), [edges, routes]);
 
   const movePosition = useMutation({
     mutationFn: (vars: { id: string; position: { x: number; y: number } }) => api.updateDevice(vars.id, { position: vars.position }),
@@ -151,6 +241,7 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
   const onNodeDragStop = useCallback(
     (_: unknown, node: Node) => {
       movePosition.mutate({ id: node.id, position: { x: node.position.x, y: node.position.y } });
+      setRouteVersion((v) => v + 1);
     },
     [movePosition],
   );
@@ -224,23 +315,35 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
           Выйти
         </Button>
       </header>
-      <div className="grid min-h-0 flex-1 grid-cols-[260px_1fr_320px]">
-        <Sidebar
-          devices={graph.devices}
-          selectedId={selection?.kind === 'device' ? selection.id : null}
-          onSelect={(id) => setSelection({ kind: 'device', id })}
-          onNewDevice={() => {
-            setNewDeviceParentId(null);
-            setShowNewDevice(true);
-          }}
-        />
-        {view === 'canvas' && (
-          <div className="relative min-h-0">
+      <div className="flex min-h-0 flex-1">
+        <div className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${sidebarOpen ? 'w-[260px]' : 'w-0'}`}>
+          <Sidebar
+            devices={graph.devices}
+            selectedId={selection?.kind === 'device' ? selection.id : null}
+            onSelect={(id) => setSelection({ kind: 'device', id })}
+            onNewDevice={() => {
+              setNewDeviceParentId(null);
+              setShowNewDevice(true);
+            }}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setSidebarOpen((v) => !v)}
+          title={sidebarOpen ? 'Скрыть инвентарь' : 'Показать инвентарь'}
+          className="flex w-5 flex-none items-center justify-center border-r border-default-200 bg-surface text-default-500 hover:bg-surface-secondary hover:text-foreground"
+        >
+          {sidebarOpen ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        </button>
+
+        <div className="relative min-h-0 flex-1">
+          {view === 'canvas' && (
             <ReactFlowProvider>
               <ReactFlow
                 nodes={nodes}
-                edges={edges}
+                edges={renderEdges}
                 nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeDragStop={onNodeDragStop}
@@ -259,22 +362,34 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
                 <Background gap={24} />
                 <Controls />
                 <MiniMap pannable zoomable />
+                <CableRouter edges={edges} version={routeVersion} onRoutes={setRoutes} />
               </ReactFlow>
             </ReactFlowProvider>
-          </div>
-        )}
-        {view === 'input-list' && <InputListTable setupId={setupId} />}
-        {view === 'rider' && <RiderTable setupId={setupId} />}
-        <Inspector
-          graph={graph}
-          selection={selection}
-          setupId={setupId}
-          onAddChild={(parentId) => {
-            setNewDeviceParentId(parentId);
-            setShowNewDevice(true);
-          }}
-          onSelectDevice={(id) => setSelection({ kind: 'device', id })}
-        />
+          )}
+          {view === 'input-list' && <InputListTable setupId={setupId} />}
+          {view === 'rider' && <RiderTable setupId={setupId} />}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setInspectorOpen((v) => !v)}
+          title={inspectorOpen ? 'Скрыть инспектор' : 'Показать инспектор'}
+          className="flex w-5 flex-none items-center justify-center border-l border-default-200 bg-surface text-default-500 hover:bg-surface-secondary hover:text-foreground"
+        >
+          {inspectorOpen ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+        </button>
+        <div className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${inspectorOpen ? 'w-[320px]' : 'w-0'}`}>
+          <Inspector
+            graph={graph}
+            selection={selection}
+            setupId={setupId}
+            onAddChild={(parentId) => {
+              setNewDeviceParentId(parentId);
+              setShowNewDevice(true);
+            }}
+            onSelectDevice={(id) => setSelection({ kind: 'device', id })}
+          />
+        </div>
       </div>
       {showNewDevice && (
         <NewDeviceModal setupId={setupId} defaultParentId={newDeviceParentId} onClose={() => setShowNewDevice(false)} />

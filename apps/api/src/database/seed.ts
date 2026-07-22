@@ -17,7 +17,6 @@
 import 'dotenv/config';
 import 'reflect-metadata';
 import bcrypt from 'bcryptjs';
-import { In } from 'typeorm';
 import {
   CableType,
   CreateAdapterDto,
@@ -35,29 +34,35 @@ import {
   PortType,
   PowerSourceType,
 } from '@resopatch/shared';
-import { AppDataSource } from './data-source';
-import { Setup } from './entities/setup.entity';
 import { Device } from './entities/device.entity';
 import { Port } from './entities/port.entity';
-import { Adapter } from './entities/adapter.entity';
-import { Cable } from './entities/cable.entity';
-import { Furniture } from './entities/furniture.entity';
-import { AuthCredential } from './entities/auth-credential.entity';
 import { applyAdapterDto, applyCableDto, applyDeviceDto, applyFurnitureDto, applyPortDto } from './mappers';
+import {
+  adaptersRepo,
+  authRepo as authRepoStore,
+  cablesRepo,
+  devicesRepo,
+  furnitureRepo as furnitureRepoStore,
+  portsRepo,
+  resetDatabase,
+  setupsRepo,
+  In,
+} from './json-db';
 import { computeAutoLayout } from '../setups/layout';
 
 async function main() {
-  await AppDataSource.initialize();
-  // Drop + recreate: this is a re-seedable starting point, not a migration.
-  await AppDataSource.synchronize(true);
+  // Wipes the JSON store back to empty — the one genuinely destructive step, and only ever run
+  // deliberately via `pnpm seed`. Normal GUI edits live in the same file the rest of the time and
+  // are never touched by restarting the server.
+  resetDatabase();
 
-  const setupRepo = AppDataSource.getRepository(Setup);
-  const deviceRepo = AppDataSource.getRepository(Device);
-  const portRepo = AppDataSource.getRepository(Port);
-  const adapterRepo = AppDataSource.getRepository(Adapter);
-  const cableRepo = AppDataSource.getRepository(Cable);
-  const furnitureRepo = AppDataSource.getRepository(Furniture);
-  const authRepo = AppDataSource.getRepository(AuthCredential);
+  const setupRepo = setupsRepo;
+  const deviceRepo = devicesRepo;
+  const portRepo = portsRepo;
+  const adapterRepo = adaptersRepo;
+  const cableRepo = cablesRepo;
+  const furnitureRepo = furnitureRepoStore;
+  const authRepo = authRepoStore;
 
   // Reseeding also resets the dashboard login back to the known default — useful if it's ever
   // forgotten. Change it from the settings panel in the app once you're in.
@@ -761,11 +766,7 @@ async function main() {
   console.log(`Seeded setup ${setup.id} ("${setup.name}")`);
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    if (AppDataSource.isInitialized) await AppDataSource.destroy();
-  });
+main().catch((e) => {
+  console.error(e);
+  process.exitCode = 1;
+});

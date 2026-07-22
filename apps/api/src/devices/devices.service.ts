@@ -1,47 +1,37 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
 import { CableType, CreateDeviceDto, DeviceDto, PowerBudgetResult, UpdateDeviceDto } from '@resopatch/shared';
-import { Device } from '../database/entities/device.entity';
-import { Port } from '../database/entities/port.entity';
-import { Cable } from '../database/entities/cable.entity';
 import { applyDeviceDto, toDeviceDto } from '../database/mappers';
+import { cablesRepo, devicesRepo, portsRepo, In } from '../database/json-db';
 
 @Injectable()
 export class DevicesService {
-  constructor(
-    @InjectRepository(Device) private readonly devices: Repository<Device>,
-    @InjectRepository(Port) private readonly ports: Repository<Port>,
-    @InjectRepository(Cable) private readonly cables: Repository<Cable>,
-  ) {}
-
   async findBySetup(setupId: string): Promise<DeviceDto[]> {
-    const devices = await this.devices.find({ where: { setupId }, order: { createdAt: 'ASC' } });
+    const devices = await devicesRepo.find({ where: { setupId }, order: { createdAt: 'ASC' } });
     return devices.map(toDeviceDto);
   }
 
   async findOne(id: string): Promise<DeviceDto> {
-    const device = await this.devices.findOne({ where: { id } });
+    const device = await devicesRepo.findOne({ where: { id } });
     if (!device) throw new NotFoundException('Device not found.');
     return toDeviceDto(device);
   }
 
   async create(dto: CreateDeviceDto): Promise<DeviceDto> {
-    const device = applyDeviceDto(this.devices.create(), dto);
-    await this.devices.save(device);
+    const device = applyDeviceDto(devicesRepo.create(), dto);
+    await devicesRepo.save(device);
     return toDeviceDto(device);
   }
 
   async update(id: string, dto: UpdateDeviceDto): Promise<DeviceDto> {
-    const device = await this.devices.findOne({ where: { id } });
+    const device = await devicesRepo.findOne({ where: { id } });
     if (!device) throw new NotFoundException('Device not found.');
     applyDeviceDto(device, dto);
-    await this.devices.save(device);
+    await devicesRepo.save(device);
     return toDeviceDto(device);
   }
 
   async remove(id: string): Promise<void> {
-    const result = await this.devices.delete(id);
+    const result = await devicesRepo.delete(id);
     if (!result.affected) throw new NotFoundException('Device not found.');
   }
 
@@ -53,17 +43,23 @@ export class DevicesService {
    * dropped or treated as zero draw.
    */
   async getPowerBudget(deviceId: string): Promise<PowerBudgetResult> {
-    const device = await this.devices.findOne({ where: { id: deviceId } });
+    const device = await devicesRepo.findOne({ where: { id: deviceId } });
     if (!device) throw new NotFoundException('Device not found.');
 
-    const sourcePorts = await this.ports.find({ where: { deviceId } });
+    const sourcePorts = await portsRepo.find({ where: { deviceId } });
     const sourcePortIds = sourcePorts.map((p) => p.id);
     const cables = sourcePortIds.length
-      ? await this.cables.find({
-          where: { sourcePortId: In(sourcePortIds), cableType: CableType.POWER_LINE },
-          relations: { targetPort: { device: true } },
-        })
+      ? await cablesRepo.find({ where: { sourcePortId: In(sourcePortIds), cableType: CableType.POWER_LINE } })
       : [];
+
+    // Manual join (no relations in the JSON store): pull every target port + its owning device
+    // once, then look them up per-cable below.
+    const targetPortIds = [...new Set(cables.map((c) => c.targetPortId))];
+    const targetPorts = targetPortIds.length ? await portsRepo.find({ where: { id: In(targetPortIds) } }) : [];
+    const targetPortById = new Map(targetPorts.map((p) => [p.id, p]));
+    const targetDeviceIds = [...new Set(targetPorts.map((p) => p.deviceId))];
+    const targetDevices = targetDeviceIds.length ? await devicesRepo.find({ where: { id: In(targetDeviceIds) } }) : [];
+    const targetDeviceById = new Map(targetDevices.map((d) => [d.id, d]));
 
     const loads: PowerBudgetResult['loads'] = [];
     const unresolvedLoads: PowerBudgetResult['unresolvedLoads'] = [];
@@ -71,7 +67,9 @@ export class DevicesService {
     let drawnCurrentMA = 0;
 
     for (const cable of cables) {
-      const targetDevice = cable.targetPort.device;
+      const targetPort = targetPortById.get(cable.targetPortId);
+      const targetDevice = targetPort ? targetDeviceById.get(targetPort.deviceId) : undefined;
+      if (!targetDevice) continue;
       const v = targetDevice.powerVoltageV;
       const ma = targetDevice.powerCurrentMA;
       if (v != null && ma != null) {

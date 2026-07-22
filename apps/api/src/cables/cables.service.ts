@@ -1,35 +1,22 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { CableDto, CreateCableDto, UpdateCableDto, validateConnection } from '@resopatch/shared';
-import { Cable } from '../database/entities/cable.entity';
-import { Port } from '../database/entities/port.entity';
-import { Adapter } from '../database/entities/adapter.entity';
 import { applyCableDto, toCableDto } from '../database/mappers';
+import { adaptersRepo, cablesRepo, devicesRepo, portsRepo, In } from '../database/json-db';
 
 @Injectable()
 export class CablesService {
-  constructor(
-    @InjectRepository(Cable) private readonly cables: Repository<Cable>,
-    @InjectRepository(Port) private readonly ports: Repository<Port>,
-    @InjectRepository(Adapter) private readonly adapters: Repository<Adapter>,
-  ) {}
-
   async findBySetup(setupId: string): Promise<CableDto[]> {
-    const cables = await this.cables
-      .createQueryBuilder('cable')
-      .innerJoin('cable.sourcePort', 'sourcePort')
-      .innerJoin('sourcePort.device', 'device')
-      .where('device.setupId = :setupId', { setupId })
-      .getMany();
+    const deviceIds = (await devicesRepo.find({ where: { setupId } })).map((d) => d.id);
+    const portIds = deviceIds.length ? (await portsRepo.find({ where: { deviceId: In(deviceIds) } })).map((p) => p.id) : [];
+    const cables = portIds.length ? await cablesRepo.find({ where: { sourcePortId: In(portIds) } }) : [];
     return cables.map(toCableDto);
   }
 
   private async assertValid(sourcePortId: string, targetPortId: string, cableType: string, adapterId?: string | null) {
     const [sourcePort, targetPort, adapter] = await Promise.all([
-      this.ports.findOne({ where: { id: sourcePortId } }),
-      this.ports.findOne({ where: { id: targetPortId } }),
-      adapterId ? this.adapters.findOne({ where: { id: adapterId } }) : Promise.resolve(null),
+      portsRepo.findOne({ where: { id: sourcePortId } }),
+      portsRepo.findOne({ where: { id: targetPortId } }),
+      adapterId ? adaptersRepo.findOne({ where: { id: adapterId } }) : Promise.resolve(null),
     ]);
     if (!sourcePort) throw new NotFoundException('Source port not found.');
     if (!targetPort) throw new NotFoundException('Target port not found.');
@@ -66,13 +53,13 @@ export class CablesService {
 
   async create(dto: CreateCableDto): Promise<CableDto> {
     await this.assertValid(dto.sourcePortId, dto.targetPortId, dto.cableType, dto.adapterId);
-    const cable = applyCableDto(this.cables.create(), dto);
-    await this.cables.save(cable);
+    const cable = applyCableDto(cablesRepo.create(), dto);
+    await cablesRepo.save(cable);
     return toCableDto(cable);
   }
 
   async update(id: string, dto: UpdateCableDto): Promise<CableDto> {
-    const existing = await this.cables.findOne({ where: { id } });
+    const existing = await cablesRepo.findOne({ where: { id } });
     if (!existing) throw new NotFoundException('Cable not found.');
 
     await this.assertValid(
@@ -83,12 +70,12 @@ export class CablesService {
     );
 
     applyCableDto(existing, dto);
-    await this.cables.save(existing);
+    await cablesRepo.save(existing);
     return toCableDto(existing);
   }
 
   async remove(id: string): Promise<void> {
-    const result = await this.cables.delete(id);
+    const result = await cablesRepo.delete(id);
     if (!result.affected) throw new NotFoundException('Cable not found.');
   }
 }

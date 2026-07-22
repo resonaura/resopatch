@@ -1,41 +1,37 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { AdapterDto, CreateAdapterDto, UpdateAdapterDto } from '@resopatch/shared';
-import { Adapter } from '../database/entities/adapter.entity';
 import { applyAdapterDto, toAdapterDto } from '../database/mappers';
+import { adaptersRepo } from '../database/json-db';
 
 @Injectable()
 export class AdaptersService {
-  constructor(@InjectRepository(Adapter) private readonly adapters: Repository<Adapter>) {}
-
   async findAll(): Promise<AdapterDto[]> {
-    const adapters = await this.adapters.find({ order: { name: 'ASC' } });
+    const adapters = await adaptersRepo.find({ order: { name: 'ASC' } });
     return adapters.map(toAdapterDto);
   }
 
   async findOne(id: string): Promise<AdapterDto> {
-    const adapter = await this.adapters.findOne({ where: { id } });
+    const adapter = await adaptersRepo.findOne({ where: { id } });
     if (!adapter) throw new NotFoundException('Adapter not found.');
     return toAdapterDto(adapter);
   }
 
   async create(dto: CreateAdapterDto): Promise<AdapterDto> {
-    const adapter = applyAdapterDto(this.adapters.create(), dto);
-    await this.adapters.save(adapter);
+    const adapter = applyAdapterDto(adaptersRepo.create(), dto);
+    await adaptersRepo.save(adapter);
     return toAdapterDto(adapter);
   }
 
   async update(id: string, dto: UpdateAdapterDto): Promise<AdapterDto> {
-    const adapter = await this.adapters.findOne({ where: { id } });
+    const adapter = await adaptersRepo.findOne({ where: { id } });
     if (!adapter) throw new NotFoundException('Adapter not found.');
     applyAdapterDto(adapter, dto);
-    await this.adapters.save(adapter);
+    await adaptersRepo.save(adapter);
     return toAdapterDto(adapter);
   }
 
   async remove(id: string): Promise<void> {
-    const result = await this.adapters.delete(id);
+    const result = await adaptersRepo.delete(id);
     if (!result.affected) throw new NotFoundException('Adapter not found.');
   }
 }

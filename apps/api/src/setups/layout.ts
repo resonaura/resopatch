@@ -19,13 +19,16 @@ type ZoneName = 'andrey' | 'barabanschik' | 'vokal' | 'service' | 'inactive';
  *  islands sit where they'd actually stand: Andrey stage left, Даня-барабанщик upstage centre
  *  (drawn top since he's furthest from the audience), Даня-вокал downstage centre (drawn
  *  underneath him — closest to the audience), and a service column stage right for gear that
- *  isn't any one person's (stage box, venue outlet, the playback laptop). Inactive/planned gear
- *  isn't part of the stage at all, so it gets its own shelf below everything instead of a spot
- *  in the floor plan. */
+ *  isn't any one person's (stage box, venue outlet, the playback laptop + its audio interface).
+ *  Inactive/planned gear isn't part of the stage at all, so it gets its own shelf below
+ *  everything instead of a spot in the floor plan. */
 function zoneOf(device: Device): ZoneName {
   if (device.inventoryStatus === InventoryStatus.OWNED_INACTIVE || device.inventoryStatus === InventoryStatus.PLANNED_NOT_OWNED) return 'inactive';
   if (device.type === DeviceType.STAGE_BOX) return 'service';
-  if (device.type === DeviceType.LAPTOP && device.ownerRole === 'Даня-барабанщик') return 'service';
+  // The playback rig (laptop + its audio interface) travels as one unit and should sit together
+  // in the service column — not split, with the interface stranded in the drummer's personal
+  // lane while the laptop it's cabled to sits three columns away.
+  if (device.ownerRole === 'Даня-барабанщик' && (device.type === DeviceType.LAPTOP || device.type === DeviceType.AUDIO_INTERFACE)) return 'service';
   if (device.ownerRole === 'Андрей') return 'andrey';
   if (device.ownerRole === 'Даня-барабанщик') return 'barabanschik';
   if (device.ownerRole === 'Даня-вокал') return 'vokal';
@@ -155,14 +158,27 @@ export function computeAutoLayout(
   cables: Cable[],
   sizes: Map<string, { width: number; height: number }>,
 ): LayoutResult {
+  // A device with a parent always renders nested inside that parent's card instead of as its own
+  // node — see DeviceNode.tsx — even if it has real ports of its own (e.g. a power brick strapped
+  // to a pedalboard): those ports render as a row *inside the parent's card*, so for layout
+  // purposes every port belongs to the nearest ancestor that actually gets positioned.
+  const deviceById = new Map(devices.map((d) => [d.id, d]));
+  const topAncestorId = (device: Device): string => {
+    let current = device;
+    while (current.parentDeviceId) {
+      const parent = deviceById.get(current.parentDeviceId);
+      if (!parent) break;
+      current = parent;
+    }
+    return current.id;
+  };
   const portToDevice = new Map<string, string>();
-  for (const p of ports) portToDevice.set(p.id, p.deviceId);
+  for (const p of ports) {
+    const device = deviceById.get(p.deviceId);
+    portToDevice.set(p.id, device ? topAncestorId(device) : p.deviceId);
+  }
 
-  // A device with a parent renders nested inside that parent's card instead of as its own node —
-  // see DeviceNode.tsx — *unless* it has real ports of its own (e.g. a power brick strapped to a
-  // pedalboard): those still need a genuine position since their cables have to land somewhere.
-  const devicesWithPorts = new Set(ports.map((p) => p.deviceId));
-  const mainDevices = devices.filter((d) => !d.parentDeviceId || devicesWithPorts.has(d.id));
+  const mainDevices = devices.filter((d) => !d.parentDeviceId);
 
   const sizeOf = (id: string) => sizes.get(id) ?? { width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT };
   const sizedOf = (id: string): SizedDevice => ({ id, ...sizeOf(id) });

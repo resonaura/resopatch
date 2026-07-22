@@ -1,9 +1,7 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { dataSourceOptions, entities } from './data-source';
 
-@Module({
-  imports: [TypeOrmModule.forRoot(dataSourceOptions), TypeOrmModule.forFeature(entities)],
-  exports: [TypeOrmModule],
-})
+// Persistence now lives in `json-db.ts` (module-level singleton repositories imported directly
+// by each service) instead of TypeORM — see that file's docstring. This module is kept as an
+// empty shell so every feature module can keep importing `DatabaseModule` unchanged.
+@Module({})
 export class DatabaseModule {}

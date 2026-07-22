@@ -1,73 +1,65 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
 import { AutoLayoutDto, CreateSetupDto, DeviceType, InputListRow, RiderRow, SetupDto, UpdateSetupDto } from '@resopatch/shared';
-import { Setup } from '../database/entities/setup.entity';
-import { Device } from '../database/entities/device.entity';
-import { Port } from '../database/entities/port.entity';
-import { Cable } from '../database/entities/cable.entity';
-import { Adapter } from '../database/entities/adapter.entity';
 import { toAdapterDto, toCableDto, toDeviceDto, toFurnitureDto, toPortDto, toSetupDto } from '../database/mappers';
+import { adaptersRepo, cablesRepo, devicesRepo, furnitureRepo, portsRepo, setupsRepo, In } from '../database/json-db';
 import { computeAutoLayout } from './layout';
 
 @Injectable()
 export class SetupsService {
-  constructor(
-    @InjectRepository(Setup) private readonly setups: Repository<Setup>,
-    @InjectRepository(Device) private readonly devices: Repository<Device>,
-    @InjectRepository(Port) private readonly ports: Repository<Port>,
-    @InjectRepository(Cable) private readonly cables: Repository<Cable>,
-    @InjectRepository(Adapter) private readonly adapters: Repository<Adapter>,
-  ) {}
-
   async findAll(): Promise<SetupDto[]> {
-    const setups = await this.setups.find({ order: { createdAt: 'ASC' } });
+    const setups = await setupsRepo.find({ order: { createdAt: 'ASC' } });
     return setups.map(toSetupDto);
   }
 
   async findOne(id: string): Promise<SetupDto> {
-    const setup = await this.setups.findOne({ where: { id } });
+    const setup = await setupsRepo.findOne({ where: { id } });
     if (!setup) throw new NotFoundException('Setup not found.');
     return toSetupDto(setup);
   }
 
   async create(dto: CreateSetupDto): Promise<SetupDto> {
-    const setup = this.setups.create({ name: dto.name, description: dto.description ?? null });
-    await this.setups.save(setup);
+    const setup = setupsRepo.create({ name: dto.name, description: dto.description ?? null });
+    await setupsRepo.save(setup);
     return toSetupDto(setup);
   }
 
   async update(id: string, dto: UpdateSetupDto): Promise<SetupDto> {
-    const setup = await this.setups.findOne({ where: { id } });
+    const setup = await setupsRepo.findOne({ where: { id } });
     if (!setup) throw new NotFoundException('Setup not found.');
     if (dto.name !== undefined) setup.name = dto.name;
     if (dto.description !== undefined) setup.description = dto.description ?? null;
-    await this.setups.save(setup);
+    await setupsRepo.save(setup);
     return toSetupDto(setup);
   }
 
   async remove(id: string): Promise<void> {
-    const result = await this.setups.delete(id);
+    const result = await setupsRepo.delete(id);
     if (!result.affected) throw new NotFoundException('Setup not found.');
   }
 
   /** Full devices/ports/cables/adapters/furniture graph for the patch map canvas. */
   async getGraph(setupId: string) {
-    const devices = await this.devices.find({ where: { setupId }, relations: { ports: true, furniture: true } });
-    const portIds = devices.flatMap((d) => d.ports.map((p) => p.id));
-    const cables = portIds.length
-      ? await this.cables.find({ where: { sourcePortId: In(portIds) }, relations: { adapter: true } })
-      : [];
+    const devices = await devicesRepo.find({ where: { setupId } });
+    const deviceIds = devices.map((d) => d.id);
+    const ports = deviceIds.length ? await portsRepo.find({ where: { deviceId: In(deviceIds) } }) : [];
+    const portsByDevice = new Map<string, typeof ports>();
+    for (const p of ports) portsByDevice.set(p.deviceId, [...(portsByDevice.get(p.deviceId) ?? []), p]);
+    const furniture = deviceIds.length ? await furnitureRepo.find({ where: { deviceId: In(deviceIds) } }) : [];
+    const furnitureByDevice = new Map(furniture.map((f) => [f.deviceId, f]));
+
+    const portIds = ports.map((p) => p.id);
+    const cables = portIds.length ? await cablesRepo.find({ where: { sourcePortId: In(portIds) } }) : [];
     const adapterIds = [...new Set(cables.map((c) => c.adapterId).filter((id): id is string => Boolean(id)))];
-    const adapters = adapterIds.length ? await this.adapters.find({ where: { id: In(adapterIds) } }) : [];
+    const adapters = adapterIds.length ? await adaptersRepo.find({ where: { id: In(adapterIds) } }) : [];
+    const adapterById = new Map(adapters.map((a) => [a.id, a]));
 
     return {
       devices: devices.map((d) => ({
         ...toDeviceDto(d),
-        ports: d.ports.map(toPortDto),
-        furniture: d.furniture ? toFurnitureDto(d.furniture) : null,
+        ports: (portsByDevice.get(d.id) ?? []).map(toPortDto),
+        furniture: furnitureByDevice.has(d.id) ? toFurnitureDto(furnitureByDevice.get(d.id)!) : null,
       })),
-      cables: cables.map((c) => ({ ...toCableDto(c), adapterName: c.adapter?.name ?? null })),
+      cables: cables.map((c) => ({ ...toCableDto(c), adapterName: (c.adapterId && adapterById.get(c.adapterId)?.name) ?? null })),
       adapters: adapters.map(toAdapterDto),
     };
   }
@@ -77,11 +69,11 @@ export class SetupsService {
    *  top-to-bottom, accessories pinned under their parent. Uses the browser's real measured node
    *  sizes (`dto.sizes`) rather than guessing dimensions from the data model. */
   async autoLayout(setupId: string, dto: AutoLayoutDto): Promise<{ updated: number }> {
-    const devices = await this.devices.find({ where: { setupId } });
+    const devices = await devicesRepo.find({ where: { setupId } });
     const deviceIds = devices.map((d) => d.id);
-    const ports = deviceIds.length ? await this.ports.find({ where: { deviceId: In(deviceIds) } }) : [];
+    const ports = deviceIds.length ? await portsRepo.find({ where: { deviceId: In(deviceIds) } }) : [];
     const portIds = ports.map((p) => p.id);
-    const cables = portIds.length ? await this.cables.find({ where: { sourcePortId: In(portIds) } }) : [];
+    const cables = portIds.length ? await cablesRepo.find({ where: { sourcePortId: In(portIds) } }) : [];
 
     const sizes = new Map(Object.entries(dto.sizes));
     const { positions } = computeAutoLayout(devices, ports, cables, sizes);
@@ -92,47 +84,66 @@ export class SetupsService {
       device.positionX = pos.x;
       device.positionY = pos.y;
     }
-    await this.devices.save(devices);
+    await devicesRepo.save(devices);
 
     return { updated: positions.size };
   }
 
   /** Derived input list (Table 6): one row per cable feeding a STAGE_BOX device. */
   async getInputList(setupId: string): Promise<InputListRow[]> {
-    const devices = await this.devices.find({ where: { setupId } });
+    const devices = await devicesRepo.find({ where: { setupId } });
+    const deviceById = new Map(devices.map((d) => [d.id, d]));
     const deviceIds = devices.map((d) => d.id);
-    const portIds = deviceIds.length ? (await this.ports.find({ where: { deviceId: In(deviceIds) } })).map((p) => p.id) : [];
+    const ports = deviceIds.length ? await portsRepo.find({ where: { deviceId: In(deviceIds) } }) : [];
+    const portById = new Map(ports.map((p) => [p.id, p]));
+    const portIds = ports.map((p) => p.id);
 
     const cables = portIds.length
-      ? await this.cables.find({
-          where: { sourcePortId: In(portIds) },
-          relations: { adapter: true, sourcePort: { device: true }, targetPort: { device: true } },
-          order: { createdAt: 'ASC' },
-        })
+      ? await cablesRepo.find({ where: { sourcePortId: In(portIds) }, order: { createdAt: 'ASC' } })
       : [];
+    const adapterIds = [...new Set(cables.map((c) => c.adapterId).filter((id): id is string => Boolean(id)))];
+    const adapters = adapterIds.length ? await adaptersRepo.find({ where: { id: In(adapterIds) } }) : [];
+    const adapterById = new Map(adapters.map((a) => [a.id, a]));
 
     return cables
-      .filter((c) => c.targetPort.device.type === DeviceType.STAGE_BOX)
-      .map((c, index) => ({
-        channel: index + 1,
-        sourceName: `${c.sourcePort.device.name} — ${c.sourcePort.name}`,
-        connector: c.sourcePort.portType,
-        direction: c.sourcePort.direction,
-        routing: c.adapter ? `Through ${c.adapter.name}` : `Direct from ${c.sourcePort.device.name}`,
-        phantomPower: false,
-        zone: c.sourcePort.device.ownerRole ?? 'Stage',
-        owner: c.sourcePort.device.ownerRole ?? '—',
-      }));
+      .map((c) => ({
+        cable: c,
+        sourcePort: portById.get(c.sourcePortId),
+        targetPort: portById.get(c.targetPortId),
+      }))
+      .filter((row): row is typeof row & { sourcePort: NonNullable<typeof row.sourcePort>; targetPort: NonNullable<typeof row.targetPort> } => {
+        if (!row.sourcePort || !row.targetPort) return false;
+        const targetDevice = deviceById.get(row.targetPort.deviceId);
+        return targetDevice?.type === DeviceType.STAGE_BOX;
+      })
+      .map((row, index) => {
+        const sourceDevice = deviceById.get(row.sourcePort.deviceId);
+        const adapter = row.cable.adapterId ? adapterById.get(row.cable.adapterId) : undefined;
+        return {
+          channel: index + 1,
+          sourceName: `${sourceDevice?.name ?? '?'} — ${row.sourcePort.name}`,
+          connector: row.sourcePort.portType,
+          direction: row.sourcePort.direction,
+          routing: adapter ? `Through ${adapter.name}` : `Direct from ${sourceDevice?.name ?? '?'}`,
+          phantomPower: false,
+          zone: sourceDevice?.ownerRole ?? 'Stage',
+          owner: sourceDevice?.ownerRole ?? '—',
+        };
+      });
   }
 
   /** Derived packing/rider checklist (Table 7): cables, adapters, furniture and power needs grouped by ownership. */
   async getRider(setupId: string): Promise<RiderRow[]> {
-    const devices = await this.devices.find({ where: { setupId }, relations: { furniture: true } });
+    const devices = await devicesRepo.find({ where: { setupId } });
     const deviceIds = devices.map((d) => d.id);
-    const portIds = deviceIds.length ? (await this.ports.find({ where: { deviceId: In(deviceIds) } })).map((p) => p.id) : [];
-    const cables = portIds.length
-      ? await this.cables.find({ where: { sourcePortId: In(portIds) }, relations: { adapter: true } })
-      : [];
+    const furniture = deviceIds.length ? await furnitureRepo.find({ where: { deviceId: In(deviceIds) } }) : [];
+    const furnitureByDevice = new Map(furniture.map((f) => [f.deviceId, f]));
+    const ports = deviceIds.length ? await portsRepo.find({ where: { deviceId: In(deviceIds) } }) : [];
+    const portIds = ports.map((p) => p.id);
+    const cables = portIds.length ? await cablesRepo.find({ where: { sourcePortId: In(portIds) } }) : [];
+    const adapterIds = [...new Set(cables.map((c) => c.adapterId).filter((id): id is string => Boolean(id)))];
+    const adapters = adapterIds.length ? await adaptersRepo.find({ where: { id: In(adapterIds) } }) : [];
+    const adapterById = new Map(adapters.map((a) => [a.id, a]));
 
     const rows: RiderRow[] = [];
 
@@ -154,19 +165,21 @@ export class SetupsService {
 
     const adapterGroups = new Map<string, number>();
     for (const c of cables) {
-      if (c.adapter) adapterGroups.set(c.adapter.name, (adapterGroups.get(c.adapter.name) ?? 0) + 1);
+      const adapter = c.adapterId ? adapterById.get(c.adapterId) : undefined;
+      if (adapter) adapterGroups.set(adapter.name, (adapterGroups.get(adapter.name) ?? 0) + 1);
     }
     for (const [name, quantity] of adapterGroups) {
       rows.push({ category: 'ADAPTER', name, quantity, isUserOwned: true });
     }
 
     for (const device of devices) {
-      if (device.furniture) {
+      const deviceFurniture = furnitureByDevice.get(device.id);
+      if (deviceFurniture) {
         rows.push({
           category: 'FURNITURE',
-          name: device.furniture.kind,
+          name: deviceFurniture.kind,
           quantity: 1,
-          isUserOwned: !device.furniture.isVenueProvided,
+          isUserOwned: !deviceFurniture.isVenueProvided,
           note: device.name,
         });
       }
