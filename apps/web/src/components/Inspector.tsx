@@ -17,6 +17,8 @@ import {
 } from '@resopatch/shared';
 import { api, type GraphCable, type GraphDevice, type GraphResponse } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
+import ImagePicker from './ImagePicker';
+import RiderSpecSheet from './RiderSpecSheet';
 
 function enumSelect<T extends string>(values: T[], value: T, onChange: (v: T) => void, label: string) {
   return (
@@ -352,14 +354,13 @@ function DeviceForm({
             rows={3}
           />
         </TextField>
-        <TextField>
-          <Label>Изображение (URL)</Label>
-          <Input
-            value={form.imageUrl ?? ''}
-            onChange={(e) => setForm((f) => ({ ...f, imageUrl: e.target.value }))}
-            onBlur={() => commitField('imageUrl', form.imageUrl || undefined)}
-          />
-        </TextField>
+        <ImagePicker
+          value={form.imageUrl ?? undefined}
+          onChange={(url) => {
+            setForm((f) => ({ ...f, imageUrl: url ?? null }));
+            commitField('imageUrl', url);
+          }}
+        />
         <TextField>
           <Label>Произвольные атрибуты (JSON)</Label>
           <TextArea value={attrsText} onChange={(e) => setAttrsText(e.target.value)} onBlur={commitAttrs} rows={6} className="font-mono text-xs" />
@@ -462,14 +463,17 @@ export default function Inspector({
     return (
       <div className="min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
         <h3 className="mb-2.5 text-sm font-semibold">{device.name}</h3>
-        <DeviceForm
-          key={device.id}
-          device={device}
-          setupId={setupId}
-          children={children}
-          onAddChild={() => onAddChild(device.id)}
-          onSelectChild={onSelectDevice}
-        />
+        <RiderSpecSheet key={`${device.id}-rider`} device={device} />
+        <div className="mt-3">
+          <DeviceForm
+            key={device.id}
+            device={device}
+            setupId={setupId}
+            children={children}
+            onAddChild={() => onAddChild(device.id)}
+            onSelectChild={onSelectDevice}
+          />
+        </div>
       </div>
     );
   }

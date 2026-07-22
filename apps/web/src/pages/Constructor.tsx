@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   ConnectionLineType,
@@ -20,7 +20,7 @@ import '@xyflow/react/dist/style.css';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Table, Tabs } from '@heroui/react';
 import { ChevronLeft, ChevronRight, ClipboardList, LayoutGrid, ListMusic, LogOut, Settings, Wand2 } from 'lucide-react';
-import { CABLE_COLORS, CableType, type InputListRow, type RiderRow } from '@resopatch/shared';
+import { CABLE_COLORS, CABLE_DASH, CABLE_WIDTH_SCALE, CableType, type InputListRow, type RiderRow } from '@resopatch/shared';
 import { api, type GraphDevice } from '../api/client';
 import DeviceNode, { type DeviceNodeData } from '../components/DeviceNode';
 import RoutedEdge from '../components/RoutedEdge';
@@ -184,8 +184,8 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
         type: 'routed',
         style: {
           stroke: CABLE_COLORS[cable.cableType],
-          strokeWidth: selection?.kind === 'cable' && selection.id === cable.id ? 3 : 1.5,
-          strokeDasharray: cable.cableType === CableType.CONTROL_LINK ? '6 4' : undefined,
+          strokeWidth: (selection?.kind === 'cable' && selection.id === cable.id ? 3 : 1.5) * CABLE_WIDTH_SCALE[cable.cableType],
+          strokeDasharray: CABLE_DASH[cable.cableType],
         },
         animated: cable.cableType === CableType.CONTROL_LINK,
         zIndex: selection?.kind === 'cable' && selection.id === cable.id ? 1 : 0,
@@ -203,14 +203,29 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialNodes, initialEdges]);
 
-  // Cable routes are recomputed by <CableRouter> (a grid-based A* — too expensive to rerun every
-  // drag frame) whenever `routeVersion` changes, not on every position update. Bumped explicitly
-  // below: once per graph (re)load, once per drag-stop.
+  // Cable routes are recomputed by <CableRouter> (a grid-based A*) whenever `routeVersion`
+  // changes — never on every React Flow position event directly, which fires far more often
+  // than the browser can usefully repaint. `requestRouteRecompute` collapses any number of those
+  // events within one animation frame into a single bump, so routing (including cables NOT
+  // attached to the node being dragged, which still need to dodge it) tracks the drag live
+  // instead of only snapping into place on drop.
   const [routes, setRoutes] = useState<Map<string, Point[]>>(new Map());
   const [routeVersion, setRouteVersion] = useState(0);
+  const routeRafRef = useRef<number | null>(null);
+  const requestRouteRecompute = useCallback(() => {
+    if (routeRafRef.current != null) return;
+    routeRafRef.current = requestAnimationFrame(() => {
+      routeRafRef.current = null;
+      setRouteVersion((v) => v + 1);
+    });
+  }, []);
   useEffect(() => {
-    const raf = requestAnimationFrame(() => setRouteVersion((v) => v + 1));
-    return () => cancelAnimationFrame(raf);
+    requestRouteRecompute();
+    return () => {
+      if (routeRafRef.current != null) cancelAnimationFrame(routeRafRef.current);
+      routeRafRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialNodes, initialEdges]);
 
   const renderEdges = useMemo(() => edges.map((e) => ({ ...e, data: { ...(e.data ?? {}), points: routes.get(e.id) } })), [edges, routes]);
@@ -238,12 +253,20 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
     autoLayout.mutate(sizes);
   }, [nodes, autoLayout]);
 
+  // Fires continuously while a node is being dragged (React Flow calls this on every pointer-move
+  // frame) — throttled by requestRouteRecompute to at most one full reroute per animation frame,
+  // so every cable (not just the ones attached to the node under the cursor) stays routed around
+  // its current live position instead of freezing until the drag ends.
+  const onNodeDrag = useCallback(() => {
+    requestRouteRecompute();
+  }, [requestRouteRecompute]);
+
   const onNodeDragStop = useCallback(
     (_: unknown, node: Node) => {
       movePosition.mutate({ id: node.id, position: { x: node.position.x, y: node.position.y } });
-      setRouteVersion((v) => v + 1);
+      requestRouteRecompute();
     },
-    [movePosition],
+    [movePosition, requestRouteRecompute],
   );
 
   const onConnect = useCallback((connection: Connection) => {
@@ -346,6 +369,7 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
                 edgeTypes={edgeTypes}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
+                onNodeDrag={onNodeDrag}
                 onNodeDragStop={onNodeDragStop}
                 onConnect={onConnect}
                 onNodeClick={onNodeClick}

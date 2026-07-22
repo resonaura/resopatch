@@ -5,6 +5,16 @@ import { InventoryStatus } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 
+/** Same fallback-to-type-icon convention as DeviceNode's thumbnail — kept as its own tiny
+ *  component here rather than shared, since Sidebar and DeviceNode intentionally have no
+ *  dependency on each other's internals. */
+function DeviceThumb({ device, className }: { device: Pick<GraphDevice, 'imageUrl' | 'type'>; className: string }) {
+  if (device.imageUrl) {
+    return <img src={device.imageUrl} alt="" className={`shrink-0 rounded object-cover ${className}`} />;
+  }
+  return <DeviceTypeIcon type={device.type} className={`shrink-0 text-default-500 ${className}`} />;
+}
+
 const GROUPS: { status: string; title: string }[] = [
   { status: InventoryStatus.OWNED_ACTIVE, title: 'В сетапе' },
   { status: InventoryStatus.OWNED_INACTIVE, title: 'Есть, не активно' },
@@ -79,7 +89,7 @@ export default function Sidebar({
                         selectedId === d.id ? 'border-l-accent bg-surface-secondary' : 'border-l-transparent'
                       }`}
                     >
-                      <DeviceTypeIcon type={d.type} className="h-3.5 w-3.5 shrink-0 text-default-500" />
+                      <DeviceThumb device={d} className="h-4 w-4" />
                       <span className="truncate">{d.name}</span>
                     </button>
                   ))}

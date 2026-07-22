@@ -11,8 +11,10 @@ export interface RoutedEdgeData {
  *  before routing has run — e.g. a cable just created this session. */
 export default function RoutedEdge({ id, data, style, markerEnd, label, sourceX, sourceY, targetX, targetY }: EdgeProps) {
   const points = (data as RoutedEdgeData | undefined)?.points;
-  const path =
-    points && points.length >= 2 ? roundedPathFromPoints(points, 10) : `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
+  // roundedPathFromPoints clamps this to half of whichever adjoining leg is shorter, so a corner
+  // right next to a port (a short leg) still gets a small, proportionate radius rather than
+  // ballooning past the segment — safe to ask for a generous radius everywhere else.
+  const path = points && points.length >= 2 ? roundedPathFromPoints(points, 16) : `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
   const mid = points && points.length > 0 ? points[Math.floor(points.length / 2)] : { x: (sourceX + targetX) / 2, y: (sourceY + targetY) / 2 };
 
   return (

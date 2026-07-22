@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import { DeviceType, HostUsbType, InventoryStatus, PowerSourceType, type CreateDeviceDto } from '@resopatch/shared';
 import { api } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
+import ImagePicker from './ImagePicker';
 
 export default function NewDeviceModal({
   setupId,
@@ -22,6 +23,7 @@ export default function NewDeviceModal({
   const [inventoryStatus, setInventoryStatus] = useState<InventoryStatus>(InventoryStatus.OWNED_ACTIVE);
   const [ownerRole, setOwnerRole] = useState('');
   const [parentDeviceId, setParentDeviceId] = useState<string>(defaultParentId ?? '__none__');
+  const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
 
   const create = useMutation({
     mutationFn: (dto: CreateDeviceDto) => api.createDevice(dto),
@@ -42,6 +44,7 @@ export default function NewDeviceModal({
       ownerRole: ownerRole || undefined,
       parentDeviceId: parentDeviceId === '__none__' ? undefined : parentDeviceId,
       position: { x: 100 + Math.random() * 400, y: 100 + Math.random() * 400 },
+      imageUrl,
       attrs: {},
       powerRequired: false,
       powerSourceType: PowerSourceType.NONE,
@@ -104,6 +107,7 @@ export default function NewDeviceModal({
                 <Label>Владелец / роль</Label>
                 <Input value={ownerRole} onChange={(e) => setOwnerRole(e.target.value)} placeholder="Андрей / Даня-вокал / Даня-барабанщик…" />
               </TextField>
+              <ImagePicker value={imageUrl} onChange={setImageUrl} />
               <Select value={parentDeviceId} onChange={(v) => setParentDeviceId(v as string)}>
                 <Label>Внутри устройства (необязательно)</Label>
                 <Select.Trigger>

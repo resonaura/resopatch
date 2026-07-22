@@ -51,6 +51,16 @@ function PortRow({ port }: { port: GraphDevice['ports'][number] }) {
   );
 }
 
+/** Small square thumbnail used wherever a device needs to be told apart at a glance (node header,
+ *  nested ported-child row, inventory list) — falls back to the type icon when no photo is set,
+ *  so callers never need an `if (imageUrl)` branch of their own. */
+function DeviceThumb({ device, className }: { device: Pick<GraphDevice, 'imageUrl' | 'type'>; className: string }) {
+  if (device.imageUrl) {
+    return <img src={device.imageUrl} alt="" className={`shrink-0 rounded object-cover ${className}`} />;
+  }
+  return <DeviceTypeIcon type={device.type} className={`shrink-0 text-default-500 ${className}`} />;
+}
+
 /** A nested device that has real ports (e.g. PowerPlant ISO-12 Pro strapped to the pedalboard):
  *  its own mini header plus its own port rows, still inside the parent card — physically it
  *  travels as one unit with the parent, so visually it never gets a second box on the canvas. */
@@ -65,7 +75,7 @@ function PortedChild({ child, onSelectChild }: { child: GraphDevice; onSelectChi
         className="flex w-full items-center gap-1.5 bg-black/10 px-2.5 py-1 text-left hover:bg-white/10"
         title={child.notes ?? child.name}
       >
-        <DeviceTypeIcon type={child.type} className="h-3 w-3 shrink-0 text-default-500" />
+        <DeviceThumb device={child} className="h-3 w-3" />
         <span className="truncate text-[10.5px] font-medium text-default-400">{child.name}</span>
       </button>
       {child.ports.map((port) => (
@@ -89,7 +99,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
       } ${inactive ? 'border-dashed opacity-70' : ''}`}
     >
       <div className="flex items-center gap-1.5 px-2.5 pt-2">
-        <DeviceTypeIcon type={device.type} className="h-3.5 w-3.5 shrink-0 text-default-500" />
+        <DeviceThumb device={device} className="h-4 w-4" />
         <span className="truncate font-semibold text-foreground" title={device.type}>
           {device.name}
         </span>
@@ -124,7 +134,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
                 className="flex items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-white/5"
                 title={child.notes ?? child.name}
               >
-                <DeviceTypeIcon type={child.type} className="h-3 w-3 shrink-0 text-default-500" />
+                <DeviceThumb device={child} className="h-3 w-3" />
                 <span className="truncate text-[10.5px] text-default-500">{child.name}</span>
               </button>
             ))}

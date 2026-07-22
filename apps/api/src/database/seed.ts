@@ -215,6 +215,12 @@ async function main() {
   // Andrey — stage left. Guitar/bass → pedalboard → UMC404HD, plus his personal post-gig-1
   // monitoring fix (MX400 → Palmer Monicon → headphones). See docs/stage-setup.md §1, §9.
   // ---------------------------------------------------------------------------------------
+  // A real parent container: the 11 pedals + ISO-12 Pro below are all `parentDeviceId: pedalboard.id`
+  // children, rendered nested inside this card (DeviceNode.tsx) rather than as loose floating
+  // nodes — physically they all travel and get patched as one unit. The pedalboard itself carries
+  // no ports of its own anymore (it did briefly, as a placeholder aggregate, before the individual
+  // pedals were itemized) — the guitar cables straight into the first pedal and the last pedal's
+  // stereo out cables straight into UMC404HD, same as ISO-12 Pro's own ports already did.
   const pedalboard = await mkDevice({
     name: 'Педалборд Harley Benton SpaceShip',
     type: DeviceType.PEDALBOARD,
@@ -223,16 +229,7 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.DC_BARREL,
     attrs: { model: 'SpaceShip (точный размер 40/50M/60/60XL не уточнён)', originalMisnomer: 'Starship' },
-    notes: '❓ Состав педалей не описан поштучно — дозаполнить в GUI (docs/stage-setup.md §6, §12.2).',
-  });
-  const pedalboardIn = await mkPort(pedalboard, { name: 'Guitar In', portType: PortType.TS_14, direction: PortDirection.IN });
-  const pedalboardOutL = await mkPort(pedalboard, { name: 'Stereo Out L', portType: PortType.TRS_14, direction: PortDirection.OUT });
-  const pedalboardOutR = await mkPort(pedalboard, { name: 'Stereo Out R', portType: PortType.TRS_14, direction: PortDirection.OUT });
-  const pedalboardPower = await mkPort(pedalboard, {
-    name: 'Power In (педали, суммарно)',
-    portType: PortType.DC_BARREL,
-    direction: PortDirection.IN,
-    power: { currentType: CurrentType.DC, voltageV: 9, polarity: Polarity.CENTER_NEGATIVE },
+    notes: 'Состав педалей — см. дочерние устройства ниже, в порядке сигнальной цепи.',
   });
 
   // Physically straps to the underside of the pedalboard and travels as one unit with it — part
@@ -329,8 +326,377 @@ async function main() {
   await mkFurniture({ deviceId: pedalboard.id, kind: FurnitureKind.PEDALBOARD_CASE, isVenueProvided: false });
   await mkFurniture({ deviceId: andreyGuitar.id, kind: FurnitureKind.GUITAR_STAND, isVenueProvided: false });
 
-  await mkCable({ sourcePortId: andreyGuitarOut.id, targetPortId: pedalboardIn.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.3, color: 'red' });
-  await mkCable({ sourcePortId: iso12Pro9vGroup.id, targetPortId: pedalboardPower.id, cableType: CableType.POWER_LINE, length: 0.3 });
+  // -------------------------------------------------------------------------------------
+  // Andrey's 11-pedal chain, in signal order. Every pedal is a `parentDeviceId: pedalboard.id`
+  // child (see pedalboard's own comment above) powered off ISO-12 Pro's shared 9V group — that
+  // group is one physical multi-jack output on the real PSU, modeled here as one port with many
+  // cables fanned out from it, same convention already used for every other shared power group in
+  // this file (e.g. each Anker outlet). Mono until FS05 Multi Modulation, which is the point the
+  // signal becomes stereo for the rest of the chain (FS05 → D-Seed II → FS02 → FS07 → UMC404HD).
+  // -------------------------------------------------------------------------------------
+  const yellowComp = await mkDevice({
+    name: 'Mooer Yellow Comp',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -680, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 10, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: false, isStereoOut: false },
+    attrs: {
+      manufacturer: 'Mooer',
+      model: 'Yellow Comp (Optical Compressor)',
+      controls: ['Volume — выходной уровень (Gain Compensation)', 'EQ — баланс высоких и низких частот (тембр)', 'Comp — степень компрессии (центральный регулятор)'],
+      footswitch: 'Mechanical True Bypass (Вкл / Выкл).',
+    },
+  });
+  const yellowCompIn = await mkPort(yellowComp, { name: 'Mono In', portType: PortType.TS_14, direction: PortDirection.IN });
+  const yellowCompOut = await mkPort(yellowComp, { name: 'Mono Out', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const yellowCompPower = await mkPort(yellowComp, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 10, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  const cs400 = await mkDevice({
+    name: 'Behringer CS400 Compressor-Sustainer',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -640, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 10, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: false, isStereoOut: false },
+    attrs: {
+      manufacturer: 'Behringer',
+      model: 'CS400 (аналог Boss CS-3)',
+      controls: ['LEVEL (MIN-MAX) — выходная громкость', 'TONE (LO-HI) — срезка/усиление верхов', 'ATTACK (MIN-MAX) — время срабатывания атаки', 'SUSTAIN (MIN-MAX) — глубина поддержания угасающего звука'],
+      footswitch: 'Электронный мягкий переключатель (Вкл / Выкл).',
+    },
+  });
+  const cs400In = await mkPort(cs400, { name: 'Mono In', portType: PortType.TS_14, direction: PortDirection.IN });
+  const cs400Out = await mkPort(cs400, { name: 'Mono Out', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const cs400Power = await mkPort(cs400, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 10, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  const to800 = await mkDevice({
+    name: 'Behringer TO800 Vintage Tube Overdrive',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -600, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 10, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: false, isStereoOut: false },
+    attrs: {
+      manufacturer: 'Behringer',
+      model: 'TO800 (бюджетный аналог Ibanez TS808 Tube Screamer, чип 4558)',
+      controls: ['DRIVE (MIN-MAX) — уровень перегруза / насыщения', 'TONE (LO-HI) — тембральный фильтр (горб по средней частоте)', 'LEVEL (MIN-MAX) — выходная громкость'],
+      footswitch: 'Вкл / Выкл.',
+    },
+  });
+  const to800In = await mkPort(to800, { name: 'Mono In', portType: PortType.TS_14, direction: PortDirection.IN });
+  const to800Out = await mkPort(to800, { name: 'Mono Out', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const to800Power = await mkPort(to800, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 10, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  const grunge = await mkDevice({
+    name: 'DigiTech Grunge Distortion',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -560, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 20, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: false, isStereoOut: false },
+    attrs: {
+      manufacturer: 'DigiTech',
+      model: 'Grunge',
+      controls: ['LOUD — общая громкость', 'LOW — регулятор басового регистра', 'HIGH — регулятор высоких частот', 'GRUNGE — уровень гейна / структуры перегруза'],
+      footswitch: 'Механический (Вкл / Выкл).',
+    },
+    notes: 'MIXER OUT MONO (параллельный выход с пассивным эмулятором кабинета) присутствует физически, но не используется — в цепь идёт только AMP OUT.',
+  });
+  const grungeIn = await mkPort(grunge, { name: 'Mono In', portType: PortType.TS_14, direction: PortDirection.IN });
+  const grungeAmpOut = await mkPort(grunge, { name: 'Amp Out Mono (в цепь)', portType: PortType.TS_14, direction: PortDirection.OUT });
+  await mkPort(grunge, { name: 'Mixer Out Mono (не используется)', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const grungePower = await mkPort(grunge, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 20, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  const fs06 = await mkDevice({
+    name: 'FLAMMA FS06 Digital Preamp',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -520, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: false, isStereoOut: false, hasPresets: true },
+    attrs: {
+      manufacturer: 'Flamma',
+      model: 'FS06 (2-канальный цифровой преамп)',
+      controls: ['GAIN', 'BASS', 'MID', 'TREBLE', 'LEVEL', 'SAVE/SELECT — сохранение и выбор пресета'],
+      footswitch: 'Одиночный клик — переключение Clean (синяя LED) / Drive (красная LED) канала. Удержание — переключение в режим стандартного On/Off Bypass. Ручки автосохраняются под каждый пресет.',
+      algorithms: [
+        'DELUXEBLUE (Fender Blues Deluxe) — Clean/Drive',
+        'AC31 (VOX AC30) — Clean/Drive',
+        'CORAL REEF (Two Rock Coral) — Clean/Drive',
+        'PLEX50 (Marshall Plexi 50) — Clean/Drive',
+        'BLUE EYE 100 (Friedman BE-100) — Clean/Drive',
+        'MB5TH GEN (Mesa Boogie MARK V) — Clean/Drive',
+        'HVE 5151 (EVH 5150) — Clean/Drive',
+      ],
+    },
+  });
+  const fs06In = await mkPort(fs06, { name: 'Mono In', portType: PortType.TS_14, direction: PortDirection.IN });
+  const fs06Out = await mkPort(fs06, { name: 'Mono Out', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const fs06Power = await mkPort(fs06, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  const fc14 = await mkDevice({
+    name: 'FLAMMA FC14 Analog Chorus',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -480, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 13, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: false, isStereoOut: false },
+    attrs: {
+      manufacturer: 'Flamma',
+      model: 'FC14 (аналоговый хорус, микро-формат, BBD-схема)',
+      controls: ['RATE — скорость (большая ручка)', 'LEVEL — микс', 'DEPTH — глубина'],
+      footswitch: 'True Bypass (Вкл / Выкл).',
+    },
+  });
+  const fc14In = await mkPort(fc14, { name: 'Mono In', portType: PortType.TS_14, direction: PortDirection.IN });
+  const fc14Out = await mkPort(fc14, { name: 'Mono Out', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const fc14Power = await mkPort(fc14, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 13, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  const jetEngine = await mkDevice({
+    name: 'Mooer Jet Engine Flanger',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -440, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 160, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: false, isStereoOut: false },
+    attrs: {
+      manufacturer: 'Mooer',
+      model: 'Jet Engine Flanger (цифровой многорежимный)',
+      controls: ['RATE (большая ручка)', 'DEPTH', 'LEVEL', 'WIDTH'],
+      footswitch: 'True Bypass (Вкл / Выкл).',
+    },
+  });
+  const jetEngineIn = await mkPort(jetEngine, { name: 'Mono In', portType: PortType.TS_14, direction: PortDirection.IN });
+  const jetEngineOut = await mkPort(jetEngine, { name: 'Mono Out', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const jetEnginePower = await mkPort(jetEngine, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 160, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  // Signal becomes stereo from here on — FS05 takes a mono in and fans out to stereo L/R, and
+  // every pedal after it is stereo in/out all the way to UMC404HD.
+  const fs05 = await mkDevice({
+    name: 'FLAMMA FS05 Multi Modulation',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -400, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: false, isStereoOut: true, hasPresets: true, presetCount: 7 },
+    attrs: {
+      manufacturer: 'Flamma',
+      model: 'FS05 (стерео комбайн эффектов модуляции, 11 алгоритмов / 7 пресетов)',
+      controls: ['RATE', 'DEPTH', 'TYPE — 11-позиционная крутилка', 'CTRL 1', 'CTRL 2', 'SAVE/SELECT'],
+      footswitch: 'Короткий клик — On/Off (Bypass). Удержание 1 сек — переключение пресетов (1→7), SAVE мигает.',
+      algorithms: [
+        '1. CHORUS (Ctrl1 Mix / Ctrl2 Tone)',
+        '2. FLANGER (Mix / Feedback)',
+        '3. TREMOLO (Duty / Tone)',
+        '4. PHASE (Mix / Tone)',
+        '5. VIBRATO (Mix / Tone)',
+        '6. ROTARY (Mix / Tone)',
+        '7. LIQUID (Mix / Tone)',
+        '8. AUTO WAH (Mix / Tone)',
+        '9. STUTTER (Duty / Tone)',
+        '10. RING (Pitch / Tone)',
+        '11. LOW BIT (Smooth / Bit Rate)',
+      ],
+    },
+  });
+  const fs05InL = await mkPort(fs05, { name: 'Mono In L', portType: PortType.TS_14, direction: PortDirection.IN });
+  await mkPort(fs05, { name: 'In R (не используется)', portType: PortType.TS_14, direction: PortDirection.IN });
+  const fs05OutL = await mkPort(fs05, { name: 'Stereo Out L', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const fs05OutR = await mkPort(fs05, { name: 'Stereo Out R', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const fs05Power = await mkPort(fs05, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  const dseed2 = await mkDevice({
+    name: 'JOYO D-Seed II Stereo Delay & Looper',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -360, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 220, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: true, isStereoOut: true },
+    attrs: {
+      manufacturer: 'Joyo',
+      model: 'D-Seed II (стерео дилей + 3.5-мин стерео-лупер)',
+      controls: ['TYPE — выбор эффекта/Looper', 'TIME BEAT / LP.FX', 'LEVEL / LP.LEVEL', 'F.BACK / LP.TONE', 'PingPong — вкл/выкл объёмное стерео-панорамирование повторов'],
+      footswitch:
+        'Двойной футсвич. В режиме Delay: левый = Tap Tempo / пресеты, правый = Bypass. В режиме Looper: левый = Rec / Dub / Rerecord, правый = Play / Stop / Clear.',
+      algorithms: ['Space', 'Lo-Fi', 'Filter', 'Tape', 'Copy (Digital)', 'Analog', 'Mod', 'Reverse', 'LOOPER — до 3.5 мин стерео, неограниченные overdubs'],
+    },
+  });
+  const dseed2InL = await mkPort(dseed2, { name: 'Stereo In L', portType: PortType.TS_14, direction: PortDirection.IN });
+  const dseed2InR = await mkPort(dseed2, { name: 'Stereo In R', portType: PortType.TS_14, direction: PortDirection.IN });
+  const dseed2OutL = await mkPort(dseed2, { name: 'Stereo Out L', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const dseed2OutR = await mkPort(dseed2, { name: 'Stereo Out R', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const dseed2Power = await mkPort(dseed2, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 220, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  const fs02 = await mkDevice({
+    name: 'FLAMMA FS02 Stereo Reverb',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -320, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: true, isStereoOut: true, hasPresets: true, presetCount: 7 },
+    attrs: {
+      manufacturer: 'Flamma',
+      model: 'FS02 (стерео ревербератор с хвостами)',
+      controls: ['LEVEL', 'DECAY', 'HI-CUT', 'LO-CUT', 'SAVE/SELECT'],
+      footswitch: 'Trails On/Off (затухание хвостов) — зажать футсвич при подаче питания.',
+      algorithms: ['Room', 'Hall', 'Church', 'Cave', 'Plate', 'Spring', 'Mod'],
+    },
+  });
+  const fs02InL = await mkPort(fs02, { name: 'Stereo In L', portType: PortType.TS_14, direction: PortDirection.IN });
+  const fs02InR = await mkPort(fs02, { name: 'Stereo In R', portType: PortType.TS_14, direction: PortDirection.IN });
+  const fs02OutL = await mkPort(fs02, { name: 'Stereo Out L', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const fs02OutR = await mkPort(fs02, { name: 'Stereo Out R', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const fs02Power = await mkPort(fs02, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  const fs07 = await mkDevice({
+    name: 'FLAMMA FS07 Stereo Cabinet Simulation',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
+    position: { x: -280, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: true, isStereoOut: true },
+    attrs: {
+      manufacturer: 'Flamma',
+      model: 'FS07 (стерео кабсим и IR Loader, 24-bit/44.1kHz)',
+      controls: ['LEVEL', 'LATENCY — фазировка стерео', 'HIGH CUT', 'LOW CUT', 'SAVE/SELECT', 'Power Amp Sim — переключатель'],
+      algorithms: [
+        'Fender Deluxe 1x12',
+        'Vox AC30 2x12',
+        'Twin Reverb 2x12',
+        'Marshall 1960A 4x12',
+        'Mesa Rectifier 4x12',
+        'Diezel V30 4x12',
+        'Orange PPC412 4x12',
+        'Soldano SLO 4x12',
+        'Engl Pro 4x12',
+        'Peavey 5150 4x12',
+        'EBS ProLine 4x10 (Bass)',
+      ],
+    },
+    notes: 'Поддерживает загрузку сторонних IR через Micro-USB — не используется live, только для оффлайн-настройки.',
+  });
+  const fs07InL = await mkPort(fs07, { name: 'Stereo In L', portType: PortType.TS_14, direction: PortDirection.IN });
+  const fs07InR = await mkPort(fs07, { name: 'Stereo In R', portType: PortType.TS_14, direction: PortDirection.IN });
+  const fs07OutL = await mkPort(fs07, { name: 'Stereo Out L', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const fs07OutR = await mkPort(fs07, { name: 'Stereo Out R', portType: PortType.TS_14, direction: PortDirection.OUT });
+  await mkPort(fs07, { name: 'Micro-USB (к ПК, offline IR-загрузка)', portType: PortType.USB_B, direction: PortDirection.BI });
+  const fs07Power = await mkPort(fs07, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  await mkCable({ sourcePortId: andreyGuitarOut.id, targetPortId: yellowCompIn.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.3, color: 'red' });
+  const pedalChain: { out: Port; in: Port }[] = [
+    { out: yellowCompOut, in: cs400In },
+    { out: cs400Out, in: to800In },
+    { out: to800Out, in: grungeIn },
+    { out: grungeAmpOut, in: fs06In },
+    { out: fs06Out, in: fc14In },
+    { out: fc14Out, in: jetEngineIn },
+    { out: jetEngineOut, in: fs05InL },
+  ];
+  for (const link of pedalChain) {
+    await mkCable({ sourcePortId: link.out.id, targetPortId: link.in.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.2, isPatchCable: true });
+  }
+  const stereoPedalChain: { outL: Port; outR: Port; inL: Port; inR: Port }[] = [
+    { outL: fs05OutL, outR: fs05OutR, inL: dseed2InL, inR: dseed2InR },
+    { outL: dseed2OutL, outR: dseed2OutR, inL: fs02InL, inR: fs02InR },
+    { outL: fs02OutL, outR: fs02OutR, inL: fs07InL, inR: fs07InR },
+  ];
+  for (const link of stereoPedalChain) {
+    await mkCable({ sourcePortId: link.outL.id, targetPortId: link.inL.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.2, isPatchCable: true });
+    await mkCable({ sourcePortId: link.outR.id, targetPortId: link.inR.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.2, isPatchCable: true });
+  }
+
+  for (const powerIn of [yellowCompPower, cs400Power, to800Power, grungePower, fs06Power, fc14Power, jetEnginePower, fs05Power, dseed2Power, fs02Power, fs07Power]) {
+    await mkCable({ sourcePortId: iso12Pro9vGroup.id, targetPortId: powerIn.id, cableType: CableType.POWER_LINE, length: 0.15 });
+  }
 
   const umc404hd = await mkDevice({
     name: 'Behringer UMC404HD',
@@ -341,17 +707,33 @@ async function main() {
     powerSourceType: PowerSourceType.USB_BUS,
     hostUsbType: HostUsbType.USB_B,
     power: { currentType: CurrentType.DC, voltageV: 5, currentMA: 1000, polarity: Polarity.CENTER_NEGATIVE },
-    notes: 'Bus-powered через USB-A→B от удлинителя Андрея (не отдельным адаптером) — docs/stage-setup.md §1.1.',
+    attrs: {
+      manufacturer: 'Behringer',
+      model: 'UMC404HD — 4x4 USB 2.0, 24-bit/192kHz, MIDAS-преампы',
+      controls: ['LINE/INST переключатель', 'PAD (-20dB)', 'Stereo/Mono monitoring', 'Main/PB 1-2 source'],
+    },
+    notes:
+      'Bus-powered через USB-A→B от удлинителя Андрея (не отдельным адаптером) — docs/stage-setup.md §1.1. Альтернативно поддерживает отдельный DC 5V/1000mA адаптер (не используется сейчас).',
   });
   const umcIn1 = await mkPort(umc404hd, { name: 'Combo In 1 (Pedalboard L)', portType: PortType.COMBO_XLR_TRS, direction: PortDirection.IN });
   const umcIn2 = await mkPort(umc404hd, { name: 'Combo In 2 (Pedalboard R)', portType: PortType.COMBO_XLR_TRS, direction: PortDirection.IN });
+  await mkPort(umc404hd, { name: 'Combo In 3 (не используется)', portType: PortType.COMBO_XLR_TRS, direction: PortDirection.IN });
+  await mkPort(umc404hd, { name: 'Combo In 4 (не используется)', portType: PortType.COMBO_XLR_TRS, direction: PortDirection.IN });
   const umcOutL = await mkPort(umc404hd, { name: 'Main Out L', portType: PortType.XLR_M, direction: PortDirection.OUT });
   const umcOutR = await mkPort(umc404hd, { name: 'Main Out R', portType: PortType.XLR_M, direction: PortDirection.OUT });
+  for (let i = 1; i <= 4; i++) {
+    await mkPort(umc404hd, { name: `Playback Out ${i} (не используется)`, portType: PortType.TRS_14, direction: PortDirection.OUT });
+  }
+  for (let i = 1; i <= 4; i++) {
+    await mkPort(umc404hd, { name: `Analog Insert ${i} (не используется)`, portType: PortType.TRS_14, direction: PortDirection.BI });
+  }
   const umcPhones = await mkPort(umc404hd, { name: 'Phones Out (стерео)', portType: PortType.TRS_14, direction: PortDirection.OUT });
+  await mkPort(umc404hd, { name: 'MIDI In (не используется)', portType: PortType.MIDI_DIN, direction: PortDirection.IN });
+  await mkPort(umc404hd, { name: 'MIDI Out (не используется)', portType: PortType.MIDI_DIN, direction: PortDirection.OUT });
   const umcUsbB = await mkPort(umc404hd, { name: 'USB-B', portType: PortType.USB_B, direction: PortDirection.BI });
 
-  await mkCable({ sourcePortId: pedalboardOutL.id, targetPortId: umcIn1.id, cableType: CableType.AUDIO_BALANCED, length: 1 });
-  await mkCable({ sourcePortId: pedalboardOutR.id, targetPortId: umcIn2.id, cableType: CableType.AUDIO_BALANCED, length: 1 });
+  await mkCable({ sourcePortId: fs07OutL.id, targetPortId: umcIn1.id, cableType: CableType.AUDIO_BALANCED, length: 1 });
+  await mkCable({ sourcePortId: fs07OutR.id, targetPortId: umcIn2.id, cableType: CableType.AUDIO_BALANCED, length: 1 });
   await mkCable({ sourcePortId: anker1UsbA1.id, targetPortId: umcUsbB.id, cableType: CableType.USB_DATA, length: 1.5, adapterId: adapterUsbAtoB.id });
 
   const mx400 = await mkDevice({
@@ -362,6 +744,11 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 12, currentMA: 150, polarity: Polarity.CENTER_POSITIVE },
+    attrs: {
+      manufacturer: 'Behringer',
+      model: 'MX400 (Micromix) — компактный 4-канальный моно линейный микшер',
+      controls: ['4 независимых регулятора Input Level (1–4)'],
+    },
     notes:
       'Отдельный собственный БП — НЕ висит на педалборде/ISO-12 Pro (docs/stage-setup.md §1.3, исправление ошибки прошлого ресёрча). Добавлен после провала с мониторингом плейбеков на первом лайве.',
   });
@@ -384,6 +771,11 @@ async function main() {
     ownerRole: 'Андрей',
     position: { x: -500, y: 400 },
     powerSourceType: PowerSourceType.PASSIVE_NONE,
+    attrs: {
+      manufacturer: 'Palmer',
+      model: 'Monicon Classic — полностью пассивный стерео мониторный контроллер',
+      controls: ['Volume — массивная ручка', 'MUTE', 'MONO — суммирование сигналов в моно'],
+    },
     notes: 'Полностью пассивный — питание не требуется. Правило: нельзя одновременно использовать Combo(XLR/TRS) и mini-jack 3.5мм входы (земляная петля) — сейчас используется только Combo-вход.',
   });
   const palmerInCombo = await mkPort(palmer, { name: 'Combo In (из MX400)', portType: PortType.COMBO_XLR_TRS, direction: PortDirection.IN });
@@ -446,10 +838,18 @@ async function main() {
     powerSourceType: PowerSourceType.USB_C_PD,
     hostUsbType: HostUsbType.USB_C,
     power: { currentType: CurrentType.DC, voltageV: 5, currentMA: 1000 },
+    attrs: {
+      manufacturer: 'Universal Audio',
+      model: 'Volt 276 — 2x2 USB-C, встроенный аналоговый компрессор 1176',
+      controls: ['Vintage Preamp Switch (ламповый окрас)', '76 Compressor presets (VOCAL, GTR, FAST, OFF)', 'Direct Monitor'],
+    },
   });
   const volt276In1 = await mkPort(volt276, { name: 'Mic In (Combo)', portType: PortType.COMBO_XLR_TRS, direction: PortDirection.IN });
+  await mkPort(volt276, { name: 'In 2 (Combo, не используется)', portType: PortType.COMBO_XLR_TRS, direction: PortDirection.IN });
   const volt276Out1 = await mkPort(volt276, { name: 'Output 1 (Monitor/Phones)', portType: PortType.TRS_14, direction: PortDirection.OUT });
   const volt276Out2 = await mkPort(volt276, { name: 'Output 2 (Line)', portType: PortType.TRS_14, direction: PortDirection.OUT });
+  await mkPort(volt276, { name: 'MIDI In (не используется)', portType: PortType.MIDI_DIN, direction: PortDirection.IN });
+  await mkPort(volt276, { name: 'MIDI Out (не используется)', portType: PortType.MIDI_DIN, direction: PortDirection.OUT });
   const volt276UsbC = await mkPort(volt276, { name: 'USB-C (питание, от удлинителя Андрея)', portType: PortType.USB_C, direction: PortDirection.BI });
 
   await mkCable({ sourcePortId: danyaVMicOut.id, targetPortId: volt276In1.id, cableType: CableType.AUDIO_BALANCED, length: 5, color: 'red' });
@@ -486,6 +886,12 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.AC_MAINS,
     power: { currentType: CurrentType.AC, voltageV: 9, currentMA: 750 },
+    attrs: {
+      manufacturer: 'Behringer',
+      model: 'FEX800 (MINIFEX) — 16-битный цифровой процессор эффектов, 16 пресетов',
+      controls: ['Встроенный Tap Tempo'],
+      algorithms: ['Reverb', 'Delay', 'Modulation', 'Pitch Shifter'],
+    },
     notes: 'Только родной AC-адаптер — DC-педалбордные блоки категорически несовместимы (docs/stage-setup.md §5.3).',
   });
   const fex800InL = await mkPort(fex800, { name: 'In L', portType: PortType.TS_14, direction: PortDirection.IN });
@@ -513,27 +919,112 @@ async function main() {
   const danyaVGuitarOut = await mkPort(danyaVGuitar, { name: 'Jack Out', portType: PortType.TS_14, direction: PortDirection.OUT });
   await mkFurniture({ deviceId: danyaVGuitar.id, kind: FurnitureKind.GUITAR_STAND, isVenueProvided: false });
 
-  const danyaVPedals: Device[] = [];
-  for (let i = 1; i <= 3; i++) {
-    danyaVPedals.push(
-      await mkDevice({
-        name: `Педаль Дани-вокала №${i} (не заполнено)`,
-        type: DeviceType.PEDAL,
-        ownerRole: 'Даня-вокал',
-        position: { x: 550 + i * 60, y: 480 },
-        notes: 'Модель/спеки не заполнены — дозаполнить в GUI (docs/stage-setup.md §2.2, §6).',
-      }),
-    );
-  }
-  const pedalPorts = await Promise.all(
-    danyaVPedals.map(async (p) => ({
-      in: await mkPort(p, { name: 'In', portType: PortType.TS_14, direction: PortDirection.IN }),
-      out: await mkPort(p, { name: 'Out', portType: PortType.TS_14, direction: PortDirection.OUT }),
-      // Power port deliberately left with no declared voltage/current/polarity — the real
-      // wiring (1 shared PSU vs. 2 PSUs + splitter vs. 1 PSU + 3-way splitter) isn't known yet.
-      power: await mkPort(p, { name: 'Power In (❓ схема питания не определена)', portType: PortType.DC_BARREL, direction: PortDirection.IN }),
-    })),
-  );
+  const tu3 = await mkDevice({
+    name: 'Boss TU-3 Chromatic Tuner',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Даня-вокал',
+    position: { x: 610, y: 480 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 30, polarity: Polarity.CENTER_NEGATIVE },
+    attrs: {
+      manufacturer: 'Boss',
+      model: 'TU-3 (или TU-2) Chromatic Tuner',
+      controls: ['21-сегментный светодиодный индикатор', 'режим Stream/Cent', 'поддержка дроп-строёв (Flat tuning до 6 полутонов)'],
+      footswitch: 'Включение режима настройки — отключает сигнал на OUTPUT (Mute).',
+    },
+    notes:
+      'Раздаёт 9V DC OUT (до 200мА) на разветвитель → Cinders + FC01 (см. ниже) — резолвит открытый вопрос docs/stage-setup.md §2.2/§12.4 про питание 3 педалей. Собственный upstream-источник питания TU-3 (что запитывает сам тюнер) пока не уточнён.',
+  });
+  const tu3In = await mkPort(tu3, { name: 'Input (с гитары Дани-вокала)', portType: PortType.TS_14, direction: PortDirection.IN });
+  const tu3Out = await mkPort(tu3, { name: 'Output (с mute при настройке)', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const tu3Power = await mkPort(tu3, {
+    name: 'Power In (upstream ❓)',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 30, polarity: Polarity.CENTER_NEGATIVE },
+  });
+  const tu3DaisyOut = await mkPort(tu3, {
+    name: '9V DC OUT (Daisy Chain, до 200мА)',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.OUT,
+    power: { currentType: CurrentType.DC, voltageV: 9, polarity: Polarity.CENTER_NEGATIVE, maxOutputCurrentMA: 200 },
+  });
+
+  const danyaVSplitter = await mkDevice({
+    name: 'Разветвитель питания 1→2 (от TU-3, на Cinders + FC01)',
+    type: DeviceType.POWER_SPLITTER,
+    ownerRole: 'Даня-вокал',
+    position: { x: 610, y: 550 },
+    notes: 'Даёт TU-3-у раздать один daisy-chain выход на 2 педали (15мА + 128мА = 143мА, укладывается в лимит 200мА).',
+  });
+  const splitterIn = await mkPort(danyaVSplitter, { name: 'In', portType: PortType.DC_BARREL, direction: PortDirection.IN });
+  const splitterOut1 = await mkPort(danyaVSplitter, { name: 'Out 1 (→ Cinders)', portType: PortType.DC_BARREL, direction: PortDirection.OUT });
+  const splitterOut2 = await mkPort(danyaVSplitter, { name: 'Out 2 (→ FC01)', portType: PortType.DC_BARREL, direction: PortDirection.OUT });
+  await mkCable({ sourcePortId: tu3DaisyOut.id, targetPortId: splitterIn.id, cableType: CableType.POWER_LINE, length: 0.2 });
+
+  const cinders = await mkDevice({
+    name: 'TC Electronic Cinders Overdrive',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Даня-вокал',
+    position: { x: 670, y: 480 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 15, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: false, isStereoOut: false },
+    attrs: {
+      manufacturer: 'TC Electronic',
+      model: 'Cinders Overdrive (прозрачный овердрайв на MOSFET, tube-like)',
+      controls: ['DRIVE — насыщение и гейн (от лёгкого буста до классического ритм-кранча)', 'VOLUME — выходной уровень', 'TONE — прозрачность и срез высоких частот'],
+      footswitch: 'True Bypass, металлический кликер.',
+    },
+  });
+  const cindersIn = await mkPort(cinders, { name: 'Input', portType: PortType.TS_14, direction: PortDirection.IN });
+  const cindersOut = await mkPort(cinders, { name: 'Output', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const cindersPower = await mkPort(cinders, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 15, polarity: Polarity.CENTER_NEGATIVE },
+  });
+  await mkCable({ sourcePortId: splitterOut1.id, targetPortId: cindersPower.id, cableType: CableType.POWER_LINE, length: 0.3 });
+
+  const fc01 = await mkDevice({
+    name: 'FLAMMA FC01 Delay',
+    type: DeviceType.PEDAL,
+    ownerRole: 'Даня-вокал',
+    position: { x: 730, y: 480 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 128, polarity: Polarity.CENTER_NEGATIVE },
+    pedal: { isStereoIn: false, isStereoOut: false },
+    attrs: {
+      manufacturer: 'Flamma',
+      model: 'FC01 (микро-педаль дилея, 3 режима)',
+      controls: [
+        '3-way Toggle: Analog (тёплая аналоговая задержка с мягким спадом) / Real Echo (естественное эхо окружения) / Tape Echo (симуляция винтажного ленточного дилея)',
+        'TIME (большая ручка) — время задержки, 5ms – 600ms',
+        'LEVEL — уровень громкости повторов',
+        'F.BACK (Feedback) — количество повторов',
+      ],
+      footswitch: 'True Bypass.',
+    },
+  });
+  const fc01In = await mkPort(fc01, { name: 'Input', portType: PortType.TS_14, direction: PortDirection.IN });
+  const fc01Out = await mkPort(fc01, { name: 'Output', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const fc01Power = await mkPort(fc01, {
+    name: 'Power In',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 128, polarity: Polarity.CENTER_NEGATIVE },
+  });
+  await mkCable({ sourcePortId: splitterOut2.id, targetPortId: fc01Power.id, cableType: CableType.POWER_LINE, length: 0.3 });
+
+  const pedalPorts = [
+    { in: tu3In, out: tu3Out },
+    { in: cindersIn, out: cindersOut },
+    { in: fc01In, out: fc01Out },
+  ];
 
   const danyaVCombo = await mkDevice({
     name: 'Комбик Дани-вокала (Egnater Tweaker 40W)',
@@ -543,8 +1034,17 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.AC_MAINS,
     power: { currentType: CurrentType.AC },
+    attrs: {
+      manufacturer: 'Egnater',
+      model: 'Tweaker 40W Combo — двухканальный полностью ламповый (2x 6L6, 3x 12AX7)',
+      controls: ['Переключатели Tweaker: USA / AC / BRIT — смена характера эквалайзера и структуры гейна'],
+    },
+    notes: 'Подзвучка снимается динамическим микрофоном Sennheiser e835s в стейджбокс (CH11) — см. ниже.',
   });
   const danyaVComboIn = await mkPort(danyaVCombo, { name: 'Input', portType: PortType.TS_14, direction: PortDirection.IN });
+  await mkPort(danyaVCombo, { name: 'FX Loop Send (не используется)', portType: PortType.TS_14, direction: PortDirection.OUT });
+  await mkPort(danyaVCombo, { name: 'FX Loop Return (не используется)', portType: PortType.TS_14, direction: PortDirection.IN });
+  await mkPort(danyaVCombo, { name: 'Speaker Out (4/8/16 Ω, не используется — комбо, кабинет не внешний)', portType: PortType.TS_14, direction: PortDirection.OUT });
   const danyaVComboPower = await mkPort(danyaVCombo, { name: 'Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN, power: { currentType: CurrentType.AC } });
   await mkCable({ sourcePortId: anker2SchukoOuts[1].id, targetPortId: danyaVComboPower.id, cableType: CableType.POWER_LINE, length: 2 });
 
@@ -588,9 +1088,18 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 12, currentMA: 1000, polarity: Polarity.ANY },
+    attrs: {
+      manufacturer: 'MOTU',
+      model: 'UltraLite-mk3 Hybrid — гибридный (USB 2.0 / FireWire) 10x14 интерфейс с DSP-эффектами',
+    },
     notes: 'Полярность блока питания устройству безразлична (ANY) — редкий случай, зафиксировано явно.',
   });
   const motuUsbB = await mkPort(motu, { name: 'USB-B', portType: PortType.USB_B, direction: PortDirection.BI });
+  await mkPort(motu, { name: 'Combo Mic/Guitar In 1 (не используется)', portType: PortType.COMBO_XLR_TRS, direction: PortDirection.IN });
+  await mkPort(motu, { name: 'Combo Mic/Guitar In 2 (не используется)', portType: PortType.COMBO_XLR_TRS, direction: PortDirection.IN });
+  for (let i = 1; i <= 6; i++) {
+    await mkPort(motu, { name: `Line In ${i} (не используется)`, portType: PortType.TRS_14, direction: PortDirection.IN });
+  }
   const motuOutBassL = await mkPort(motu, { name: 'Out — Bass L', portType: PortType.TRS_14, direction: PortDirection.OUT });
   const motuOutBassR = await mkPort(motu, { name: 'Out — Bass R', portType: PortType.TRS_14, direction: PortDirection.OUT });
   const motuOutPercL = await mkPort(motu, { name: 'Out — Percussion L', portType: PortType.TRS_14, direction: PortDirection.OUT });
@@ -599,6 +1108,12 @@ async function main() {
   const motuOutSynthR = await mkPort(motu, { name: 'Out — Synths/BVs R', portType: PortType.TRS_14, direction: PortDirection.OUT });
   const motuOutAux = await mkPort(motu, { name: 'Aux Out (клик барабанщику)', portType: PortType.TRS_18, direction: PortDirection.OUT });
   const motuOutMonitorFeed = await mkPort(motu, { name: 'Line Out (личный монитор-фид Андрею)', portType: PortType.TS_14, direction: PortDirection.OUT });
+  await mkPort(motu, { name: 'S/PDIF In (не используется)', portType: PortType.TRS_14, direction: PortDirection.IN });
+  await mkPort(motu, { name: 'S/PDIF Out (не используется)', portType: PortType.TRS_14, direction: PortDirection.OUT });
+  await mkPort(motu, { name: 'Optical In (не используется)', portType: PortType.TRS_14, direction: PortDirection.IN });
+  await mkPort(motu, { name: 'Optical Out (не используется)', portType: PortType.TRS_14, direction: PortDirection.OUT });
+  await mkPort(motu, { name: 'MIDI In (не используется)', portType: PortType.MIDI_DIN, direction: PortDirection.IN });
+  await mkPort(motu, { name: 'MIDI Out (не используется)', portType: PortType.MIDI_DIN, direction: PortDirection.OUT });
   const motuPower = await mkPort(motu, {
     name: 'Power In',
     portType: PortType.DC_BARREL,
