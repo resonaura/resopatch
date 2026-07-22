@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Checkbox, Disclosure, Input, Label, ListBox, Select, TextArea, TextField, toast } from '@heroui/react';
-import { Cable as CableIcon, Layers, Plus, StickyNote, Trash2, Zap, type LucideIcon } from 'lucide-react';
+import { Cable as CableIcon, Layers, Package, Plus, StickyNote, Trash2, Zap, type LucideIcon } from 'lucide-react';
 import {
   CableType,
   CurrentType,
@@ -16,6 +16,7 @@ import {
   type UpdateDeviceDto,
 } from '@resopatch/shared';
 import { api, type GraphCable, type GraphDevice, type GraphResponse } from '../api/client';
+import { DeviceTypeIcon } from '../lib/deviceIcons';
 
 function enumSelect<T extends string>(values: T[], value: T, onChange: (v: T) => void, label: string) {
   return (
@@ -80,7 +81,19 @@ function Section({ title, icon: Icon, children }: { title: string; icon: LucideI
   );
 }
 
-function DeviceForm({ device, setupId }: { device: GraphDevice; setupId: string }) {
+function DeviceForm({
+  device,
+  setupId,
+  children,
+  onAddChild,
+  onSelectChild,
+}: {
+  device: GraphDevice;
+  setupId: string;
+  children: GraphDevice[];
+  onAddChild: () => void;
+  onSelectChild: (id: string) => void;
+}) {
   const qc = useQueryClient();
   const [form, setForm] = useState(device);
   const [attrsText, setAttrsText] = useState(() => JSON.stringify(device.attrs, null, 2));
@@ -309,6 +322,26 @@ function DeviceForm({ device, setupId }: { device: GraphDevice; setupId: string 
         </Button>
       </Section>
 
+      <Section title={`Комплект / аксессуары (${children.length})`} icon={Package}>
+        {children.map((child) => (
+          <button
+            key={child.id}
+            onClick={() => onSelectChild(child.id)}
+            className="flex items-center gap-2 rounded-md border border-default-200 px-2 py-1.5 text-left text-xs hover:bg-surface-secondary"
+          >
+            <DeviceTypeIcon type={child.type} className="h-3.5 w-3.5 shrink-0 text-default-500" />
+            <span className="truncate">{child.name}</span>
+          </button>
+        ))}
+        <Button size="sm" variant="secondary" onPress={onAddChild}>
+          <Plus className="h-3.5 w-3.5" />
+          Добавить в комплект
+        </Button>
+        <p className="text-[11px] text-default-500">
+          Тюнер, ремень, липучки, чехлы, педали на этом устройстве — показываются списком прямо на карточке на схеме, не отдельными узлами.
+        </p>
+      </Section>
+
       <Section title="Заметки и доп. поля" icon={StickyNote}>
         <TextField>
           <Label>Заметки</Label>
@@ -396,7 +429,19 @@ function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: stri
 
 export type Selection = { kind: 'device'; id: string } | { kind: 'cable'; id: string } | null;
 
-export default function Inspector({ graph, selection, setupId }: { graph: GraphResponse; selection: Selection; setupId: string }) {
+export default function Inspector({
+  graph,
+  selection,
+  setupId,
+  onAddChild,
+  onSelectDevice,
+}: {
+  graph: GraphResponse;
+  selection: Selection;
+  setupId: string;
+  onAddChild: (parentId: string) => void;
+  onSelectDevice: (id: string) => void;
+}) {
   if (!selection) {
     return (
       <div className="min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-4 text-sm text-default-500">
@@ -413,10 +458,18 @@ export default function Inspector({ graph, selection, setupId }: { graph: GraphR
   if (selection.kind === 'device') {
     const device = graph.devices.find((d) => d.id === selection.id);
     if (!device) return null;
+    const children = graph.devices.filter((d) => d.parentDeviceId === device.id);
     return (
       <div className="min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
         <h3 className="mb-2.5 text-sm font-semibold">{device.name}</h3>
-        <DeviceForm key={device.id} device={device} setupId={setupId} />
+        <DeviceForm
+          key={device.id}
+          device={device}
+          setupId={setupId}
+          children={children}
+          onAddChild={() => onAddChild(device.id)}
+          onSelectChild={onSelectDevice}
+        />
       </div>
     );
   }

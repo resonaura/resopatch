@@ -4,9 +4,17 @@ import { Chip } from '@heroui/react';
 import { InventoryStatus, PortDirection } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
+import { portChannelColor } from '../lib/portChannel';
+import { PortTypeIcon } from '../lib/portIcons';
 
 export interface DeviceNodeData {
   device: GraphDevice;
+  /** Devices with parentDeviceId === this node's device — accessories (straps, tuner, velcro,
+   *  cases) and, once filled in, pedals mounted on this board. They have no ports of their own
+   *  worth drawing cables to, so they render as a nested list inside this card instead of as
+   *  separate floating nodes on the canvas. */
+  children: GraphDevice[];
+  onSelectChild: (id: string) => void;
   [key: string]: unknown;
 }
 
@@ -25,7 +33,7 @@ const STATUS_COLOR: Record<string, 'success' | 'default' | 'warning' | 'accent'>
 };
 
 function DeviceNodeImpl({ data, selected }: NodeProps) {
-  const { device } = data as unknown as DeviceNodeData;
+  const { device, children, onSelectChild } = data as unknown as DeviceNodeData;
   const ports = device.ports;
   const inactive = device.inventoryStatus !== InventoryStatus.OWNED_ACTIVE && device.inventoryStatus !== InventoryStatus.VENUE_PROVIDED;
 
@@ -52,16 +60,46 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
           {ports.map((port) => {
             const showLeft = port.direction === PortDirection.IN || port.direction === PortDirection.BI;
             const showRight = port.direction === PortDirection.OUT || port.direction === PortDirection.BI;
+            const channelColor = portChannelColor(port.name);
             return (
-              <div key={port.id} className="relative border-b border-white/5 px-3.5 py-1 last:border-b-0">
+              <div key={port.id} className="relative flex items-center gap-1.5 border-b border-white/5 px-3.5 py-1 last:border-b-0">
                 {showLeft && <Handle type="target" position={Position.Left} id={port.id} />}
-                <span className="block truncate pr-1 text-[10.5px] text-default-500" title={`${port.name} (${port.portType})`}>
+                {showLeft && <PortTypeIcon portType={port.portType} />}
+                {channelColor && (
+                  <span
+                    className="h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-black/40"
+                    style={{ backgroundColor: channelColor }}
+                  />
+                )}
+                <span className="block min-w-0 flex-1 truncate pr-1 text-[10.5px] text-default-500" title={`${port.name} (${port.portType})`}>
                   {port.name}
                 </span>
+                {showRight && <PortTypeIcon portType={port.portType} />}
                 {showRight && <Handle type="source" position={Position.Right} id={port.id} />}
               </div>
             );
           })}
+        </div>
+      )}
+      {children.length > 0 && (
+        <div className="border-t border-default-200 bg-black/10 px-2 py-1.5">
+          <div className="mb-1 text-[9px] font-medium uppercase tracking-wide text-default-500">Комплект / аксессуары</div>
+          <div className="flex flex-col gap-0.5">
+            {children.map((child) => (
+              <button
+                key={child.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectChild(child.id);
+                }}
+                className="flex items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-white/5"
+                title={child.notes ?? child.name}
+              >
+                <DeviceTypeIcon type={child.type} className="h-3 w-3 shrink-0 text-default-500" />
+                <span className="truncate text-[10.5px] text-default-500">{child.name}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

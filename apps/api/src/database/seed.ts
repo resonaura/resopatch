@@ -206,15 +206,43 @@ async function main() {
   await mkCable({ sourcePortId: venueOutlet1.id, targetPortId: anker1Plug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'white' });
   await mkCable({ sourcePortId: venueOutlet2.id, targetPortId: anker2Plug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'white' });
 
+  // ---------------------------------------------------------------------------------------
+  // Andrey — stage left. Guitar/bass → pedalboard → UMC404HD, plus his personal post-gig-1
+  // monitoring fix (MX400 → Palmer Monicon → headphones). See docs/stage-setup.md §1, §9.
+  // ---------------------------------------------------------------------------------------
+  const pedalboard = await mkDevice({
+    name: 'Педалборд Harley Benton SpaceShip',
+    type: DeviceType.PEDALBOARD,
+    ownerRole: 'Андрей',
+    position: { x: -700, y: 0 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.DC_BARREL,
+    attrs: { model: 'SpaceShip (точный размер 40/50M/60/60XL не уточнён)', originalMisnomer: 'Starship' },
+    notes: '❓ Состав педалей не описан поштучно — дозаполнить в GUI (docs/stage-setup.md §6, §12.2).',
+  });
+  const pedalboardIn = await mkPort(pedalboard, { name: 'Guitar In', portType: PortType.TS_14, direction: PortDirection.IN });
+  const pedalboardOutL = await mkPort(pedalboard, { name: 'Stereo Out L', portType: PortType.TRS_14, direction: PortDirection.OUT });
+  const pedalboardOutR = await mkPort(pedalboard, { name: 'Stereo Out R', portType: PortType.TRS_14, direction: PortDirection.OUT });
+  const pedalboardPower = await mkPort(pedalboard, {
+    name: 'Power In (педали, суммарно)',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.IN,
+    power: { currentType: CurrentType.DC, voltageV: 9, polarity: Polarity.CENTER_NEGATIVE },
+  });
+
+  // Physically straps to the underside of the pedalboard and travels as one unit with it — part
+  // of "the pedalboard" the same way the velcro and patch cables are, even though (unlike those)
+  // it still has real ports/cables of its own, so it stays a full node on the canvas too.
   const iso12pro = await mkDevice({
     name: 'Harley Benton PowerPlant ISO-12 Pro',
     type: DeviceType.POWER_SUPPLY,
     ownerRole: 'Андрей',
+    parentDeviceId: pedalboard.id,
     position: { x: -300, y: 450 },
     powerRequired: true,
     powerSourceType: PowerSourceType.AC_MAINS,
     power: { maxOutputPowerW: 27 },
-    notes: 'Изолированный мультиблок питания педалборда Андрея. Глобальный лимит 27W суммарно на все выходы.',
+    notes: 'Изолированный мультиблок питания педалборда Андрея. Глобальный лимит 27W суммарно на все выходы. Крепится к педалборду — физически единое целое с ним.',
   });
   const iso12ProIn = await mkPort(iso12pro, { name: 'Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN, power: { currentType: CurrentType.AC } });
   const iso12Pro9vGroup = await mkPort(iso12pro, {
@@ -232,10 +260,6 @@ async function main() {
 
   await mkCable({ sourcePortId: anker1SchukoOuts[0].id, targetPortId: iso12ProIn.id, cableType: CableType.POWER_LINE, length: 1 });
 
-  // ---------------------------------------------------------------------------------------
-  // Andrey — stage left. Guitar/bass → pedalboard → UMC404HD, plus his personal post-gig-1
-  // monitoring fix (MX400 → Palmer Monicon → headphones). See docs/stage-setup.md §1, §9.
-  // ---------------------------------------------------------------------------------------
   const andreyGuitar = await mkDevice({
     name: 'Гитара Андрея',
     type: DeviceType.INSTRUMENT,
@@ -282,26 +306,6 @@ async function main() {
   });
   const venueBassComboIn = await mkPort(venueBassCombo, { name: 'Input', portType: PortType.TS_14, direction: PortDirection.IN });
   await mkCable({ sourcePortId: andreyBassOut.id, targetPortId: venueBassComboIn.id, cableType: CableType.AUDIO_UNBALANCED, length: 4 });
-
-  const pedalboard = await mkDevice({
-    name: 'Педалборд Harley Benton SpaceShip',
-    type: DeviceType.PEDALBOARD,
-    ownerRole: 'Андрей',
-    position: { x: -700, y: 0 },
-    powerRequired: true,
-    powerSourceType: PowerSourceType.DC_BARREL,
-    attrs: { model: 'SpaceShip (точный размер 40/50M/60/60XL не уточнён)', originalMisnomer: 'Starship' },
-    notes: '❓ Состав педалей не описан поштучно — дозаполнить в GUI (docs/stage-setup.md §6, §12.2).',
-  });
-  const pedalboardIn = await mkPort(pedalboard, { name: 'Guitar In', portType: PortType.TS_14, direction: PortDirection.IN });
-  const pedalboardOutL = await mkPort(pedalboard, { name: 'Stereo Out L', portType: PortType.TRS_14, direction: PortDirection.OUT });
-  const pedalboardOutR = await mkPort(pedalboard, { name: 'Stereo Out R', portType: PortType.TRS_14, direction: PortDirection.OUT });
-  const pedalboardPower = await mkPort(pedalboard, {
-    name: 'Power In (педали, суммарно)',
-    portType: PortType.DC_BARREL,
-    direction: PortDirection.IN,
-    power: { currentType: CurrentType.DC, voltageV: 9, polarity: Polarity.CENTER_NEGATIVE },
-  });
 
   await mkDevice({
     name: 'Липучки крепления педалей',

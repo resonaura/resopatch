@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import {
   Background,
+  ConnectionLineType,
   Controls,
   MiniMap,
   ReactFlow,
@@ -18,7 +19,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Table, Tabs } from '@heroui/react';
 import { ClipboardList, LayoutGrid, ListMusic, LogOut, Settings, Wand2 } from 'lucide-react';
 import { CABLE_COLORS, CableType, type InputListRow, type RiderRow } from '@resopatch/shared';
-import { api } from '../api/client';
+import { api, type GraphDevice } from '../api/client';
 import DeviceNode, { type DeviceNodeData } from '../components/DeviceNode';
 import Sidebar from '../components/Sidebar';
 import Inspector, { type Selection } from '../components/Inspector';
@@ -28,6 +29,17 @@ import SettingsModal from '../components/SettingsModal';
 
 const nodeTypes = { device: DeviceNode };
 
+/** Deterministic per-edge jitter for the smoothstep "offset" (how far a path overshoots its
+ *  source/target before turning). Two cables that happen to run the same rectilinear route — e.g.
+ *  several mics all heading to the same stage box — would otherwise trace the exact same corner
+ *  points and read as one line; staggering the overshoot fans their elbows out just enough to
+ *  keep each cable visually distinct. */
+function edgeOffset(id: string, min = 14, max = 58): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return min + (hash % (max - min));
+}
+
 export default function Constructor({ setupId, setupName }: { setupId: string; setupName: string }) {
   const qc = useQueryClient();
   const graphQuery = useQuery({ queryKey: ['graph', setupId], queryFn: () => api.getGraph(setupId) });
@@ -35,21 +47,40 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
 
   const [selection, setSelection] = useState<Selection>(null);
   const [showNewDevice, setShowNewDevice] = useState(false);
+  const [newDeviceParentId, setNewDeviceParentId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(null);
   const [view, setView] = useState<'canvas' | 'input-list' | 'rider'>('canvas');
 
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, GraphDevice[]>();
+    for (const d of graph?.devices ?? []) {
+      if (!d.parentDeviceId) continue;
+      const list = map.get(d.parentDeviceId) ?? [];
+      list.push(d);
+      map.set(d.parentDeviceId, list);
+    }
+    return map;
+  }, [graph]);
+
+  const onSelectChild = useCallback((id: string) => setSelection({ kind: 'device', id }), []);
+
   const initialNodes: Node[] = useMemo(
     () =>
-      (graph?.devices ?? []).map((device) => ({
-        id: device.id,
-        type: 'device',
-        position: device.position,
-        data: { device } satisfies DeviceNodeData,
-        selected: selection?.kind === 'device' && selection.id === device.id,
-      })),
+      (graph?.devices ?? [])
+        // A device with a parent nests inside that parent's card instead of getting its own node
+        // — unless it has real ports of its own (e.g. a power brick strapped to a pedalboard),
+        // in which case its cables still need somewhere to land.
+        .filter((device) => !device.parentDeviceId || device.ports.length > 0)
+        .map((device) => ({
+          id: device.id,
+          type: 'device',
+          position: device.position,
+          data: { device, children: childrenByParent.get(device.id) ?? [], onSelectChild } satisfies DeviceNodeData,
+          selected: selection?.kind === 'device' && selection.id === device.id,
+        })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [graph, selection],
+    [graph, selection, childrenByParent, onSelectChild],
   );
 
   const portToDevice = useMemo(() => {
@@ -68,12 +99,18 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
         targetHandle: cable.targetPortId,
         label: cable.color ?? undefined,
         selected: selection?.kind === 'cable' && selection.id === cable.id,
+        // Right-angle routing hugs node edges instead of cutting diagonally across the canvas —
+        // with devices already grid-aligned by the zone layout, that keeps parallel runs visually
+        // distinct instead of bundling into an X of crossing bezier curves.
+        type: 'smoothstep',
+        pathOptions: { borderRadius: 10, offset: edgeOffset(cable.id) },
         style: {
           stroke: CABLE_COLORS[cable.cableType],
           strokeWidth: selection?.kind === 'cable' && selection.id === cable.id ? 3 : 1.5,
           strokeDasharray: cable.cableType === CableType.CONTROL_LINK ? '6 4' : undefined,
         },
         animated: cable.cableType === CableType.CONTROL_LINK,
+        zIndex: selection?.kind === 'cable' && selection.id === cable.id ? 1 : 0,
       })),
     [graph, portToDevice, selection],
   );
@@ -192,7 +229,10 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
           devices={graph.devices}
           selectedId={selection?.kind === 'device' ? selection.id : null}
           onSelect={(id) => setSelection({ kind: 'device', id })}
-          onNewDevice={() => setShowNewDevice(true)}
+          onNewDevice={() => {
+            setNewDeviceParentId(null);
+            setShowNewDevice(true);
+          }}
         />
         {view === 'canvas' && (
           <div className="relative min-h-0">
@@ -213,6 +253,8 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
                 minZoom={0.02}
                 maxZoom={2}
                 colorMode="dark"
+                connectionLineType={ConnectionLineType.SmoothStep}
+                elevateEdgesOnSelect
               >
                 <Background gap={24} />
                 <Controls />
@@ -223,9 +265,20 @@ export default function Constructor({ setupId, setupName }: { setupId: string; s
         )}
         {view === 'input-list' && <InputListTable setupId={setupId} />}
         {view === 'rider' && <RiderTable setupId={setupId} />}
-        <Inspector graph={graph} selection={selection} setupId={setupId} />
+        <Inspector
+          graph={graph}
+          selection={selection}
+          setupId={setupId}
+          onAddChild={(parentId) => {
+            setNewDeviceParentId(parentId);
+            setShowNewDevice(true);
+          }}
+          onSelectDevice={(id) => setSelection({ kind: 'device', id })}
+        />
       </div>
-      {showNewDevice && <NewDeviceModal setupId={setupId} onClose={() => setShowNewDevice(false)} />}
+      {showNewDevice && (
+        <NewDeviceModal setupId={setupId} defaultParentId={newDeviceParentId} onClose={() => setShowNewDevice(false)} />
+      )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {pendingConnection && pendingSourcePort && pendingTargetPort && pendingSourceDevice && pendingTargetDevice && (
         <NewCableModal
