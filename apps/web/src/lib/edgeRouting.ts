@@ -29,6 +29,7 @@ export interface EdgeRouteSpec {
   end: { x: number; y: number };
   sourceDir?: 'left' | 'right';
   targetDir?: 'left' | 'right';
+  isPowerAdapter?: boolean;
 }
 
 export type Point = { x: number; y: number };
@@ -273,13 +274,17 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
 
   if (found) {
     const cellPoints = found.slice(1, -1).map(([cx, cy]) => ({ x: cx * cell, y: cy * cell }));
+    const sPortClearance = start.x + sSign * 24;
+    const tPortClearance = end.x + tSign * 24;
     return simplifyColinear([
       start,
-      { x: start.x, y: stubStart.y },
+      { x: sPortClearance, y: start.y },
+      { x: sPortClearance, y: stubStart.y },
       stubStart,
       ...cellPoints,
       stubEnd,
-      { x: end.x, y: stubEnd.y },
+      { x: tPortClearance, y: stubEnd.y },
+      { x: tPortClearance, y: end.y },
       end,
     ]);
   }
@@ -309,23 +314,20 @@ interface SegmentRef {
   anchor: number;
 }
 
-/** Stage 2: nudge coincident parallel runs apart into separate lanes. Only ever touches interior
- *  segments (never the first/last, which are anchored exactly to a port) and only ever moves a
- *  segment perpendicular to its own direction — the neighbouring perpendicular segments simply
- *  get longer or shorter to absorb the shift, so no new corners are needed to stay connected.
- *
- *  `edges` is only consulted for the safety-net revert check below — it's what lets that check
- *  tell "this cable's own source/target device" apart from every other obstacle. */
+/** Stage 2: nudge coincident parallel runs apart into separate lanes. */
 export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObstacle[], edges: EdgeRouteSpec[]): Map<string, Point[]> {
   const working = new Map(Array.from(routes, ([id, pts]) => [id, pts.map((p) => ({ ...p }))] as const));
   const specById = new Map(edges.map((e) => [e.id, e] as const));
 
   const segments: SegmentRef[] = [];
   for (const [edgeId, pts] of working) {
+    if (pts.length < 3) continue;
     const spec = specById.get(edgeId);
-    const nearStartIdx = 1;
-    const nearEndIdx = pts.length - 3;
-    for (let i = 1; i < pts.length - 2; i++) {
+    const startIdx = pts.length >= 7 ? 2 : 1;
+    const endIdx = pts.length >= 7 ? pts.length - 3 : pts.length - 2;
+    const nearStartIdx = startIdx;
+    const nearEndIdx = endIdx - 1;
+    for (let i = startIdx; i < endIdx; i++) {
       const a = pts[i];
       const b = pts[i + 1];
       let orientation: 'h' | 'v' | undefined;
@@ -390,10 +392,11 @@ export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObs
       laneOf.set(seg, lane);
     }
     const laneCount = laneEnds.length;
-    if (laneCount < 2) continue;
+    const isPowerAdapterGroup = group.some((s) => specById.get(s.edgeId)?.isPowerAdapter);
+    const groupLaneGap = isPowerAdapterGroup ? 28 : LANE_GAP;
     for (const seg of group) {
       const lane = laneOf.get(seg)!;
-      const offset = (lane - (laneCount - 1) / 2) * LANE_GAP;
+      const offset = (lane - (laneCount - 1) / 2) * groupLaneGap;
       if (offset === 0) continue;
       const pts = working.get(seg.edgeId)!;
       if (seg.orientation === 'h') {
@@ -435,12 +438,66 @@ export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObs
 }
 
 /** Runs both stages for a full graph: pathfind every cable independently, then separate any
- *  coincident parallel runs into lanes. */
+ *  coincident parallel runs into lanes. Automatically registers micro-node card obstacles for
+ *  power adapter cables so other cables route cleanly around them. */
 export function computeRoutes(obstacles: RectObstacle[], edges: EdgeRouteSpec[]): Map<string, Point[]> {
   const routes = new Map<string, Point[]>();
   const ordered = [...edges].sort((a, b) => a.id.localeCompare(b.id));
-  for (const spec of ordered) routes.set(spec.id, findPath(spec, obstacles));
-  return resolveOverlaps(routes, obstacles, ordered);
+
+  // Pass 1: Initial pathfinding for all edges
+  for (const spec of ordered) {
+    routes.set(spec.id, findPath(spec, obstacles));
+  }
+  const pass1Routes = resolveOverlaps(routes, obstacles, ordered);
+
+  // Pass 2: Identify adapter micro-node card obstacles
+  const adapterObstacles: RectObstacle[] = [];
+  for (const spec of ordered) {
+    if (!spec.isPowerAdapter) continue;
+    const pts = pass1Routes.get(spec.id);
+    if (!pts || pts.length < 2) continue;
+
+    // Find midpoint of longest straight interior segment
+    let maxDist = -1;
+    let bestMid = { x: (pts[0].x + pts[pts.length - 1].x) / 2, y: (pts[0].y + pts[pts.length - 1].y) / 2 };
+    const startIdx = pts.length >= 4 ? 1 : 0;
+    const endIdx = pts.length >= 4 ? pts.length - 2 : pts.length - 1;
+
+    for (let i = startIdx; i < endIdx; i++) {
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+      if (dist > maxDist) {
+        maxDist = dist;
+        bestMid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      }
+    }
+
+    // Register a 130x36px obstacle for this micro-node card
+    adapterObstacles.push({
+      id: `adapter-card-${spec.id}`,
+      x: bestMid.x - 65,
+      y: bestMid.y - 18,
+      width: 130,
+      height: 36,
+    });
+  }
+
+  // Pass 3: If we have micro-node card obstacles, re-route non-adapter cables around them
+  if (adapterObstacles.length > 0) {
+    const combinedObstacles = [...obstacles, ...adapterObstacles];
+    const pass2Routes = new Map<string, Point[]>();
+    for (const spec of ordered) {
+      if (spec.isPowerAdapter) {
+        pass2Routes.set(spec.id, pass1Routes.get(spec.id)!);
+      } else {
+        pass2Routes.set(spec.id, findPath(spec, combinedObstacles));
+      }
+    }
+    return resolveOverlaps(pass2Routes, combinedObstacles, ordered);
+  }
+
+  return pass1Routes;
 }
 
 /** Same corner-rounding technique `smoothstep` uses internally: cut each straight run short by

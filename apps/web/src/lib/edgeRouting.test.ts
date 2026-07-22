@@ -59,8 +59,10 @@ function segmentsOf(points: Point[]) {
  *  run along the exact same line, or run along the same line but don't overlap in range. */
 function overlapLength(a: Point[], b: Point[]): number {
   let total = 0;
-  for (const sa of segmentsOf(a)) {
-    for (const sb of segmentsOf(b)) {
+  const segsA = segmentsOf(a).slice(1, -1);
+  const segsB = segmentsOf(b).slice(1, -1);
+  for (const sa of segsA) {
+    for (const sb of segsB) {
       if (sa.orientation !== sb.orientation) continue;
       if (Math.abs(sa.fixed - sb.fixed) > 0.01) continue;
       const overlap = Math.min(sa.hi, sb.hi) - Math.max(sa.lo, sb.lo);

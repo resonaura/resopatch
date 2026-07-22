@@ -111,6 +111,7 @@ function CableRouter({
         end,
         sourceDir: sHandle.position as 'left' | 'right',
         targetDir: tHandle.position as 'left' | 'right',
+        isPowerAdapter: (e.data as any)?.powerConverter != null,
       });
     }
 

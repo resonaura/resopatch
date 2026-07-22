@@ -18,6 +18,7 @@ import {
   CABLE_DASH,
   CABLE_WIDTH_SCALE,
   CableType,
+  getPowerCableStyle,
   type InputListRow,
   type PortDto,
   type RiderRow,
@@ -159,28 +160,69 @@ export default function Constructor({
 
   const initialEdges: Edge[] = useMemo(
     () =>
-      mainGraph.externalCables.map((cable) => ({
-        id: cable.id,
-        source: portToDevice.get(cable.sourcePortId) ?? "",
-        sourceHandle: cable.sourcePortId,
-        target: portToDevice.get(cable.targetPortId) ?? "",
-        targetHandle: cable.targetPortId,
-        label: cable.color ?? undefined,
-        selected: selection?.kind === "cable" && selection.id === cable.id,
-        type: "routed",
-        style: {
-          stroke: CABLE_COLORS[cable.cableType],
-          strokeWidth:
-            (selection?.kind === "cable" && selection.id === cable.id
-              ? 3
-              : 1.5) * CABLE_WIDTH_SCALE[cable.cableType],
-          strokeDasharray: CABLE_DASH[cable.cableType],
-        },
-        animated: cable.cableType === CableType.CONTROL_LINK,
-        zIndex:
-          selection?.kind === "cable" && selection.id === cable.id ? 1 : 0,
-      })),
-    [mainGraph.externalCables, portToDevice, selection],
+      mainGraph.externalCables.map((cable) => {
+        const isSelected = selection?.kind === "cable" && selection.id === cable.id;
+        const sPort = graph?.devices.flatMap((d) => d.ports).find((p) => p.id === cable.sourcePortId);
+        const tPort = graph?.devices.flatMap((d) => d.ports).find((p) => p.id === cable.targetPortId);
+        const sDev = deviceByPortId.get(cable.sourcePortId);
+        const tDev = deviceByPortId.get(cable.targetPortId);
+
+        const voltage = sPort?.power.voltageV ?? tPort?.power.voltageV ?? sDev?.power.voltageV ?? tDev?.power.voltageV;
+        const currentType = sPort?.power.currentType ?? tPort?.power.currentType ?? sDev?.power.currentType ?? tDev?.power.currentType;
+
+        let stroke = CABLE_COLORS[cable.cableType];
+        let widthScale = CABLE_WIDTH_SCALE[cable.cableType];
+        let dash = CABLE_DASH[cable.cableType];
+
+        if (cable.cableType === CableType.POWER_LINE) {
+          const portType = sPort?.portType ?? tPort?.portType;
+          const devType = sDev?.type ?? tDev?.type;
+          const powerStyle = getPowerCableStyle(voltage, currentType, portType, devType);
+          stroke = powerStyle.stroke;
+          widthScale = powerStyle.widthScale;
+          dash = powerStyle.dash ?? dash;
+        }
+
+        const sIsMains = sPort?.portType === 'POWER_SCHUKO' || sPort?.portType === 'POWER_IEC' || sDev?.type === 'POWER_STRIP';
+        const tIsMains = tPort?.portType === 'POWER_SCHUKO' || tPort?.portType === 'POWER_IEC' || tDev?.type === 'POWER_STRIP';
+        const isPowerAdapter = cable.cableType === CableType.POWER_LINE && ((sIsMains && !tIsMains) || (tIsMains && !sIsMains));
+
+        let powerConverter = null;
+        if (isPowerAdapter) {
+          const targetVoltage = tPort?.power.voltageV ?? sPort?.power.voltageV ?? tDev?.power.voltageV ?? sDev?.power.voltageV ?? 9;
+          const targetCurrent = tPort?.power.currentType ?? sPort?.power.currentType ?? tDev?.power.currentType ?? sDev?.power.currentType ?? 'DC';
+          const styleInfo = getPowerCableStyle(targetVoltage, targetCurrent, null, null);
+          powerConverter = {
+            fromVoltage: '120V AC',
+            toVoltage: `${targetVoltage}V ${targetCurrent}`,
+            adapterName: 'БП',
+            dcColor: styleInfo.stroke,
+          };
+          if (styleInfo.dash) dash = styleInfo.dash;
+        }
+
+        return {
+          id: cable.id,
+          source: portToDevice.get(cable.sourcePortId) ?? "",
+          sourceHandle: cable.sourcePortId,
+          target: portToDevice.get(cable.targetPortId) ?? "",
+          targetHandle: cable.targetPortId,
+          label: cable.color ?? undefined,
+          selected: isSelected,
+          type: "routed",
+          data: {
+            powerConverter,
+          },
+          style: {
+            stroke,
+            strokeWidth: (isSelected ? 3 : 1.5) * widthScale,
+            strokeDasharray: dash,
+          },
+          animated: cable.cableType === CableType.CONTROL_LINK,
+          zIndex: isSelected ? 1 : 0,
+        };
+      }),
+    [mainGraph.externalCables, portToDevice, selection, graph, deviceByPortId],
   );
 
   const movePosition = useMutation({

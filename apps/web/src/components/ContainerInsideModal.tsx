@@ -5,7 +5,7 @@ import type { Connection } from '@xyflow/react';
 import type { GraphCable, GraphDevice } from '../api/client';
 import { containerInternalGraph } from '../lib/containerGraph';
 import PatchCanvas from './PatchCanvas';
-import { CABLE_COLORS, CABLE_DASH, CABLE_WIDTH_SCALE, CableType, DeviceType, InventoryStatus } from '@resopatch/shared';
+import { CABLE_COLORS, CABLE_DASH, CABLE_WIDTH_SCALE, CableType, DeviceType, InventoryStatus, getPowerCableStyle } from '@resopatch/shared';
 import type { Node, Edge } from '@xyflow/react';
 import type { DeviceNodeData } from './DeviceNode';
 
@@ -187,22 +187,66 @@ export default function ContainerInsideModal({
 
   const edges: Edge[] = useMemo(
     () =>
-      displayedCables.map((cable) => ({
-        id: cable.id,
-        source: portToNodeId.get(cable.sourcePortId) ?? '',
-        sourceHandle: cable.sourcePortId,
-        target: portToNodeId.get(cable.targetPortId) ?? '',
-        targetHandle: cable.targetPortId,
-        label: cable.color ?? undefined,
-        type: 'routed',
-        style: {
-          stroke: CABLE_COLORS[cable.cableType],
-          strokeWidth: (CABLE_WIDTH_SCALE[cable.cableType] ?? 1) * 1.5,
-          strokeDasharray: CABLE_DASH[cable.cableType],
-        },
-        animated: cable.cableType === CableType.CONTROL_LINK,
-      })),
-    [displayedCables, portToNodeId],
+      displayedCables.map((cable) => {
+        const sPort = allPortById.get(cable.sourcePortId);
+        const tPort = allPortById.get(cable.targetPortId);
+        const sDev = allPortToDevice.get(cable.sourcePortId);
+        const tDev = allPortToDevice.get(cable.targetPortId);
+
+        const voltage = sPort?.power.voltageV ?? tPort?.power.voltageV ?? sDev?.power.voltageV ?? tDev?.power.voltageV;
+        const currentType = sPort?.power.currentType ?? tPort?.power.currentType ?? sDev?.power.currentType ?? tDev?.power.currentType;
+
+        let stroke = CABLE_COLORS[cable.cableType];
+        let widthScale = CABLE_WIDTH_SCALE[cable.cableType] ?? 1;
+        let dash = CABLE_DASH[cable.cableType];
+
+        if (cable.cableType === CableType.POWER_LINE) {
+          const portType = sPort?.portType ?? tPort?.portType;
+          const devType = sDev?.type ?? tDev?.type;
+          const powerStyle = getPowerCableStyle(voltage, currentType, portType, devType);
+          stroke = powerStyle.stroke;
+          widthScale = powerStyle.widthScale;
+          dash = powerStyle.dash ?? dash;
+        }
+
+        const sIsMains = sPort?.portType === 'POWER_SCHUKO' || sPort?.portType === 'POWER_IEC' || sDev?.type === 'POWER_STRIP';
+        const tIsMains = tPort?.portType === 'POWER_SCHUKO' || tPort?.portType === 'POWER_IEC' || tDev?.type === 'POWER_STRIP';
+        const isPowerAdapter = cable.cableType === CableType.POWER_LINE && ((sIsMains && !tIsMains) || (tIsMains && !sIsMains));
+
+        let powerConverter = null;
+        if (isPowerAdapter) {
+          const targetVoltage = tPort?.power.voltageV ?? sPort?.power.voltageV ?? tDev?.power.voltageV ?? sDev?.power.voltageV ?? 9;
+          const targetCurrent = tPort?.power.currentType ?? sPort?.power.currentType ?? tDev?.power.currentType ?? sDev?.power.currentType ?? 'DC';
+          const styleInfo = getPowerCableStyle(targetVoltage, targetCurrent, null, null);
+          powerConverter = {
+            fromVoltage: '120V AC',
+            toVoltage: `${targetVoltage}V ${targetCurrent}`,
+            adapterName: 'БП',
+            dcColor: styleInfo.stroke,
+          };
+          if (styleInfo.dash) dash = styleInfo.dash;
+        }
+
+        return {
+          id: cable.id,
+          source: portToNodeId.get(cable.sourcePortId) ?? '',
+          sourceHandle: cable.sourcePortId,
+          target: portToNodeId.get(cable.targetPortId) ?? '',
+          targetHandle: cable.targetPortId,
+          label: cable.color ?? undefined,
+          type: 'routed',
+          data: {
+            powerConverter,
+          },
+          style: {
+            stroke,
+            strokeWidth: widthScale * 1.5,
+            strokeDasharray: dash,
+          },
+          animated: cable.cableType === CableType.CONTROL_LINK,
+        };
+      }),
+    [displayedCables, portToNodeId, allPortById, allPortToDevice],
   );
 
   return (
