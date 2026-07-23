@@ -413,6 +413,23 @@ function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: stri
         <Label>Цвет</Label>
         <Input defaultValue={cable.color ?? ''} onBlur={(e) => save.mutate({ color: e.target.value || undefined })} />
       </TextField>
+      <Section title="Текстура кабеля" icon={CableIcon}>
+        <ImagePicker
+          label="Начало кабеля"
+          value={cable.textureStartUrl ?? undefined}
+          onChange={(url) => save.mutate({ textureStartUrl: url ?? null })}
+        />
+        <ImagePicker
+          label="Конец кабеля"
+          value={cable.textureEndUrl ?? undefined}
+          onChange={(url) => save.mutate({ textureEndUrl: url ?? null })}
+        />
+        <ImagePicker
+          label="Повторяющийся сегмент"
+          value={cable.textureMiddleUrl ?? undefined}
+          onChange={(url) => save.mutate({ textureMiddleUrl: url ?? null })}
+        />
+      </Section>
       <Checkbox isSelected={cable.isPatchCable} onChange={(v) => save.mutate({ isPatchCable: v })}>
         Патч-кабель
       </Checkbox>

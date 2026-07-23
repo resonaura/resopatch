@@ -46,6 +46,17 @@ export class Cable {
   @Column({ type: 'boolean', default: false })
   isPatchCable: boolean;
 
+  /** Data URLs (or plain URLs) for a custom cable texture, split into the two end caps and the
+   *  repeating middle section — bent/stamped along the routed path at render time. */
+  @Column({ type: 'varchar', nullable: true })
+  textureStartUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  textureEndUrl: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  textureMiddleUrl: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

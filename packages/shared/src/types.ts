@@ -95,6 +95,9 @@ export interface CableDto {
   isUserOwned: boolean;
   color: string | null;
   isPatchCable: boolean;
+  textureStartUrl: string | null;
+  textureEndUrl: string | null;
+  textureMiddleUrl: string | null;
 }
 
 export interface FurnitureDto {

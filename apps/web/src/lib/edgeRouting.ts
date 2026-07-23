@@ -437,12 +437,70 @@ export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObs
   return working;
 }
 
+/** A dead-straight 2-point cable (the `findPath` direct-line fast path) is only ever verified
+ *  clear along that exact line — `resolveOverlaps` skips it entirely (needs >= 3 points), so
+ *  without this pass two different straight cables sharing a row/column would render as one fused
+ *  line. This adds a small decorative curve so they read as distinct, but only ever accepts a
+ *  candidate shape after checking it against every device — a dip/jog that isn't verified clear
+ *  would risk swinging straight through whatever card happens to sit in that space, which is
+ *  exactly the "cable renders under a node" bug this exists to avoid. Falls back to the plain
+ *  straight line (already known clear) whenever no curved candidate clears.
+ *
+ *  The straight 2-point line itself is always safe with respect to its *own* source/target device
+ *  — a port handle sits exactly on its card's edge, so the direct line runs tangent to that edge,
+ *  never through the interior. But the whole point of this bend is to swing the line *off* that
+ *  edge into what's assumed to be open corridor space — and on a tall multi-row card, that offset
+ *  can just as easily land back inside its own card, slicing across a different port row. So this
+ *  checks the bent candidate against every device including its own, at padding 0 (a bend may
+ *  still graze/touch its own edge to leave the port — only a genuine cut through the interior
+ *  disqualifies it), the same own-device-at-zero-padding rule `resolveOverlaps`'s safety net uses. */
+function addCosmeticCurve(edgeId: string, points: Point[], spec: EdgeRouteSpec | undefined, obstacles: RectObstacle[]): Point[] {
+  if (points.length !== 2) return points;
+  const [p1, p2] = points;
+  const clear = (pts: Point[]) =>
+    pts.slice(0, -1).every((p, i) =>
+      obstacles.every((o) => {
+        const isOwnDevice = spec != null && (o.id === spec.sourceNodeId || o.id === spec.targetNodeId);
+        return !segmentCrossesRect(p, pts[i + 1], o, isOwnDevice ? 0 : OBSTACLE_PADDING);
+      }),
+    );
+
+  const hash = edgeId.split('').reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) | 0, 0);
+  const absHash = Math.abs(hash);
+
+  if (Math.abs(p1.y - p2.y) < 1 && Math.abs(p1.x - p2.x) > 20) {
+    // Same-row cable — try dipping below the row first, then above, before giving up.
+    const stub = 24 + (absHash % 10);
+    const sx = p1.x < p2.x ? p1.x + stub : p1.x - stub;
+    const tx = p1.x < p2.x ? p2.x - stub : p2.x + stub;
+    for (const sign of [1, -1]) {
+      const dipY = p1.y + sign * (28 + (absHash % 16));
+      const bent = [p1, { x: sx, y: p1.y }, { x: sx, y: dipY }, { x: tx, y: dipY }, { x: tx, y: p2.y }, p2];
+      if (clear(bent)) return bent;
+    }
+    return points;
+  }
+  if (Math.abs(p1.x - p2.x) < 1 && Math.abs(p1.y - p2.y) > 20) {
+    // Same-column cable — try the hash-preferred side first, then the opposite side.
+    const jog = 28 + (absHash % 20);
+    const preferredDir = hash % 2 === 0 ? 1 : -1;
+    for (const dir of [preferredDir, -preferredDir]) {
+      const sideX = p1.x + dir * jog;
+      const bent = [p1, { x: sideX, y: p1.y }, { x: sideX, y: p2.y }, p2];
+      if (clear(bent)) return bent;
+    }
+    return points;
+  }
+  return points;
+}
+
 /** Runs both stages for a full graph: pathfind every cable independently, then separate any
  *  coincident parallel runs into lanes. Automatically registers micro-node card obstacles for
  *  power adapter cables so other cables route cleanly around them. */
 export function computeRoutes(obstacles: RectObstacle[], edges: EdgeRouteSpec[]): Map<string, Point[]> {
   const routes = new Map<string, Point[]>();
   const ordered = [...edges].sort((a, b) => a.id.localeCompare(b.id));
+  const specById = new Map(ordered.map((s) => [s.id, s] as const));
 
   // Pass 1: Initial pathfinding for all edges
   for (const spec of ordered) {
@@ -484,6 +542,8 @@ export function computeRoutes(obstacles: RectObstacle[], edges: EdgeRouteSpec[])
   }
 
   // Pass 3: If we have micro-node card obstacles, re-route non-adapter cables around them
+  let finalRoutes = pass1Routes;
+  let finalObstacles = obstacles;
   if (adapterObstacles.length > 0) {
     const combinedObstacles = [...obstacles, ...adapterObstacles];
     const pass2Routes = new Map<string, Point[]>();
@@ -494,10 +554,15 @@ export function computeRoutes(obstacles: RectObstacle[], edges: EdgeRouteSpec[])
         pass2Routes.set(spec.id, findPath(spec, combinedObstacles));
       }
     }
-    return resolveOverlaps(pass2Routes, combinedObstacles, ordered);
+    finalRoutes = resolveOverlaps(pass2Routes, combinedObstacles, ordered);
+    finalObstacles = combinedObstacles;
   }
 
-  return pass1Routes;
+  const curvedRoutes = new Map<string, Point[]>();
+  for (const [id, pts] of finalRoutes) {
+    curvedRoutes.set(id, addCosmeticCurve(id, pts, specById.get(id), finalObstacles));
+  }
+  return curvedRoutes;
 }
 
 /** Same corner-rounding technique `smoothstep` uses internally: cut each straight run short by
@@ -524,4 +589,88 @@ export function roundedPathFromPoints(points: Point[], radius: number): string {
   const last = points[points.length - 1];
   d += ` L ${last.x} ${last.y}`;
   return d;
+}
+
+export interface PathSample {
+  x: number;
+  y: number;
+  /** Direction of travel at this point, in radians (`Math.atan2` convention). */
+  angle: number;
+  /** Arc length from the start of the path to this sample. */
+  dist: number;
+}
+
+/** Flattens the exact same straight-run + quadratic-corner shape `roundedPathFromPoints` draws
+ *  into a dense polyline, subdividing each corner curve — the shared geometry both functions walk,
+ *  so anything sampled off of it (e.g. texture tiles) stays pixel-aligned with the rendered path. */
+function flattenRoundedPath(points: Point[], radius: number, curveSteps = 8): Point[] {
+  if (points.length < 3) return points.map((p) => ({ ...p }));
+
+  const flat: Point[] = [{ ...points[0] }];
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const next = points[i + 1];
+    const v1 = { x: curr.x - prev.x, y: curr.y - prev.y };
+    const v2 = { x: next.x - curr.x, y: next.y - curr.y };
+    const len1 = Math.hypot(v1.x, v1.y);
+    const len2 = Math.hypot(v2.x, v2.y);
+    const r = Math.max(0, Math.min(radius, len1 / 2, len2 / 2));
+    const p1 = len1 > 0 ? { x: curr.x - (v1.x / len1) * r, y: curr.y - (v1.y / len1) * r } : curr;
+    const p2 = len2 > 0 ? { x: curr.x + (v2.x / len2) * r, y: curr.y + (v2.y / len2) * r } : curr;
+    flat.push(p1);
+    for (let s = 1; s <= curveSteps; s++) {
+      const t = s / curveSteps;
+      const mt = 1 - t;
+      flat.push({
+        x: mt * mt * p1.x + 2 * mt * t * curr.x + t * t * p2.x,
+        y: mt * mt * p1.y + 2 * mt * t * curr.y + t * t * p2.y,
+      });
+    }
+  }
+  flat.push({ ...points[points.length - 1] });
+  return flat;
+}
+
+/** Samples position + direction of travel at fixed arc-length steps along the same visual path
+ *  `roundedPathFromPoints` renders, curved corners included. Used to stamp texture tiles that
+ *  rotate to follow the cable through every bend instead of ever being drawn straight through a
+ *  turn. Always includes a final sample at the exact path end regardless of step spacing. */
+export function sampleAlongPath(points: Point[], radius: number, step: number): { samples: PathSample[]; length: number } {
+  const flat = flattenRoundedPath(points, radius);
+  if (flat.length < 2) return { samples: [], length: 0 };
+
+  const segLengths: number[] = [];
+  let total = 0;
+  for (let i = 0; i < flat.length - 1; i++) {
+    const d = Math.hypot(flat[i + 1].x - flat[i].x, flat[i + 1].y - flat[i].y);
+    segLengths.push(d);
+    total += d;
+  }
+
+  const pointAt = (dist: number): PathSample => {
+    let segStart = 0;
+    for (let i = 0; i < segLengths.length; i++) {
+      const segLen = segLengths[i];
+      if (dist <= segStart + segLen || i === segLengths.length - 1) {
+        const t = segLen > 0 ? Math.max(0, Math.min(1, (dist - segStart) / segLen)) : 0;
+        const a = flat[i];
+        const b = flat[i + 1];
+        return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, angle: Math.atan2(b.y - a.y, b.x - a.x), dist };
+      }
+      segStart += segLen;
+    }
+    const last = flat[flat.length - 1];
+    return { x: last.x, y: last.y, angle: 0, dist };
+  };
+
+  const samples: PathSample[] = [];
+  const stepCount = Math.max(1, Math.floor(total / step));
+  for (let i = 0; i <= stepCount; i++) {
+    samples.push(pointAt(Math.min(i * step, total)));
+  }
+  if (samples.length === 0 || samples[samples.length - 1].x !== flat[flat.length - 1].x || samples[samples.length - 1].y !== flat[flat.length - 1].y) {
+    samples.push(pointAt(total));
+  }
+  return { samples, length: total };
 }

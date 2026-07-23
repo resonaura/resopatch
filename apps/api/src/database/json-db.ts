@@ -197,7 +197,16 @@ export const adaptersRepo = new JsonRepository<Adapter>('adapters', () => ({ isA
 
 export const cablesRepo = new JsonRepository<Cable>(
   'cables',
-  () => ({ adapterId: null, isUserOwned: true, color: null, isPatchCable: false }) as Partial<Cable>,
+  () =>
+    ({
+      adapterId: null,
+      isUserOwned: true,
+      color: null,
+      isPatchCable: false,
+      textureStartUrl: null,
+      textureEndUrl: null,
+      textureMiddleUrl: null,
+    }) as Partial<Cable>,
 );
 
 export const furnitureRepo = new JsonRepository<Furniture>('furniture', () => ({ isVenueProvided: false }) as Partial<Furniture>);

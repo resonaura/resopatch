@@ -4,6 +4,7 @@ import {
   findPath,
   resolveOverlaps,
   roundedPathFromPoints,
+  sampleAlongPath,
   segmentCrossesRect,
   simplifyColinear,
   type EdgeRouteSpec,
@@ -454,6 +455,71 @@ describe('resolveOverlaps — regression coverage for the reverted-fix bugs', ()
   });
 });
 
+describe('computeRoutes — cosmetic curve never cuts through a device', () => {
+  it('does not bend a straight vertical cable through devices flanking both possible jog directions', () => {
+    // Two devices stacked directly on top of each other (classic same-column cable, which used to
+    // get an unconditional decorative side-jog in RoutedEdge with zero obstacle awareness at all).
+    // A thin bystander sits in the path of *each* possible jog direction (left and right of the
+    // straight line), but neither touches the direct line itself — the old code picked one
+    // direction from a hash with no clearance check and would cut straight through it.
+    const top = rect('top', 0, 0, 220, 100);
+    const bottom = rect('bottom', 0, 400, 220, 100);
+    const bystanderLeft = rect('bystanderLeft', 50, 100, 20, 300);
+    const bystanderRight = rect('bystanderRight', 125, 100, 25, 300);
+    const specs = [spec('e1', 'top', 'bottom', { x: 100, y: 100 }, { x: 100, y: 400 })];
+    const obstacles = [top, bottom, bystanderLeft, bystanderRight];
+    const routes = computeRoutes(obstacles, specs);
+    const path = routes.get('e1')!;
+    expect(isOrthogonal(path)).toBe(true);
+    expect(routeCrossesRect(path, bystanderLeft)).toBe(false);
+    expect(routeCrossesRect(path, bystanderRight)).toBe(false);
+  });
+
+  it('does not bend a straight horizontal cable through devices flanking both possible dip directions', () => {
+    const left = rect('left', 0, 0, 200, 100);
+    const right = rect('right', 500, 0, 200, 100);
+    const bystanderAbove = rect('bystanderAbove', 150, 0, 400, 25);
+    const bystanderBelow = rect('bystanderBelow', 150, 75, 400, 25);
+    const specs = [spec('e1', 'left', 'right', { x: 200, y: 50 }, { x: 500, y: 50 })];
+    const obstacles = [left, right, bystanderAbove, bystanderBelow];
+    const routes = computeRoutes(obstacles, specs);
+    const path = routes.get('e1')!;
+    expect(isOrthogonal(path)).toBe(true);
+    expect(routeCrossesRect(path, bystanderAbove)).toBe(false);
+    expect(routeCrossesRect(path, bystanderBelow)).toBe(false);
+  });
+
+  it('does not let the vertical jog cut through its own tall multi-row source card (real-world regression)', () => {
+    // A tall 4-row source card (e.g. a mixer) stacked directly above a target card at the exact
+    // same x — the connecting port sits on the card's *left edge*, partway down (not at the card's
+    // own top/bottom corner). Jogging further left moves into open canvas (safe); jogging right
+    // moves back into the card's own remaining rows. `addCosmeticCurve` used to exclude the whole
+    // *own* device from its clearance check, so a hash that preferred the wrong direction would
+    // ship a cable that visibly cut across its own source card — exactly what was seen live.
+    const source = rect('mx400', 0, 0, 220, 300);
+    const target = rect('palmer', 0, 500, 220, 300);
+    const specs = [spec('e1', 'mx400', 'palmer', { x: 0, y: 180 }, { x: 0, y: 520 })];
+    const routes = computeRoutes([source, target], specs);
+    const path = routes.get('e1')!;
+    expect(isOrthogonal(path)).toBe(true);
+    expect(routeCrossesRect(path, source)).toBe(false);
+    expect(routeCrossesRect(path, target)).toBe(false);
+  });
+
+  it('does not let the horizontal dip cut through its own tall source card', () => {
+    // Mirror of the above for the same-row dip case: a wide card where the port sits away from
+    // the card's own top/bottom edge, so dipping the wrong way slices across its own rows.
+    const source = rect('left', 0, 0, 200, 300);
+    const target = rect('right', 500, 100, 200, 100);
+    const specs = [spec('e1', 'left', 'right', { x: 200, y: 150 }, { x: 500, y: 150 })];
+    const routes = computeRoutes([source, target], specs);
+    const path = routes.get('e1')!;
+    expect(isOrthogonal(path)).toBe(true);
+    expect(routeCrossesRect(path, source)).toBe(false);
+    expect(routeCrossesRect(path, target)).toBe(false);
+  });
+});
+
 describe('computeRoutes — larger graphs', () => {
   it('stays overlap-free and crossing-free on a busy 24-cable synthetic stage graph', () => {
     const obstacles: RectObstacle[] = [
@@ -543,6 +609,50 @@ describe('computeRoutes — larger graphs', () => {
     for (const s of specs) {
       expect(shuffled.get(s.id)).toEqual(forward.get(s.id));
     }
+  });
+});
+
+describe('sampleAlongPath', () => {
+  it('samples a straight 2-point path at even spacing, starting and ending at the endpoints', () => {
+    const points: Point[] = [{ x: 0, y: 50 }, { x: 100, y: 50 }];
+    const { samples, length } = sampleAlongPath(points, 16, 20);
+    expect(length).toBeCloseTo(100, 5);
+    expect(samples[0]).toMatchObject({ x: 0, y: 50 });
+    expect(samples[samples.length - 1]).toMatchObject({ x: 100, y: 50 });
+    // Every sample should stay exactly on the line.
+    for (const s of samples) expect(s.y).toBeCloseTo(50, 5);
+    // Direction of travel is straight along +x.
+    for (const s of samples) expect(s.angle).toBeCloseTo(0, 5);
+  });
+
+  it('follows a right-angle corner smoothly — angle sweeps from horizontal to vertical', () => {
+    const points: Point[] = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }];
+    const { samples, length } = sampleAlongPath(points, 16, 5);
+    // Total length is close to the two straight runs (100 + 100), the rounded corner shaves a
+    // small, bounded amount off — never a large detour.
+    expect(length).toBeGreaterThan(180);
+    expect(length).toBeLessThanOrEqual(200);
+    expect(samples[0]).toMatchObject({ x: 0, y: 0 });
+    const last = samples[samples.length - 1];
+    expect(last.x).toBeCloseTo(100, 1);
+    expect(last.y).toBeCloseTo(100, 1);
+    // Starts traveling along +x (angle 0), ends traveling along +y (angle PI/2).
+    expect(samples[0].angle).toBeCloseTo(0, 5);
+    expect(last.angle).toBeCloseTo(Math.PI / 2, 1);
+    // Never jumps backward in x before the corner, or sideways in y after it — i.e. it's a single
+    // smooth sweep, not a path that overshoots and doubles back.
+    for (const s of samples) {
+      expect(s.x).toBeGreaterThanOrEqual(-0.01);
+      expect(s.x).toBeLessThanOrEqual(100.01);
+      expect(s.y).toBeGreaterThanOrEqual(-0.01);
+      expect(s.y).toBeLessThanOrEqual(100.01);
+    }
+  });
+
+  it('handles a degenerate single-point path without throwing', () => {
+    expect(() => sampleAlongPath([{ x: 5, y: 5 }], 16, 20)).not.toThrow();
+    const { length } = sampleAlongPath([{ x: 5, y: 5 }], 16, 20);
+    expect(length).toBe(0);
   });
 });
 

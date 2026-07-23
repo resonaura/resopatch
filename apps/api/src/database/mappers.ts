@@ -171,6 +171,9 @@ export function toCableDto(c: Cable): CableDto {
     isUserOwned: c.isUserOwned,
     color: c.color,
     isPatchCable: c.isPatchCable,
+    textureStartUrl: c.textureStartUrl,
+    textureEndUrl: c.textureEndUrl,
+    textureMiddleUrl: c.textureMiddleUrl,
   };
 }
 
@@ -183,6 +186,9 @@ export function applyCableDto(entity: Cable, dto: Partial<CreateCableDto> & Part
   if (dto.isUserOwned !== undefined) entity.isUserOwned = dto.isUserOwned;
   if (dto.color !== undefined) entity.color = dto.color ?? null;
   if (dto.isPatchCable !== undefined) entity.isPatchCable = dto.isPatchCable;
+  if (dto.textureStartUrl !== undefined) entity.textureStartUrl = dto.textureStartUrl ?? null;
+  if (dto.textureEndUrl !== undefined) entity.textureEndUrl = dto.textureEndUrl ?? null;
+  if (dto.textureMiddleUrl !== undefined) entity.textureMiddleUrl = dto.textureMiddleUrl ?? null;
   return entity;
 }
 

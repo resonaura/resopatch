@@ -53,6 +53,9 @@ function cable(id: string, sourcePortId: string, targetPortId: string): GraphCab
     isUserOwned: true,
     color: null,
     isPatchCable: false,
+    textureStartUrl: null,
+    textureEndUrl: null,
+    textureMiddleUrl: null,
     adapterName: null,
   };
 }

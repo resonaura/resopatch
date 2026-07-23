@@ -5,8 +5,29 @@ import { Layers } from 'lucide-react';
 import { InventoryStatus, PortDirection } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
+import { ProgressiveImage } from '../lib/img';
 import { portChannelColor } from '../lib/portChannel';
 import { PortTypeIcon } from '../lib/portIcons';
+
+/** `imageUrl` doubles as either a relative path into the api's optimized image storage
+ *  (see apps/api/src/images) or a raw `data:`/pasted URL from ImagePicker's upload flow —
+ *  only the former can be resolved through the auto-optimization pipeline (manifest lookup
+ *  + breakpoint/format negotiation), so this tells the two apart. */
+function isStorageImage(url: string): boolean {
+  return !url.startsWith('data:') && !/^https?:\/\//i.test(url);
+}
+
+/** Full-width photo banner across the top of a device card. Renders above the header row
+ *  instead of the small square thumb whenever a photo is set — the node grows taller to
+ *  fit it (see DeviceThumb below for the fallback used in compact contexts like the nested
+ *  accessory list, where a banner would be too tall). */
+function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'name'> }) {
+  if (!device.imageUrl) return null;
+  if (isStorageImage(device.imageUrl)) {
+    return <ProgressiveImage src={device.imageUrl} alt={device.name} className="w-full" />;
+  }
+  return <img src={device.imageUrl} alt="" className="block w-full object-cover" />;
+}
 
 /** A descendant's port that needs a Handle proxied onto this (collapsed) container card because
  *  something outside the container plugs into it — see containerGraph.ts for how this set is
@@ -84,7 +105,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`w-[240px] rounded-lg border text-xs shadow-lg transition-opacity ${
+      className={`w-[240px] overflow-hidden rounded-lg border text-xs shadow-lg transition-opacity ${
         selected
           ? 'border-accent ring-2 ring-accent/40 bg-surface-secondary'
           : isVirtual
@@ -92,6 +113,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
           : 'border-default-200 bg-surface-secondary'
       } ${inactive && !isVirtual ? 'border-dashed opacity-70' : ''}`}
     >
+      <DeviceImageBanner device={device} />
       <div className="flex items-center gap-1.5 px-2.5 pt-2">
         <DeviceThumb device={device} className="h-4 w-4" />
         <span className="truncate font-semibold text-foreground" title={device.type}>

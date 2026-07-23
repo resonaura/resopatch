@@ -7,5 +7,8 @@ build/
 *.log
 .DS_Store
 apps/api/data/
+apps/api/.cache/
 *.sqlite3
 *.sqlite3-journal
+*.sqlite
+*.sqlite-journal

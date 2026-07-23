@@ -244,6 +244,7 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.AC_MAINS,
     power: { maxOutputPowerW: 27 },
+    imageUrl: 'andrii-pedalboard-power.png',
     notes: 'Изолированный мультиблок питания педалборда Андрея. Глобальный лимит 27W суммарно на все выходы. Крепится к педалборду — физически единое целое с ним.',
   });
   const iso12ProIn = await mkPort(iso12pro, { name: 'Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN, power: { currentType: CurrentType.AC } });
@@ -267,6 +268,7 @@ async function main() {
     type: DeviceType.INSTRUMENT,
     ownerRole: 'Андрей',
     position: { x: -900, y: 0 },
+    imageUrl: 'guitar-andrii.webp',
     attrs: { kind: 'guitar' },
   });
   const andreyGuitarOut = await mkPort(andreyGuitar, { name: 'Jack Out', portType: PortType.TS_14, direction: PortDirection.OUT });
@@ -277,6 +279,7 @@ async function main() {
     ownerRole: 'Андрей',
     parentDeviceId: andreyGuitar.id,
     position: { x: -950, y: -100 },
+    imageUrl: 'andrii-guitar-strap.png',
   });
   await mkDevice({
     name: 'TC Electronic PolyTune Clip',
@@ -284,6 +287,7 @@ async function main() {
     ownerRole: 'Андрей',
     parentDeviceId: andreyGuitar.id,
     position: { x: -850, y: -100 },
+    imageUrl: 'andrii-tuner.png',
     attrs: { battery: 'CR2032', batteryVoltage: 3, batteryLifeHours: 18 },
     notes: 'Крепится прищепкой на голову грифа, пьезодатчик — автономный, без сигнальных кабелей (docs/stage-setup.md §9).',
   });
@@ -293,6 +297,7 @@ async function main() {
     type: DeviceType.INSTRUMENT,
     ownerRole: 'Андрей',
     position: { x: -1100, y: 150 },
+    imageUrl: 'andrii-bass.png',
     attrs: { kind: 'bass' },
     notes: 'Используется на некоторых песнях вместо гитары — подключается напрямую в басовый комбик площадки.',
   });
@@ -344,6 +349,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 10, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: false, isStereoOut: false },
+    imageUrl: 'andrii-pedalboard-1-yellow-comp.webp',
     attrs: {
       manufacturer: 'Mooer',
       model: 'Yellow Comp (Optical Compressor)',
@@ -370,6 +376,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 10, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: false, isStereoOut: false },
+    imageUrl: 'andrii-pedalboard-2-compressor-sustainer.webp',
     attrs: {
       manufacturer: 'Behringer',
       model: 'CS400 (аналог Boss CS-3)',
@@ -396,6 +403,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 10, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: false, isStereoOut: false },
+    imageUrl: 'andrii-pedalboard-3-tube-overdrive.webp',
     attrs: {
       manufacturer: 'Behringer',
       model: 'TO800 (бюджетный аналог Ibanez TS808 Tube Screamer, чип 4558)',
@@ -422,6 +430,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 20, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: false, isStereoOut: false },
+    imageUrl: 'andrii-pedalboard-4-grunge.png',
     attrs: {
       manufacturer: 'DigiTech',
       model: 'Grunge',
@@ -450,6 +459,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: false, isStereoOut: false, hasPresets: true },
+    imageUrl: 'andrii-pedalboard-5-preamp.webp',
     attrs: {
       manufacturer: 'Flamma',
       model: 'FS06 (2-канальный цифровой преамп)',
@@ -485,6 +495,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 13, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: false, isStereoOut: false },
+    imageUrl: 'andrii-pedalboard-6-chorus.webp',
     attrs: {
       manufacturer: 'Flamma',
       model: 'FC14 (аналоговый хорус, микро-формат, BBD-схема)',
@@ -511,6 +522,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 160, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: false, isStereoOut: false },
+    imageUrl: 'andrii-pedalboard-7-flanger.png',
     attrs: {
       manufacturer: 'Mooer',
       model: 'Jet Engine Flanger (цифровой многорежимный)',
@@ -539,6 +551,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: false, isStereoOut: true, hasPresets: true, presetCount: 7 },
+    imageUrl: 'andrii-pedalboard-8-mod.png',
     attrs: {
       manufacturer: 'Flamma',
       model: 'FS05 (стерео комбайн эффектов модуляции, 11 алгоритмов / 7 пресетов)',
@@ -580,6 +593,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 220, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: true, isStereoOut: true },
+    imageUrl: 'andrii-pedalboard-9-delay.webp',
     attrs: {
       manufacturer: 'Joyo',
       model: 'D-Seed II (стерео дилей + 3.5-мин стерео-лупер)',
@@ -610,6 +624,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: true, isStereoOut: true, hasPresets: true, presetCount: 7 },
+    imageUrl: 'andrii-pedalboard-10-rev.png',
     attrs: {
       manufacturer: 'Flamma',
       model: 'FS02 (стерео ревербератор с хвостами)',
@@ -639,6 +654,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: true, isStereoOut: true },
+    imageUrl: 'andrii-pedalboard-11-cab.webp',
     attrs: {
       manufacturer: 'Flamma',
       model: 'FS07 (стерео кабсим и IR Loader, 24-bit/44.1kHz)',
@@ -707,6 +723,7 @@ async function main() {
     powerSourceType: PowerSourceType.USB_BUS,
     hostUsbType: HostUsbType.USB_B,
     power: { currentType: CurrentType.DC, voltageV: 5, currentMA: 1000, polarity: Polarity.CENTER_NEGATIVE },
+    imageUrl: 'umc404hd-front-back.png',
     attrs: {
       manufacturer: 'Behringer',
       model: 'UMC404HD — 4x4 USB 2.0, 24-bit/192kHz, MIDAS-преампы',
@@ -744,6 +761,7 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 12, currentMA: 150, polarity: Polarity.CENTER_POSITIVE },
+    imageUrl: 'behringer-mx400-top.png',
     attrs: {
       manufacturer: 'Behringer',
       model: 'MX400 (Micromix) — компактный 4-канальный моно линейный микшер',
@@ -771,6 +789,7 @@ async function main() {
     ownerRole: 'Андрей',
     position: { x: -500, y: 400 },
     powerSourceType: PowerSourceType.PASSIVE_NONE,
+    imageUrl: 'palmer-front.png',
     attrs: {
       manufacturer: 'Palmer',
       model: 'Monicon Classic — полностью пассивный стерео мониторный контроллер',
@@ -791,6 +810,7 @@ async function main() {
     type: DeviceType.MONITOR,
     ownerRole: 'Андрей',
     position: { x: -500, y: 550 },
+    imageUrl: 'andrii-headphones.webp',
   });
   const andreyHeadphonesIn = await mkPort(andreyHeadphones, { name: 'In', portType: PortType.TRS_18, direction: PortDirection.IN });
   await mkCable({ sourcePortId: palmerOutMini.id, targetPortId: andreyHeadphonesIn.id, cableType: CableType.AUDIO_UNBALANCED, length: 3 });
@@ -803,6 +823,7 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 12, currentMA: 2000 },
+    imageUrl: 'andrii-lamp.png',
     attrs: { lumens: 500, musicSyncModes: 8, control: ['WiFi', 'BLE', 'Matter'] },
     notes: 'Ставится прямо на сцену. Подключается в последнюю очередь.',
   });
@@ -824,6 +845,7 @@ async function main() {
     type: DeviceType.MICROPHONE,
     ownerRole: 'Даня-вокал',
     position: { x: 300, y: -150 },
+    imageUrl: 'dan-vocalist-mic.webp',
     notes: 'Наш (не площадки) — на площадках это ненадёжно (docs/stage-setup.md §0).',
   });
   const danyaVMicOut = await mkPort(danyaVMic, { name: 'Out', portType: PortType.XLR_M, direction: PortDirection.OUT });
@@ -838,6 +860,7 @@ async function main() {
     powerSourceType: PowerSourceType.USB_C_PD,
     hostUsbType: HostUsbType.USB_C,
     power: { currentType: CurrentType.DC, voltageV: 5, currentMA: 1000 },
+    imageUrl: 'volt276-front.webp',
     attrs: {
       manufacturer: 'Universal Audio',
       model: 'Volt 276 — 2x2 USB-C, встроенный аналоговый компрессор 1176',
@@ -860,6 +883,7 @@ async function main() {
     type: DeviceType.MONITOR,
     ownerRole: 'Даня-вокал',
     position: { x: 300, y: -300 },
+    imageUrl: 'dan-vocalist-iem.png',
     notes:
       'Подключены НАПРЯМУЮ в Volt 276 (без микшера — см. план в §2.3). Сейчас Даня-вокал слышит в ушах только себя, не полный мониторный микс — это нормальное текущее состояние (docs/stage-setup.md §2.1).',
   });
@@ -886,6 +910,7 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.AC_MAINS,
     power: { currentType: CurrentType.AC, voltageV: 9, currentMA: 750 },
+    imageUrl: 'fex800-front.webp',
     attrs: {
       manufacturer: 'Behringer',
       model: 'FEX800 (MINIFEX) — 16-битный цифровой процессор эффектов, 16 пресетов',
@@ -913,6 +938,7 @@ async function main() {
     type: DeviceType.INSTRUMENT,
     ownerRole: 'Даня-вокал',
     position: { x: 550, y: 350 },
+    imageUrl: 'dan-vocalist-guitar.webp',
     attrs: { kind: 'guitar' },
     notes: 'Используется не на всех песнях (docs/stage-setup.md §2.2).',
   });
@@ -927,6 +953,7 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 30, polarity: Polarity.CENTER_NEGATIVE },
+    imageUrl: 'dan-vocalist-tuner-pedal.png',
     attrs: {
       manufacturer: 'Boss',
       model: 'TU-3 (или TU-2) Chromatic Tuner',
@@ -934,7 +961,7 @@ async function main() {
       footswitch: 'Включение режима настройки — отключает сигнал на OUTPUT (Mute).',
     },
     notes:
-      'Раздаёт 9V DC OUT (до 200мА) на разветвитель → Cinders + FC01 (см. ниже) — резолвит открытый вопрос docs/stage-setup.md §2.2/§12.4 про питание 3 педалей. Собственный upstream-источник питания TU-3 (что запитывает сам тюнер) пока не уточнён.',
+      'Раздаёт 9V DC OUT (до 200мА) на разветвитель → Cinders + FC03 (см. ниже) — резолвит открытый вопрос docs/stage-setup.md §2.2/§12.4 про питание 3 педалей. Собственный upstream-источник питания TU-3 (что запитывает сам тюнер) пока не уточнён.',
   });
   const tu3In = await mkPort(tu3, { name: 'Input (с гитары Дани-вокала)', portType: PortType.TS_14, direction: PortDirection.IN });
   const tu3Out = await mkPort(tu3, { name: 'Output (с mute при настройке)', portType: PortType.TS_14, direction: PortDirection.OUT });
@@ -952,7 +979,7 @@ async function main() {
   });
 
   const danyaVSplitter = await mkDevice({
-    name: 'Разветвитель питания 1→2 (от TU-3, на Cinders + FC01)',
+    name: 'Разветвитель питания 1→2 (от TU-3, на Cinders + FC03)',
     type: DeviceType.POWER_SPLITTER,
     ownerRole: 'Даня-вокал',
     position: { x: 610, y: 550 },
@@ -960,7 +987,7 @@ async function main() {
   });
   const splitterIn = await mkPort(danyaVSplitter, { name: 'In', portType: PortType.DC_BARREL, direction: PortDirection.IN });
   const splitterOut1 = await mkPort(danyaVSplitter, { name: 'Out 1 (→ Cinders)', portType: PortType.DC_BARREL, direction: PortDirection.OUT });
-  const splitterOut2 = await mkPort(danyaVSplitter, { name: 'Out 2 (→ FC01)', portType: PortType.DC_BARREL, direction: PortDirection.OUT });
+  const splitterOut2 = await mkPort(danyaVSplitter, { name: 'Out 2 (→ FC03)', portType: PortType.DC_BARREL, direction: PortDirection.OUT });
   await mkCable({ sourcePortId: tu3DaisyOut.id, targetPortId: splitterIn.id, cableType: CableType.POWER_LINE, length: 0.2 });
 
   const cinders = await mkDevice({
@@ -972,6 +999,7 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 15, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: false, isStereoOut: false },
+    imageUrl: 'dan-vocalist-cinders.png',
     attrs: {
       manufacturer: 'TC Electronic',
       model: 'Cinders Overdrive (прозрачный овердрайв на MOSFET, tube-like)',
@@ -989,8 +1017,8 @@ async function main() {
   });
   await mkCable({ sourcePortId: splitterOut1.id, targetPortId: cindersPower.id, cableType: CableType.POWER_LINE, length: 0.3 });
 
-  const fc01 = await mkDevice({
-    name: 'FLAMMA FC01 Delay',
+  const fc03 = await mkDevice({
+    name: 'FLAMMA FC03 Delay',
     type: DeviceType.PEDAL,
     ownerRole: 'Даня-вокал',
     position: { x: 730, y: 480 },
@@ -998,9 +1026,10 @@ async function main() {
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 128, polarity: Polarity.CENTER_NEGATIVE },
     pedal: { isStereoIn: false, isStereoOut: false },
+    imageUrl: 'dan-vocalist-delay.png',
     attrs: {
       manufacturer: 'Flamma',
-      model: 'FC01 (микро-педаль дилея, 3 режима)',
+      model: 'FC03 (микро-педаль дилея, 3 режима)',
       controls: [
         '3-way Toggle: Analog (тёплая аналоговая задержка с мягким спадом) / Real Echo (естественное эхо окружения) / Tape Echo (симуляция винтажного ленточного дилея)',
         'TIME (большая ручка) — время задержки, 5ms – 600ms',
@@ -1010,20 +1039,20 @@ async function main() {
       footswitch: 'True Bypass.',
     },
   });
-  const fc01In = await mkPort(fc01, { name: 'Input', portType: PortType.TS_14, direction: PortDirection.IN });
-  const fc01Out = await mkPort(fc01, { name: 'Output', portType: PortType.TS_14, direction: PortDirection.OUT });
-  const fc01Power = await mkPort(fc01, {
+  const fc03In = await mkPort(fc03, { name: 'Input', portType: PortType.TS_14, direction: PortDirection.IN });
+  const fc03Out = await mkPort(fc03, { name: 'Output', portType: PortType.TS_14, direction: PortDirection.OUT });
+  const fc03Power = await mkPort(fc03, {
     name: 'Power In',
     portType: PortType.DC_BARREL,
     direction: PortDirection.IN,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 128, polarity: Polarity.CENTER_NEGATIVE },
   });
-  await mkCable({ sourcePortId: splitterOut2.id, targetPortId: fc01Power.id, cableType: CableType.POWER_LINE, length: 0.3 });
+  await mkCable({ sourcePortId: splitterOut2.id, targetPortId: fc03Power.id, cableType: CableType.POWER_LINE, length: 0.3 });
 
   const pedalPorts = [
     { in: tu3In, out: tu3Out },
     { in: cindersIn, out: cindersOut },
-    { in: fc01In, out: fc01Out },
+    { in: fc03In, out: fc03Out },
   ];
 
   const danyaVCombo = await mkDevice({
@@ -1034,6 +1063,7 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.AC_MAINS,
     power: { currentType: CurrentType.AC },
+    imageUrl: 'dan-vocalist-combo.png',
     attrs: {
       manufacturer: 'Egnater',
       model: 'Tweaker 40W Combo — двухканальный полностью ламповый (2x 6L6, 3x 12AX7)',
@@ -1058,6 +1088,7 @@ async function main() {
     type: DeviceType.MICROPHONE,
     ownerRole: 'Даня-вокал',
     position: { x: 850, y: 480 },
+    imageUrl: 'dan-vocalist-guitar-amp-mic.webp',
     notes: 'Целевое состояние по rider.md (CH11) — не успели поставить на первом лайве, обкатать вживую (docs/stage-setup.md §2.2).',
   });
   const e835sOut = await mkPort(e835s, { name: 'Out', portType: PortType.XLR_M, direction: PortDirection.OUT });
@@ -1088,6 +1119,7 @@ async function main() {
     powerRequired: true,
     powerSourceType: PowerSourceType.DC_BARREL,
     power: { currentType: CurrentType.DC, voltageV: 12, currentMA: 1000, polarity: Polarity.ANY },
+    imageUrl: 'motu-front-back.png',
     attrs: {
       manufacturer: 'MOTU',
       model: 'UltraLite-mk3 Hybrid — гибридный (USB 2.0 / FireWire) 10x14 интерфейс с DSP-эффектами',
@@ -1190,6 +1222,7 @@ async function main() {
     type: DeviceType.MIDI_DEVICE,
     inventoryStatus: InventoryStatus.OWNED_INACTIVE,
     position: { x: -900, y: 700 },
+    imageUrl: 'midi-thru5.png',
     attrs: { ins: 1, outs: 5, widiCoreCapable: true },
     notes: 'Для будущего большого сета — сейчас не участвует в активном сетапе (докупать/подключать не нужно).',
   });
@@ -1223,6 +1256,7 @@ async function main() {
     type: DeviceType.KEYBOARD,
     inventoryStatus: InventoryStatus.OWNED_INACTIVE,
     position: { x: -900, y: 1000 },
+    imageUrl: 'andrii-keys.png',
     notes:
       'Для будущего большого сета. Открытые вопросы: тот же ли ноут с плейбеками используется или второй; своя стойка или пюпитр площадки; как переключается UMC404HD между хостами (docs/stage-setup.md §11).',
   });

@@ -100,6 +100,9 @@ export const createCableSchema = z.object({
   isUserOwned: z.boolean().default(true),
   color: z.string().optional(),
   isPatchCable: z.boolean().default(false),
+  textureStartUrl: z.string().nullable().optional(),
+  textureEndUrl: z.string().nullable().optional(),
+  textureMiddleUrl: z.string().nullable().optional(),
 });
 export type CreateCableDto = z.infer<typeof createCableSchema>;
 export const updateCableSchema = createCableSchema.partial();

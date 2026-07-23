@@ -212,6 +212,10 @@ export default function Constructor({
           type: "routed",
           data: {
             powerConverter,
+            texture:
+              cable.textureStartUrl || cable.textureEndUrl || cable.textureMiddleUrl
+                ? { start: cable.textureStartUrl, end: cable.textureEndUrl, middle: cable.textureMiddleUrl }
+                : undefined,
           },
           style: {
             stroke,
