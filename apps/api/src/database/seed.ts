@@ -227,7 +227,7 @@ async function main() {
       await mkPort(anker2, { name: `Розетка ${i}`, portType: PortType.POWER_SCHUKO, direction: PortDirection.OUT, power: { currentType: CurrentType.AC } }),
     );
   }
-  await mkPort(anker2, { name: 'USB-A #1 (резерв — план: микшер Дани-вокала)', portType: PortType.USB_A, direction: PortDirection.OUT, power: { maxOutputPowerW: 12 } });
+  const anker2UsbA1 = await mkPort(anker2, { name: 'USB-A #1 (резерв — план: микшер Дани-вокала)', portType: PortType.USB_A, direction: PortDirection.OUT, power: { maxOutputPowerW: 12 } });
   await mkPort(anker2, { name: 'USB-A #2', portType: PortType.USB_A, direction: PortDirection.OUT, power: { maxOutputPowerW: 12 } });
   await mkPort(anker2, { name: 'USB-C (PD)', portType: PortType.USB_C, direction: PortDirection.OUT, power: { maxOutputPowerW: 20 } });
 
@@ -1121,27 +1121,48 @@ async function main() {
   await mkFurniture({ deviceId: e835s.id, kind: FurnitureKind.MIC_STAND, isVenueProvided: true });
 
   // ---------------------------------------------------------------------------------------
-  // Даня-барабанщик + плейбеки — сзади сцены. Ноут → MOTU → стейджбокс (6 каналов) + клик
-  // барабанщику + личный монитор-фид Андрею. См. docs/stage-setup.md §3, §4.
+  // ---------------------------------------------------------------------------------------
+  // Даня-вокал + плейбеки — сетап плейбеков. Ноут (MacBook Pro M5) → MOTU → стейджбокс
   // ---------------------------------------------------------------------------------------
   const playbackLaptop = await mkDevice({
-    name: 'Ноут с плейбеками',
+    name: 'MacBook Pro 16" (M5) — Плейбеки',
     type: DeviceType.LAPTOP,
-    ownerRole: 'Даня-барабанщик',
+    ownerRole: 'Даня-вокал',
     position: { x: 1200, y: -150 },
     powerRequired: true,
     powerSourceType: PowerSourceType.USB_C_PD,
     hostUsbType: HostUsbType.USB_C,
     power: { currentType: CurrentType.DC, voltageV: 20, currentMA: 3000 },
     imageUrl: 'dan-vocalist-macbook.webp',
-    notes: 'Расположен слева от барабанщика. Собственное питание ноута не значится ни в одной из таблиц §5 — не выдумываем розетку, оставлено неподключённым до уточнения.',
+    attrs: {
+      manufacturer: 'Apple',
+      model: 'MacBook Pro 16" (M5 Max, 3x Thunderbolt 4 / USB-C, MagSafe 3)',
+    },
+    notes: 'Основной ноутбук для воспроизведения плейбеков и управления сценой.',
   });
-  const playbackLaptopUsbC = await mkPort(playbackLaptop, { name: 'USB-C', portType: PortType.USB_C, direction: PortDirection.BI });
+  const playbackLaptopUsbC = await mkPort(playbackLaptop, { name: 'USB-C / TB4', portType: PortType.USB_C, direction: PortDirection.BI });
+  const playbackLaptopPowerIn = await mkPort(playbackLaptop, { name: 'MagSafe / USB-C Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN });
+
+  // Laptop Power Supply (MacBook Pro M5)
+  const playbackLaptopPsu = await mkDevice({
+    name: 'БП Apple 140W USB-C (плейбеки)',
+    type: DeviceType.POWER_SUPPLY,
+    ownerRole: 'Даня-вокал',
+    position: { x: 1050, y: -150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.AC_MAINS,
+    notes: 'Блок питания 140W для ноутбука плейбеков Дани-вокала.',
+  });
+  const playbackLaptopPsuPlug = await mkPort(playbackLaptopPsu, { name: 'Вилка (в Anker)', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN });
+  const playbackLaptopPsuOut = await mkPort(playbackLaptopPsu, { name: 'USB-C Out (140W)', portType: PortType.USB_C, direction: PortDirection.OUT, power: { maxOutputPowerW: 140 } });
+
+  await mkCable({ sourcePortId: anker2SchukoOuts[3].id, targetPortId: playbackLaptopPsuPlug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'black' });
+  await mkCable({ sourcePortId: playbackLaptopPsuOut.id, targetPortId: playbackLaptopPowerIn.id, cableType: CableType.POWER_LINE, length: 2, color: 'white' });
 
   const motu = await mkDevice({
     name: 'MOTU UltraLite-mk3 Hybrid',
     type: DeviceType.AUDIO_INTERFACE,
-    ownerRole: 'Даня-барабанщик',
+    ownerRole: 'Даня-вокал',
     position: { x: 1200, y: 0 },
     powerRequired: true,
     powerSourceType: PowerSourceType.DC_BARREL,
@@ -1172,7 +1193,7 @@ async function main() {
   await mkPort(motu, { name: 'Optical In (не используется)', portType: PortType.TRS_14, direction: PortDirection.IN });
   await mkPort(motu, { name: 'Optical Out (не используется)', portType: PortType.TRS_14, direction: PortDirection.OUT });
   await mkPort(motu, { name: 'MIDI In (не используется)', portType: PortType.MIDI_DIN, direction: PortDirection.IN });
-  await mkPort(motu, { name: 'MIDI Out (не используется)', portType: PortType.MIDI_DIN, direction: PortDirection.OUT });
+  const motuMidiOut = await mkPort(motu, { name: 'MIDI Out', portType: PortType.MIDI_DIN, direction: PortDirection.OUT });
   const motuPower = await mkPort(motu, {
     name: 'Power In',
     portType: PortType.DC_BARREL,
@@ -1183,6 +1204,71 @@ async function main() {
   await mkCable({ sourcePortId: playbackLaptopUsbC.id, targetPortId: motuUsbB.id, cableType: CableType.USB_DATA, length: 1.5, adapterId: adapterUsbCtoB.id });
   await mkCable({ sourcePortId: anker2SchukoOuts[2].id, targetPortId: motuPower.id, cableType: CableType.POWER_LINE, length: 2, adapterId: adapterMotuPsu.id });
   await mkCable({ sourcePortId: motuOutMonitorFeed.id, targetPortId: mx400In1.id, cableType: CableType.AUDIO_UNBALANCED, length: 10 });
+
+  // ---------------------------------------------------------------------------------------
+  // Devices & Cabling for Setup Mode "С клавишами" (Keys + MIDI Sync)
+  // ---------------------------------------------------------------------------------------
+  const synthLaptop = await mkDevice({
+    name: 'MacBook Pro 16" (M1) — Синты/Клавиши',
+    type: DeviceType.LAPTOP,
+    ownerRole: 'Андрей',
+    position: { x: -800, y: -250 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.USB_C_PD,
+    hostUsbType: HostUsbType.USB_C,
+    imageUrl: 'andrii-macbook.png',
+    attrs: {
+      manufacturer: 'Apple',
+      model: 'MacBook Pro 16" (M1 Pro/Max, 3x Thunderbolt 4, HDMI, MagSafe 3)',
+      isKeysOnly: true,
+    },
+    notes: 'Ноутбук Андрея для софт-синтезаторов и виртуальных клавишных инструментов.',
+  });
+  const synthLaptopPowerIn = await mkPort(synthLaptop, { name: 'MagSafe / USB-C Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN });
+
+  const synthLaptopPsu = await mkDevice({
+    name: 'БП Apple 140W USB-C (синты)',
+    type: DeviceType.POWER_SUPPLY,
+    ownerRole: 'Андрей',
+    position: { x: -600, y: -250 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.AC_MAINS,
+    attrs: { isKeysOnly: true },
+    notes: 'Блок питания 140W для синтезаторного ноутбука Андрея.',
+  });
+  const synthLaptopPsuPlug = await mkPort(synthLaptopPsu, { name: 'Вилка (в Anker)', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN });
+  const synthLaptopPsuOut = await mkPort(synthLaptopPsu, { name: 'USB-C Out (140W)', portType: PortType.USB_C, direction: PortDirection.OUT, power: { maxOutputPowerW: 140 } });
+
+  await mkCable({ sourcePortId: anker1SchukoOuts[1].id, targetPortId: synthLaptopPsuPlug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'black' });
+  await mkCable({ sourcePortId: synthLaptopPsuOut.id, targetPortId: synthLaptopPowerIn.id, cableType: CableType.POWER_LINE, length: 2, color: 'white' });
+
+  const cmeSyncBox = await mkDevice({
+    name: 'CME U6MIDI Pro / Sync Box',
+    type: DeviceType.MIDI_DEVICE,
+    ownerRole: 'Даня-вокал',
+    position: { x: 950, y: 150 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.USB_BUS,
+    imageUrl: 'midi-thru5.png',
+    attrs: {
+      manufacturer: 'CME',
+      model: 'U6MIDI Pro / Sync Box — профессиональный MIDI сплиттер и синхронизатор',
+      isKeysOnly: true,
+    },
+    notes: 'Миди-синхронизатор: принимает MIDI-клок из MOTU и раздаёт на UMC404HD и клавиши.',
+  });
+  const cmePowerIn = await mkPort(cmeSyncBox, { name: 'USB-C Power In (5V DC)', portType: PortType.USB_C, direction: PortDirection.IN, power: { voltageV: 5, currentType: CurrentType.DC } });
+  const cmeMidiIn = await mkPort(cmeSyncBox, { name: 'MIDI IN', portType: PortType.MIDI_DIN, direction: PortDirection.IN });
+  const cmeMidiOut1 = await mkPort(cmeSyncBox, { name: 'MIDI OUT 1', portType: PortType.MIDI_DIN, direction: PortDirection.OUT });
+  await mkPort(cmeSyncBox, { name: 'MIDI OUT 2 (не используется)', portType: PortType.MIDI_DIN, direction: PortDirection.OUT });
+
+  // CME Power cable
+  await mkCable({ sourcePortId: anker2UsbA1.id, targetPortId: cmePowerIn.id, cableType: CableType.POWER_LINE, length: 1.5 });
+
+  // MIDI Sync Cables (MOTU MIDI Out -> CME Sync Box MIDI In, CME Sync Box MIDI Out 1 -> UMC404HD MIDI In)
+  await mkCable({ sourcePortId: motuMidiOut.id, targetPortId: cmeMidiIn.id, cableType: CableType.MIDI, length: 3, color: 'orange' });
+  const umcMidiIn = await mkPort(umc404hd, { name: 'MIDI In (Sync)', portType: PortType.MIDI_DIN, direction: PortDirection.IN });
+  await mkCable({ sourcePortId: cmeMidiOut1.id, targetPortId: umcMidiIn.id, cableType: CableType.MIDI, length: 5, color: 'orange' });
 
   const danyaDIem = await mkDevice({
     name: 'IEM-комплект Дани-барабанщика (полностью автономный)',

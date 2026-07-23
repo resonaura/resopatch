@@ -1,0 +1,7 @@
+node_modules
+dist
+.next
+*.lock
+pnpm-lock.yaml
+*.min.js
+*.d.ts

@@ -10,13 +10,24 @@
     "dev:api": "pnpm --filter @resopatch/api dev",
     "dev:web": "pnpm --filter @resopatch/web dev",
     "dev:bot": "pnpm --filter @resopatch/bot dev",
-    "kill-ports": "bash scripts/kill-ports.sh"
+    "kill-ports": "bash scripts/kill-ports.sh",
+    "lint": "eslint apps packages --ext .ts,.tsx --max-warnings 0",
+    "lint:fix": "eslint apps packages --ext .ts,.tsx --fix",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,css}\" \"packages/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,css}\" \"packages/**/*.{ts,tsx}\""
   },
   "engines": {
     "node": ">=20"
   },
   "devDependencies": {
-    "concurrently": "^10.0.3"
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.3",
+    "eslint": "^10.7.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.65.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

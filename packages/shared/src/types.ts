@@ -130,7 +130,7 @@ export interface InputListRow {
 
 /** One row of the derived packing/rider checklist (Table 7 in the design doc). */
 export interface RiderRow {
-  category: 'CABLE' | 'ADAPTER' | 'FURNITURE' | 'POWER';
+  category: 'CABLE' | 'ADAPTER' | 'FURNITURE' | 'POWER' | 'EQUIPMENT';
   name: string;
   quantity: number;
   isUserOwned: boolean;

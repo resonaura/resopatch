@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { AutoLayoutDto, CreateSetupDto, DeviceType, InputListRow, RiderRow, SetupDto, UpdateSetupDto } from '@resopatch/shared';
+import { AutoLayoutDto, CreateSetupDto, DeviceType, InventoryStatus, InputListRow, RiderRow, SetupDto, UpdateSetupDto } from '@resopatch/shared';
 import { toAdapterDto, toCableDto, toDeviceDto, toFurnitureDto, toPortDto, toSetupDto } from '../database/mappers';
 import { adaptersRepo, cablesRepo, devicesRepo, furnitureRepo, portsRepo, setupsRepo, In } from '../database/json-db';
 import { computeAutoLayout } from './layout';
@@ -173,6 +173,15 @@ export class SetupsService {
     }
 
     for (const device of devices) {
+      if (device.inventoryStatus === InventoryStatus.VENUE_PROVIDED) {
+        rows.push({
+          category: 'EQUIPMENT',
+          name: device.name,
+          quantity: 1,
+          isUserOwned: false,
+          note: device.notes ?? undefined,
+        });
+      }
       const deviceFurniture = furnitureByDevice.get(device.id);
       if (deviceFurniture) {
         rows.push({
@@ -186,7 +195,7 @@ export class SetupsService {
     }
 
     for (const device of devices) {
-      if (device.powerRequired) {
+      if (device.powerRequired && device.inventoryStatus !== InventoryStatus.VENUE_PROVIDED) {
         rows.push({
           category: 'POWER',
           name: `${device.name} power (${device.powerSourceType})`,

@@ -58,39 +58,78 @@ export default function Constructor({
   const [view, setView] = useState<"canvas" | "input-list" | "rider" | "checklist">("canvas");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [insideContainerId, setInsideContainerId] = useState<string | null>(null);
 
-  const [insideContainerId, setInsideContainerId] = useState<string | null>(
-    null,
-  );
+  const [setupMode, setSetupMode] = useState<'no-keys' | 'with-keys'>(() => {
+    try {
+      return (localStorage.getItem(`resopatch_setup_mode_${setupId}`) as 'no-keys' | 'with-keys') || 'no-keys';
+    } catch {
+      return 'no-keys';
+    }
+  });
+
+  const handleSetupModeChange = (mode: 'no-keys' | 'with-keys') => {
+    setSetupMode(mode);
+    try {
+      localStorage.setItem(`resopatch_setup_mode_${setupId}`, mode);
+    } catch {
+      // ignore
+    }
+  };
+
+  const activeDevices = useMemo(() => {
+    if (!graph?.devices) return [];
+    if (setupMode === 'with-keys') return graph.devices;
+    return graph.devices.filter((d) => !d.attrs?.isKeysOnly);
+  }, [graph, setupMode]);
+
+  const activeCables = useMemo(() => {
+    if (!graph?.cables) return [];
+    if (setupMode === 'with-keys') return graph.cables;
+
+    const activePortIds = new Set(activeDevices.flatMap((d) => d.ports).map((p) => p.id));
+    return graph.cables.filter(
+      (c) => activePortIds.has(c.sourcePortId) && activePortIds.has(c.targetPortId),
+    );
+  }, [graph, activeDevices, setupMode]);
+
+  const activeGraph = useMemo(() => {
+    if (!graph) return null;
+    return {
+      ...graph,
+      devices: activeDevices,
+      cables: activeCables,
+    };
+  }, [graph, activeDevices, activeCables]);
 
   const childrenByParent = useMemo(() => {
     const map = new Map<string, GraphDevice[]>();
-    for (const d of graph?.devices ?? []) {
+    for (const d of activeGraph?.devices ?? []) {
       if (!d.parentDeviceId) continue;
       const list = map.get(d.parentDeviceId) ?? [];
       list.push(d);
       map.set(d.parentDeviceId, list);
     }
     return map;
-  }, [graph]);
+  }, [activeGraph]);
 
   const mainGraph = useMemo(() => {
-    if (!graph)
+    if (!activeGraph)
       return {
         externalCables: [],
         internalCableIds: new Set<string>(),
         boundaryPortsByContainer: new Map(),
       };
-    return splitMainCanvasGraph(graph.devices, graph.cables);
-  }, [graph]);
+    return splitMainCanvasGraph(activeGraph.devices, activeGraph.cables);
+  }, [activeGraph]);
 
   const deviceByPortId = useMemo(() => {
     const map = new Map<string, GraphDevice>();
-    for (const d of graph?.devices ?? []) {
+    for (const d of activeGraph?.devices ?? []) {
       for (const p of d.ports) map.set(p.id, d);
     }
     return map;
-  }, [graph]);
+  }, [activeGraph]);
 
   const onSelectChild = useCallback(
     (id: string) => setSelection({ kind: "device", id }),
@@ -103,16 +142,16 @@ export default function Constructor({
 
   const connectedPortIds = useMemo(() => {
     const set = new Set<string>();
-    for (const c of graph?.cables ?? []) {
+    for (const c of activeGraph?.cables ?? []) {
       set.add(c.sourcePortId);
       set.add(c.targetPortId);
     }
     return set;
-  }, [graph]);
+  }, [activeGraph]);
 
   const initialNodes: Node[] = useMemo(
     () =>
-      (graph?.devices ?? [])
+      (activeGraph?.devices ?? [])
         .filter((device) => !device.parentDeviceId)
         .map((device) => {
           const boundaryPortDtos =
@@ -138,7 +177,7 @@ export default function Constructor({
           };
         }),
     [
-      graph,
+      activeGraph,
       mainGraph,
       childrenByParent,
       deviceByPortId,
@@ -149,7 +188,7 @@ export default function Constructor({
   );
 
   const portToDevice = useMemo(() => {
-    const deviceById = new Map((graph?.devices ?? []).map((d) => [d.id, d]));
+    const deviceById = new Map((activeGraph?.devices ?? []).map((d) => [d.id, d]));
     const topAncestorId = (device: GraphDevice): string => {
       let current = device;
       while (current.parentDeviceId) {
@@ -160,20 +199,20 @@ export default function Constructor({
       return current.id;
     };
     const map = new Map<string, string>();
-    for (const d of graph?.devices ?? []) {
+    for (const d of activeGraph?.devices ?? []) {
       const nodeId = topAncestorId(d);
       for (const p of d.ports) map.set(p.id, nodeId);
     }
     return map;
-  }, [graph]);
+  }, [activeGraph]);
 
   const portById = useMemo(() => {
     const map = new Map<string, GraphDevice['ports'][number]>();
-    for (const d of graph?.devices ?? []) {
+    for (const d of activeGraph?.devices ?? []) {
       for (const p of d.ports) map.set(p.id, p);
     }
     return map;
-  }, [graph]);
+  }, [activeGraph]);
 
   const initialEdges: Edge[] = useMemo(
     () =>
@@ -218,7 +257,7 @@ export default function Constructor({
         Загрузка сетапа…
       </div>
     );
-  if (graphQuery.isError || !graph)
+  if (graphQuery.isError || !graph || !activeGraph)
     return (
       <div className="flex h-full items-center justify-center text-default-500">
         Не удалось загрузить сетап.
@@ -226,83 +265,121 @@ export default function Constructor({
     );
 
   const pendingSourcePort = pendingConnection
-    ? graph.devices
+    ? activeGraph.devices
         .flatMap((d) => d.ports)
         .find((p) => p.id === pendingConnection.sourceHandle)
     : null;
   const pendingTargetPort = pendingConnection
-    ? graph.devices
+    ? activeGraph.devices
         .flatMap((d) => d.ports)
         .find((p) => p.id === pendingConnection.targetHandle)
     : null;
   const pendingSourceDevice = pendingConnection
-    ? graph.devices.find((d) => d.id === pendingConnection.source)
+    ? activeGraph.devices.find((d) => d.id === pendingConnection.source)
     : null;
   const pendingTargetDevice = pendingConnection
-    ? graph.devices.find((d) => d.id === pendingConnection.target)
+    ? activeGraph.devices.find((d) => d.id === pendingConnection.target)
     : null;
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-default-200 bg-surface px-4 py-2">
-        <h1 className="text-sm font-semibold">Resopatch</h1>
-        <span className="text-xs text-default-500">{setupName}</span>
-        <Tabs
-          selectedKey={view}
-          onSelectionChange={(key) => setView(key as typeof view)}
-          variant="secondary"
-          className="ml-auto"
-        >
-          <Tabs.ListContainer>
-            <Tabs.List aria-label="Вид">
-              <Tabs.Tab id="canvas">
-                <LayoutGrid className="h-3.5 w-3.5" />
-                Схема
-              </Tabs.Tab>
-              <Tabs.Tab id="input-list">
-                <Tabs.Separator />
-                <ListMusic className="h-3.5 w-3.5" />
-                Input List
-              </Tabs.Tab>
-              <Tabs.Tab id="rider">
-                <Tabs.Separator />
-                <ClipboardList className="h-3.5 w-3.5" />
-                Райдер
-              </Tabs.Tab>
-              <Tabs.Tab id="checklist">
-                <Tabs.Separator />
-                <CheckSquare className="h-3.5 w-3.5" />
-                Чеклист стаффа
-              </Tabs.Tab>
-            </Tabs.List>
-          </Tabs.ListContainer>
-        </Tabs>
-        {view === "canvas" && (
-          <Button
-            size="sm"
-            variant="secondary"
-            onPress={runAutoLayout}
-            isPending={autoLayout.isPending}
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-default-200 bg-surface px-4 py-2 select-none">
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold tracking-tight text-foreground text-base">Resopatch</span>
+            <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">PRO</span>
+          </div>
+          <div className="h-4 w-px bg-default-200" />
+          <span className="text-xs font-medium text-default-500 max-w-[200px] truncate">{setupName}</span>
+        </div>
+
+        {/* Setup Mode Switcher */}
+        <div className="flex items-center rounded-lg border border-default-200 bg-surface-secondary/80 p-0.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => handleSetupModeChange('no-keys')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+              setupMode === 'no-keys'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-default-500 hover:text-foreground'
+            }`}
           >
-            <Wand2 className="h-3.5 w-3.5" />
-            Упорядочить
-          </Button>
-        )}
-        <Button size="sm" variant="ghost" onPress={() => setShowSettings(true)}>
-          <Settings className="h-3.5 w-3.5" />
-          Настройки
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onPress={async () => {
-            await api.logout();
-            location.reload();
-          }}
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          Выйти
-        </Button>
+            Без клавиш
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSetupModeChange('with-keys')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all ${
+              setupMode === 'with-keys'
+                ? 'bg-accent text-accent-foreground shadow-sm'
+                : 'text-default-500 hover:text-foreground'
+            }`}
+          >
+            С клавишами
+          </button>
+        </div>
+
+        {/* Navigation & Action Controls */}
+        <div className="flex items-center gap-2 shrink-0">
+          <Tabs
+            selectedKey={view}
+            onSelectionChange={(key) => setView(key as typeof view)}
+            variant="secondary"
+          >
+            <Tabs.ListContainer>
+              <Tabs.List aria-label="Вид">
+                <Tabs.Tab id="canvas">
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  Схема
+                </Tabs.Tab>
+                <Tabs.Tab id="input-list">
+                  <Tabs.Separator />
+                  <ListMusic className="h-3.5 w-3.5" />
+                  Input List
+                </Tabs.Tab>
+                <Tabs.Tab id="rider">
+                  <Tabs.Separator />
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Райдер
+                </Tabs.Tab>
+                <Tabs.Tab id="checklist">
+                  <Tabs.Separator />
+                  <CheckSquare className="h-3.5 w-3.5" />
+                  Чеклист стаффа
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs.ListContainer>
+          </Tabs>
+
+          {view === "canvas" && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onPress={runAutoLayout}
+              isPending={autoLayout.isPending}
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              Упорядочить
+            </Button>
+          )}
+          <span title="Настройки">
+            <Button size="sm" variant="ghost" onPress={() => setShowSettings(true)}>
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
+          </span>
+          <span title="Выйти">
+            <Button
+              size="sm"
+              variant="secondary"
+              onPress={async () => {
+                await api.logout();
+                location.reload();
+              }}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </Button>
+          </span>
+        </div>
       </header>
       <div className="flex min-h-0 flex-1">
         <div
@@ -516,6 +593,8 @@ function RiderTable({ setupId, devices }: { setupId: string; devices?: GraphDevi
       </div>
     );
 
+  const venueRows = query.data.filter((r) => !r.isUserOwned);
+
   return (
     <div className="min-h-0 overflow-auto p-4">
       <Table>
@@ -523,20 +602,18 @@ function RiderTable({ setupId, devices }: { setupId: string; devices?: GraphDevi
           <Table.Content aria-label="Rider">
             <Table.Header>
               <Table.Column>Категория</Table.Column>
-              <Table.Column>Наименование</Table.Column>
+              <Table.Column>Наименование оборудования площадки</Table.Column>
               <Table.Column>Кол-во</Table.Column>
-              <Table.Column>Чьё</Table.Column>
               <Table.Column>Заметка</Table.Column>
             </Table.Header>
             <Table.Body>
-              {query.data.map((r: RiderRow, i: number) => (
+              {venueRows.map((r: RiderRow, i: number) => (
                 <Table.Row key={i}>
                   <Table.Cell>{r.category}</Table.Cell>
                   <Table.Cell>
                     <DevicePhotoCell name={r.name} devices={devices} />
                   </Table.Cell>
                   <Table.Cell>{r.quantity}</Table.Cell>
-                  <Table.Cell>{r.isUserOwned ? "наше" : "площадка"}</Table.Cell>
                   <Table.Cell>{r.note ?? ""}</Table.Cell>
                 </Table.Row>
               ))}

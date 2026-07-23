@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Button, Checkbox, Chip } from '@heroui/react';
-import { CheckSquare, RotateCcw, PackageCheck, AlertCircle, ShieldCheck } from 'lucide-react';
+import { RotateCcw, PackageCheck } from 'lucide-react';
 import { InventoryStatus } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
@@ -56,12 +56,13 @@ export default function StaffChecklist({ devices, setupId }: { devices: GraphDev
     }
   };
 
-  // Group top-level devices and their accessories by Owner
+  // Group top-level devices and their accessories by Owner (excluding venue-provided items)
   const grouped = useMemo(() => {
-    const parentDevices = devices.filter((d) => !d.parentDeviceId);
+    const bandDevices = devices.filter((d) => d.inventoryStatus !== InventoryStatus.VENUE_PROVIDED);
+    const parentDevices = bandDevices.filter((d) => !d.parentDeviceId);
     const childrenMap = new Map<string, GraphDevice[]>();
 
-    for (const d of devices) {
+    for (const d of bandDevices) {
       if (d.parentDeviceId) {
         const list = childrenMap.get(d.parentDeviceId) ?? [];
         list.push(d);
@@ -72,7 +73,7 @@ export default function StaffChecklist({ devices, setupId }: { devices: GraphDev
     const groups = new Map<string, { parent: GraphDevice; accessories: GraphDevice[] }[]>();
 
     for (const parent of parentDevices) {
-      const owner = parent.ownerRole?.trim() || 'Общее оборудования';
+      const owner = parent.ownerRole?.trim() || 'Общее оборудование';
       const list = groups.get(owner) ?? [];
       list.push({
         parent,
@@ -156,7 +157,6 @@ export default function StaffChecklist({ devices, setupId }: { devices: GraphDev
               <div className="divide-y divide-default-100">
                 {items.map(({ parent, accessories }) => {
                   const isChecked = !!checkedMap[parent.id];
-                  const isVenue = parent.inventoryStatus === InventoryStatus.VENUE_PROVIDED;
 
                   return (
                     <div
@@ -164,17 +164,11 @@ export default function StaffChecklist({ devices, setupId }: { devices: GraphDev
                       className={`p-3.5 transition-colors ${isChecked ? 'bg-accent/5' : 'hover:bg-surface-secondary/30'}`}
                     >
                       <div className="flex items-start gap-3">
-                        {!isVenue ? (
-                          <Checkbox
-                            isSelected={isChecked}
-                            onChange={() => toggleCheck(parent.id)}
-                            className="mt-1"
-                          />
-                        ) : (
-                          <div className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-default-200 text-default-600 shrink-0">
-                            ПЛОЩАДКА
-                          </div>
-                        )}
+                        <Checkbox
+                          isSelected={isChecked}
+                          onChange={() => toggleCheck(parent.id)}
+                          className="mt-1"
+                        />
 
                         <ItemThumb device={parent} />
 

@@ -100,4 +100,7 @@ export const api = {
 
   createFurniture: (dto: CreateFurnitureDto) => request<FurnitureDto>('/furniture', { method: 'POST', body: JSON.stringify(dto) }),
   deleteFurniture: (id: string) => request<void>(`/furniture/${id}`, { method: 'DELETE' }),
+
+  uploadImage: (dataUrl: string, fileName?: string) =>
+    request<{ url: string }>('/img/upload', { method: 'POST', body: JSON.stringify({ dataUrl, fileName }) }),
 };

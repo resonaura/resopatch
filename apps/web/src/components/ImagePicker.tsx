@@ -2,12 +2,8 @@ import { useRef, useState } from 'react';
 import { Button, Input, Label } from '@heroui/react';
 import { ImageOff, Trash2, Upload } from 'lucide-react';
 import { fileToCompressedDataUrl } from '../lib/imageUpload';
+import { api } from '../api/client';
 
-/** Upload-a-photo-or-paste-a-URL control shared by NewDeviceModal (creation) and Inspector
- *  (editing) — both just need "give me a data URL or a plain URL string back", the same shape
- *  `imageUrl` already stores either way (see imageUpload.ts for why uploads become data URLs
- *  instead of going to a blob store). Upload and removal apply immediately; the URL text field
- *  commits on blur only, matching every other text field in Inspector's DeviceForm. */
 export default function ImagePicker({
   value,
   onChange,
@@ -27,7 +23,17 @@ export default function ImagePicker({
     setError(null);
     setBusy(true);
     try {
-      onChange(await fileToCompressedDataUrl(file));
+      const dataUrl = await fileToCompressedDataUrl(file);
+      try {
+        const res = await api.uploadImage(dataUrl, file.name);
+        if (res?.url) {
+          onChange(res.url);
+          return;
+        }
+      } catch (err) {
+        console.warn('API upload fallback to data URL:', err);
+      }
+      onChange(dataUrl);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Не удалось загрузить изображение');
     } finally {

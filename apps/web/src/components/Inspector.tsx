@@ -17,7 +17,6 @@ import {
 } from '@resopatch/shared';
 import { api, type GraphCable, type GraphDevice, type GraphResponse } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
-import { ProgressiveImage } from '../lib/img';
 import ImagePicker from './ImagePicker';
 import RiderSpecSheet from './RiderSpecSheet';
 

@@ -17,7 +17,6 @@ type ZoneName = 'andrey' | 'barabanschik' | 'vokal' | 'service' | 'inactive';
 function zoneOf(device: Device): ZoneName {
   if (device.inventoryStatus === InventoryStatus.OWNED_INACTIVE || device.inventoryStatus === InventoryStatus.PLANNED_NOT_OWNED) return 'inactive';
   if (device.type === DeviceType.STAGE_BOX) return 'service';
-  if (device.ownerRole === 'Даня-барабанщик' && (device.type === DeviceType.LAPTOP || device.type === DeviceType.AUDIO_INTERFACE)) return 'service';
   if (device.ownerRole === 'Андрей') return 'andrey';
   if (device.ownerRole === 'Даня-барабанщик') return 'barabanschik';
   if (device.ownerRole === 'Даня-вокал') return 'vokal';
