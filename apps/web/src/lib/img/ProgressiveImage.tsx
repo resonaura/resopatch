@@ -8,6 +8,9 @@ export interface ProgressiveImageProps {
   aspectRatio?: string;
   className?: string;
   style?: React.CSSProperties;
+  /** Passed to the rendered <img> elements — defaults to 'cover'. Use 'contain' when the
+   *  image must be fully visible inside a fixed-height container (e.g. the banner strip). */
+  objectFit?: 'cover' | 'contain';
 }
 
 const SKELETON_STYLE_ID = 'progressive-image-skeleton-keyframes';
@@ -55,10 +58,15 @@ function containerStyle(aspectRatio: string | undefined, style: React.CSSPropert
 /** Photos (webp/avif): LQIP blur-fade in, then invisibly preload each breakpoint
  * upgrade and swap once fully loaded so nothing ever pops in unloaded. */
 export const ProgressiveImage = forwardRef<HTMLDivElement, ProgressiveImageProps>(function ProgressiveImage(
-  { src, alt, aspectRatio, className = '', style = {} },
+  { src, alt, aspectRatio, className = '', style = {}, objectFit = 'cover' },
   forwardedRef,
 ) {
   const { ref: hookRef, src: targetSrc, lqip, isLoaded, intrinsic } = useProgressiveImage(src);
+
+  // When the caller gives us a fixed-height class (h-full / h-[Npx]) the container
+  // already has an explicit height — letting aspectRatio override it would break layout.
+  const fixedHeight = className.includes('h-full') || /\bh-\[/.test(className);
+  const resolvedAspectRatio = aspectRatio ?? (fixedHeight ? undefined : intrinsicAspectRatio(intrinsic));
 
   const [currentSrc, setCurrentSrc] = useState<string | null>(null);
   const [pendingSrc, setPendingSrc] = useState<string | null>(null);
@@ -70,8 +78,6 @@ export const ProgressiveImage = forwardRef<HTMLDivElement, ProgressiveImageProps
     if (typeof forwardedRef === 'function') forwardedRef(node);
     else if (forwardedRef) forwardedRef.current = node;
   };
-
-  const resolvedAspectRatio = aspectRatio ?? intrinsicAspectRatio(intrinsic);
 
   useEffect(() => {
     if (!isLoaded || !targetSrc) return;
@@ -103,7 +109,7 @@ export const ProgressiveImage = forwardRef<HTMLDivElement, ProgressiveImageProps
           style={{
             width: '100%',
             height: '100%',
-            objectFit: 'cover',
+            objectFit,
             filter: 'blur(20px)',
             transition: 'opacity 0.6s ease',
             opacity: currentSrc ? 0 : 1,
@@ -122,7 +128,7 @@ export const ProgressiveImage = forwardRef<HTMLDivElement, ProgressiveImageProps
           style={{
             width: '100%',
             height: '100%',
-            objectFit: 'cover',
+            objectFit,
             transition: 'opacity 0.5s ease-in-out',
             opacity: isTransitioning ? 0.7 : 1,
             position: 'relative',
@@ -140,7 +146,7 @@ export const ProgressiveImage = forwardRef<HTMLDivElement, ProgressiveImageProps
           style={{
             width: '100%',
             height: '100%',
-            objectFit: 'cover',
+            objectFit,
             position: 'absolute',
             top: 0,
             left: 0,

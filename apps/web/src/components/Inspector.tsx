@@ -17,6 +17,7 @@ import {
 } from '@resopatch/shared';
 import { api, type GraphCable, type GraphDevice, type GraphResponse } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
+import { ProgressiveImage } from '../lib/img';
 import ImagePicker from './ImagePicker';
 import RiderSpecSheet from './RiderSpecSheet';
 
@@ -151,8 +152,40 @@ function DeviceForm({
     }
   };
 
+function InspectorDeviceBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'imageUrls' | 'name' | 'type'> }) {
+  if (device.type === DeviceType.PEDALBOARD) return null;
+
+  const urls: string[] = device.imageUrls?.length
+    ? device.imageUrls
+    : device.imageUrl
+    ? [device.imageUrl]
+    : [];
+
+  if (urls.length === 0) return null;
+
+  return (
+    <div className="w-full overflow-hidden rounded-lg border border-default-200 shadow-md bg-black/30 mb-1">
+      <div className="flex h-44 w-full divide-x divide-default-200/40">
+        {urls.map((url, idx) => {
+          const isStorage = !url.startsWith('data:') && !/^https?:\/\//i.test(url);
+          return (
+            <div key={url} className="relative flex-1 h-full flex items-center justify-center p-2">
+              {isStorage ? (
+                <ProgressiveImage src={url} alt={idx === 0 ? device.name : ''} className="h-full w-full max-h-full max-w-full" objectFit="contain" />
+              ) : (
+                <img src={url} alt="" className="max-h-full max-w-full object-contain m-auto" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
   return (
     <div className="flex flex-col gap-3">
+      <InspectorDeviceBanner device={form} />
       <TextField>
         <Label>Название</Label>
         <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} onBlur={() => commitField('name', form.name)} />

@@ -5,7 +5,16 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
+import { seedDatabase } from './database/seed';
+
 async function bootstrap() {
+  // TEMPORARY: Auto-reseed on every server startup per request
+  try {
+    await seedDatabase();
+  } catch (err) {
+    console.error('Failed to auto-reseed database on startup:', err);
+  }
+
   // Nest registers its own (100kb-limited) body parser inside NestFactory.create() itself, before
   // any code here gets to run — too early to override by just calling useBodyParser() afterwards,
   // since the default would already be first in the Express middleware chain. `bodyParser: false`

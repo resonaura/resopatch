@@ -155,6 +155,7 @@ async function main() {
     type: DeviceType.POWER_STRIP,
     ownerRole: 'Андрей',
     position: { x: -300, y: 250 },
+    imageUrl: 'anker-cord.webp',
     attrs: {
       productName:
         'Anker Surge Protector Flat Plug Power Strip 2000J, 5ft Thin Extension Cord, 8 Outlets, 2 USB A and 1 USB C Port, 20W for iPhone15, Wall Mount, Compact for Home, Office, Room, TUV Listed (White)',
@@ -189,6 +190,7 @@ async function main() {
     type: DeviceType.POWER_STRIP,
     ownerRole: 'Даня-вокал',
     position: { x: 900, y: 850 },
+    imageUrl: 'anker-cord.webp',
     attrs: {
       productName:
         'Anker Surge Protector Flat Plug Power Strip 2000J, 5ft Thin Extension Cord, 8 Outlets, 2 USB A and 1 USB C Port, 20W for iPhone15, Wall Mount, Compact for Home, Office, Room, TUV Listed (White)',
@@ -790,6 +792,7 @@ async function main() {
     position: { x: -500, y: 400 },
     powerSourceType: PowerSourceType.PASSIVE_NONE,
     imageUrl: 'palmer-front.png',
+    imageUrls: ['palmer-front.png', 'palmer-back.png'],
     attrs: {
       manufacturer: 'Palmer',
       model: 'Monicon Classic — полностью пассивный стерео мониторный контроллер',
@@ -861,6 +864,7 @@ async function main() {
     hostUsbType: HostUsbType.USB_C,
     power: { currentType: CurrentType.DC, voltageV: 5, currentMA: 1000 },
     imageUrl: 'volt276-front.webp',
+    imageUrls: ['volt276-front.webp', 'volt276-back.webp', 'volt276-top.png'],
     attrs: {
       manufacturer: 'Universal Audio',
       model: 'Volt 276 — 2x2 USB-C, встроенный аналоговый компрессор 1176',
@@ -911,6 +915,7 @@ async function main() {
     powerSourceType: PowerSourceType.AC_MAINS,
     power: { currentType: CurrentType.AC, voltageV: 9, currentMA: 750 },
     imageUrl: 'fex800-front.webp',
+    imageUrls: ['fex800-front.webp', 'fex800-back.webp'],
     attrs: {
       manufacturer: 'Behringer',
       model: 'FEX800 (MINIFEX) — 16-битный цифровой процессор эффектов, 16 пресетов',
@@ -1107,6 +1112,7 @@ async function main() {
     powerSourceType: PowerSourceType.USB_C_PD,
     hostUsbType: HostUsbType.USB_C,
     power: { currentType: CurrentType.DC, voltageV: 20, currentMA: 3000 },
+    imageUrl: 'dan-vocalist-macbook.webp',
     notes: 'Расположен слева от барабанщика. Собственное питание ноута не значится ни в одной из таблиц §5 — не выдумываем розетку, оставлено неподключённым до уточнения.',
   });
   const playbackLaptopUsbC = await mkPort(playbackLaptop, { name: 'USB-C', portType: PortType.USB_C, direction: PortDirection.BI });
@@ -1297,9 +1303,11 @@ async function main() {
   const estimatedSizes = new Map<string, { width: number; height: number }>();
   for (const d of allDevices) {
     const portCount = portCountByDevice.get(d.id) ?? 0;
+    const hasImage = d.type !== DeviceType.PEDALBOARD && (d.imageUrl || (d.imageUrls && d.imageUrls.length > 0));
+    const bannerH = hasImage ? 140 : 0;
     const ownerRow = d.ownerRole ? 20 : 0;
     const portsBlock = portCount > 0 ? 1 + portCount * 23 : 0;
-    estimatedSizes.set(d.id, { width: 220, height: 2 + 28 + 30 + ownerRow + portsBlock });
+    estimatedSizes.set(d.id, { width: 250, height: bannerH + 28 + 30 + ownerRow + portsBlock + 40 });
   }
 
   const { positions } = computeAutoLayout(allDevices, allPorts, allCables, estimatedSizes);
@@ -1315,7 +1323,13 @@ async function main() {
   console.log(`Seeded setup ${setup.id} ("${setup.name}")`);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exitCode = 1;
-});
+export async function seedDatabase() {
+  await main();
+}
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
+}

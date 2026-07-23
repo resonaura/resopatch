@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Chip } from '@heroui/react';
 import { Layers } from 'lucide-react';
-import { InventoryStatus, PortDirection } from '@resopatch/shared';
+import { DeviceType, InventoryStatus, PortDirection } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { ProgressiveImage } from '../lib/img';
@@ -17,17 +17,56 @@ function isStorageImage(url: string): boolean {
   return !url.startsWith('data:') && !/^https?:\/\//i.test(url);
 }
 
-/** Full-width photo banner across the top of a device card. Renders above the header row
- *  instead of the small square thumb whenever a photo is set — the node grows taller to
- *  fit it (see DeviceThumb below for the fallback used in compact contexts like the nested
- *  accessory list, where a banner would be too tall). */
-function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'name'> }) {
-  if (!device.imageUrl) return null;
-  if (isStorageImage(device.imageUrl)) {
-    return <ProgressiveImage src={device.imageUrl} alt={device.name} className="w-full" />;
+/** Renders a single image inside the banner strip — storage paths go through the
+ *  /img/ optimisation endpoint; data: and http(s) URLs are passed through as-is. */
+function BannerImage({ url, alt, isOnly }: { url: string; alt: string; isOnly: boolean }) {
+  const containerClass = `relative flex-1 h-full overflow-hidden ${isOnly ? 'rounded-none' : ''} bg-black/30 flex items-center justify-center p-1.5`;
+  if (isStorageImage(url)) {
+    return (
+      <div className={containerClass}>
+        <ProgressiveImage
+          src={url}
+          alt={alt}
+          className="h-full w-full max-h-full max-w-full"
+          objectFit="contain"
+        />
+      </div>
+    );
   }
-  return <img src={device.imageUrl} alt="" className="block w-full object-cover" />;
+  return (
+    <div className={containerClass}>
+      <img src={url} alt="" className="max-h-full max-w-full object-contain m-auto" />
+    </div>
+  );
 }
+
+/** Full-width photo banner across the top of a device card. Fixed-height rectangle
+ *  (max 140px) so the node is always a clean shape regardless of image aspect ratio.
+ *  When `imageUrls` has multiple entries they are shown side-by-side (front + back etc).
+ *  Falls back to the single `imageUrl` for devices that only have one view. */
+function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'imageUrls' | 'name' | 'type'> }) {
+  if (device.type === DeviceType.PEDALBOARD) return null;
+
+  const urls: string[] = device.imageUrls?.length
+    ? device.imageUrls
+    : device.imageUrl
+    ? [device.imageUrl]
+    : [];
+
+  if (urls.length === 0) return null;
+
+  return (
+    <div
+      className="flex w-full overflow-hidden border-b border-default-200/60 bg-black/20"
+      style={{ height: '140px' }}
+    >
+      {urls.map((url, i) => (
+        <BannerImage key={url} url={url} alt={i === 0 ? device.name : ''} isOnly={urls.length === 1} />
+      ))}
+    </div>
+  );
+}
+
 
 /** A descendant's port that needs a Handle proxied onto this (collapsed) container card because
  *  something outside the container plugs into it — see containerGraph.ts for how this set is
@@ -94,9 +133,9 @@ function PortRow({ port, subtitle }: { port: GraphDevice['ports'][number]; subti
 function DeviceThumb({ device, className }: { device: Pick<GraphDevice, 'imageUrl' | 'type'>; className: string }) {
   if (device.imageUrl) {
     const thumbSrc = isStorageImage(device.imageUrl)
-      ? `/img/${device.imageUrl}?w=64`
+      ? `/img/${device.imageUrl}?w=128`
       : device.imageUrl;
-    return <img src={thumbSrc} alt="" className={`shrink-0 aspect-square rounded object-contain object-center ${className}`} />;
+    return <img src={thumbSrc} alt="" className={`shrink-0 aspect-square rounded object-contain object-center bg-black/20 p-0.5 ${className}`} />;
   }
   return <DeviceTypeIcon type={device.type} className={`shrink-0 aspect-square text-default-500 ${className}`} />;
 }
@@ -123,7 +162,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
       <DeviceImageBanner device={device} />
       <div className="flex items-center gap-1.5 px-2.5 pt-2">
         {/* Hide the small thumb when there is already a full-width banner above */}
-        {!device.imageUrl && <DeviceThumb device={device} className="h-4 w-4" />}
+        {!device.imageUrl && <DeviceThumb device={device} className="h-6 w-6" />}
         <span className="truncate font-semibold text-foreground" title={device.type}>
           {device.name}
         </span>
@@ -175,11 +214,11 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
                   e.stopPropagation();
                   onSelectChild(child.id);
                 }}
-                className="flex items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-white/5"
+                className="flex items-center gap-2 rounded p-1 text-left hover:bg-white/10"
                 title={child.notes ?? child.name}
               >
-                <DeviceThumb device={child} className="h-5 w-5" />
-                <span className="truncate text-[10.5px] text-default-500">{child.name}</span>
+                <DeviceThumb device={child} className="h-8 w-8" />
+                <span className="truncate text-xs font-medium text-foreground/90">{child.name}</span>
               </button>
             ))}
           </div>

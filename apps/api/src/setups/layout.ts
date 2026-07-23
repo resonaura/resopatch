@@ -4,13 +4,13 @@ import { Device } from '../database/entities/device.entity';
 import { Cable } from '../database/entities/cable.entity';
 import { Port } from '../database/entities/port.entity';
 
-const FALLBACK_WIDTH = 240;
-const FALLBACK_HEIGHT = 90;
-const COLUMN_GAP = 140;
-const ROW_GAP = 100;
-const CHAIN_GAP_X = 180;
-const ZONE_GAP_X = 480;
-const ZONE_GAP_Y = 400;
+const FALLBACK_WIDTH = 260;
+const FALLBACK_HEIGHT = 240;
+const COLUMN_GAP = 180;
+const ROW_GAP = 160;
+const CHAIN_GAP_X = 220;
+const ZONE_GAP_X = 520;
+const ZONE_GAP_Y = 480;
 
 type ZoneName = 'andrey' | 'barabanschik' | 'vokal' | 'service' | 'inactive';
 

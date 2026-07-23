@@ -61,6 +61,7 @@ export function toDeviceDto(d: Device): DeviceDto {
           }
         : null,
     imageUrl: d.imageUrl,
+    imageUrls: d.imageUrls ?? null,
     notes: d.notes,
     attrs: d.attrs ?? {},
   };
@@ -99,6 +100,7 @@ export function applyDeviceDto(entity: Device, dto: Partial<CreateDeviceDto> & P
     entity.pedalSmartModes = dto.pedal.smartModes ?? null;
   }
   if (dto.imageUrl !== undefined) entity.imageUrl = dto.imageUrl ?? null;
+  if (dto.imageUrls !== undefined) entity.imageUrls = dto.imageUrls ?? null;
   if (dto.notes !== undefined) entity.notes = dto.notes ?? null;
   if (dto.attrs !== undefined) entity.attrs = dto.attrs;
   return entity;

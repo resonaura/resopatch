@@ -59,6 +59,9 @@ export interface DeviceDto {
   power: PowerProfile;
   pedal: PedalProfile | null;
   imageUrl: string | null;
+  /** Additional views (back, top, detail shots, etc.) beyond the primary `imageUrl`. When
+   *  present the canvas node renders all of them side-by-side in the image banner. */
+  imageUrls?: string[] | null;
   notes: string | null;
   /** Free-form catch-all for spec fields that don't warrant a dedicated column yet
    *  (manufacturer, model number, weight, dimensions, purchase link, ...). */

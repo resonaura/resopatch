@@ -20,6 +20,70 @@ export interface ContainerInsideModalProps {
   onNodeMoved: (id: string, position: { x: number; y: number }) => void;
 }
 
+/** Orders devices inside a container topologically by signal cable connections (source -> target),
+ *  so pedals render left-to-right, top-to-bottom in the exact order they are patched. */
+function sortDevicesBySignalFlow(devices: GraphDevice[], cables: GraphCable[]): GraphDevice[] {
+  if (devices.length <= 1) return devices;
+
+  const deviceMap = new Map(devices.map((d) => [d.id, d]));
+  const portToDevice = new Map<string, string>();
+  for (const d of devices) {
+    for (const p of d.ports) {
+      portToDevice.set(p.id, d.id);
+    }
+  }
+
+  const nextMap = new Map<string, Set<string>>();
+  const inDegree = new Map<string, number>();
+  for (const d of devices) {
+    nextMap.set(d.id, new Set());
+    inDegree.set(d.id, 0);
+  }
+
+  for (const c of cables) {
+    const srcDevId = portToDevice.get(c.sourcePortId);
+    const tgtDevId = portToDevice.get(c.targetPortId);
+    if (srcDevId && tgtDevId && srcDevId !== tgtDevId) {
+      if (!nextMap.get(srcDevId)!.has(tgtDevId)) {
+        nextMap.get(srcDevId)!.add(tgtDevId);
+        inDegree.set(tgtDevId, (inDegree.get(tgtDevId) ?? 0) + 1);
+      }
+    }
+  }
+
+  const sorted: GraphDevice[] = [];
+  const visited = new Set<string>();
+
+  // Entry nodes (inDegree === 0)
+  const queue: string[] = devices.filter((d) => (inDegree.get(d.id) ?? 0) === 0).map((d) => d.id);
+
+  while (queue.length > 0) {
+    const currId = queue.shift()!;
+    if (visited.has(currId)) continue;
+    visited.add(currId);
+    const dev = deviceMap.get(currId);
+    if (dev) sorted.push(dev);
+
+    const targets = Array.from(nextMap.get(currId) ?? []);
+    for (const tgtId of targets) {
+      const deg = (inDegree.get(tgtId) ?? 1) - 1;
+      inDegree.set(tgtId, deg);
+      if (deg <= 0 && !visited.has(tgtId)) {
+        queue.push(tgtId);
+      }
+    }
+  }
+
+  // Append any remaining unvisited devices (disconnected or cyclic)
+  for (const d of devices) {
+    if (!visited.has(d.id)) {
+      sorted.push(d);
+    }
+  }
+
+  return sorted;
+}
+
 export default function ContainerInsideModal({
   containerDevice,
   allDevices,
@@ -64,10 +128,12 @@ export default function ContainerInsideModal({
     return map;
   }, [allDevices]);
 
-  // Compute clean, non-overlapping grid positions for pedals inside the container
+  // Compute clean, non-overlapping grid positions for pedals inside the container ordered by signal flow
   const positionedChildDevices = useMemo(() => {
     const power = childDevices.filter((d) => d.type === DeviceType.POWER_SUPPLY || d.type === DeviceType.POWER_SPLITTER || d.type === DeviceType.POWER_STRIP);
-    const signal = childDevices.filter((d) => d.type !== DeviceType.POWER_SUPPLY && d.type !== DeviceType.POWER_SPLITTER && d.type !== DeviceType.POWER_STRIP);
+    const unsortedSignal = childDevices.filter((d) => d.type !== DeviceType.POWER_SUPPLY && d.type !== DeviceType.POWER_SPLITTER && d.type !== DeviceType.POWER_STRIP);
+
+    const signal = sortDevicesBySignalFlow(unsortedSignal, internalCables);
 
     const COLS = 4;
     const GAP_X = 360; // 240px card + 120px gap
@@ -94,7 +160,7 @@ export default function ContainerInsideModal({
     });
 
     return result;
-  }, [childDevices]);
+  }, [childDevices, internalCables]);
 
   // Find external cables connected to children inside this container
   const { boundaryNodes, boundaryCables } = useMemo(() => {

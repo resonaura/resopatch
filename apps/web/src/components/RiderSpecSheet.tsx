@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Chip, Disclosure } from '@heroui/react';
 import { ListChecks, ScrollText, SlidersHorizontal, ToggleLeft, Zap } from 'lucide-react';
-import { PortDirection, type PowerProfile } from '@resopatch/shared';
+import { DeviceType, PortDirection, type PowerProfile } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
+import { ProgressiveImage } from '../lib/img';
 import { PortTypeIcon } from '../lib/portIcons';
 import { readRiderAttrs } from '../lib/riderSpec';
 
@@ -58,6 +59,22 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
       </Disclosure.Heading>
       <Disclosure.Content>
         <div className="flex flex-col gap-3 pb-3 text-xs">
+          {device.type !== DeviceType.PEDALBOARD && (device.imageUrl || (device.imageUrls && device.imageUrls.length > 0)) && (
+            <div className="flex w-full overflow-hidden rounded-md border border-default-200 bg-black/30 h-36">
+              {(device.imageUrls?.length ? device.imageUrls : [device.imageUrl!]).map((url) => {
+                const isStorage = !url.startsWith('data:') && !/^https?:\/\//i.test(url);
+                return (
+                  <div key={url} className="relative flex-1 h-full flex items-center justify-center p-1">
+                    {isStorage ? (
+                      <ProgressiveImage src={url} alt={device.name} className="h-full w-full max-h-full max-w-full" objectFit="contain" />
+                    ) : (
+                      <img src={url} alt="" className="max-h-full max-w-full object-contain m-auto" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {(manufacturer || model) && (
             <div className="text-default-500">
               {[manufacturer, model].filter(Boolean).join(' — ')}

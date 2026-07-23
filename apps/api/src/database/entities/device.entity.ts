@@ -113,6 +113,9 @@ export class Device {
   @Column({ type: 'varchar', nullable: true })
   imageUrl: string | null;
 
+  @Column({ type: 'simple-json', nullable: true })
+  imageUrls: string[] | null;
+
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 

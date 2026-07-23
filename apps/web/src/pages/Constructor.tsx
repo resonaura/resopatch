@@ -4,6 +4,7 @@ import "@xyflow/react/dist/style.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Table, Tabs } from "@heroui/react";
 import {
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -32,6 +33,7 @@ import NewDeviceModal from "../components/NewDeviceModal";
 import NewCableModal from "../components/NewCableModal";
 import SettingsModal from "../components/SettingsModal";
 import ContainerInsideModal from "../components/ContainerInsideModal";
+import StaffChecklist from "../components/StaffChecklist";
 import { splitMainCanvasGraph } from "../lib/containerGraph";
 
 export default function Constructor({
@@ -57,7 +59,7 @@ export default function Constructor({
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(
     null,
   );
-  const [view, setView] = useState<"canvas" | "input-list" | "rider">("canvas");
+  const [view, setView] = useState<"canvas" | "input-list" | "rider" | "checklist">("canvas");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
 
@@ -314,6 +316,11 @@ export default function Constructor({
                 <ClipboardList className="h-3.5 w-3.5" />
                 Райдер
               </Tabs.Tab>
+              <Tabs.Tab id="checklist">
+                <Tabs.Separator />
+                <CheckSquare className="h-3.5 w-3.5" />
+                Чеклист стаффа
+              </Tabs.Tab>
             </Tabs.List>
           </Tabs.ListContainer>
         </Tabs>
@@ -388,8 +395,9 @@ export default function Constructor({
               }}
             />
           )}
-          {view === "input-list" && <InputListTable setupId={setupId} />}
-          {view === "rider" && <RiderTable setupId={setupId} />}
+          {view === "input-list" && <InputListTable setupId={setupId} devices={graph.devices} />}
+          {view === "rider" && <RiderTable setupId={setupId} devices={graph.devices} />}
+          {view === "checklist" && <StaffChecklist devices={graph.devices} setupId={setupId} />}
         </div>
 
         <button
@@ -464,7 +472,22 @@ export default function Constructor({
   );
 }
 
-function InputListTable({ setupId }: { setupId: string }) {
+function DevicePhotoCell({ name, devices }: { name: string; devices?: GraphDevice[] }) {
+  const match = devices?.find((d) => d.name === name || name.includes(d.name) || d.name.includes(name));
+  if (match?.imageUrl) {
+    const isStorage = !match.imageUrl.startsWith('data:') && !/^https?:\/\//i.test(match.imageUrl);
+    const src = isStorage ? `/img/${match.imageUrl}?w=128` : match.imageUrl;
+    return (
+      <div className="flex items-center gap-2">
+        <img src={src} alt="" className="h-8 w-8 shrink-0 rounded object-contain bg-black/20 p-0.5 border border-default-200" />
+        <span className="font-medium">{name}</span>
+      </div>
+    );
+  }
+  return <span className="font-medium">{name}</span>;
+}
+
+function InputListTable({ setupId, devices }: { setupId: string; devices?: GraphDevice[] }) {
   const query = useQuery({
     queryKey: ["input-list", setupId],
     queryFn: () => api.getInputList(setupId),
@@ -504,9 +527,14 @@ function InputListTable({ setupId }: { setupId: string }) {
             <Table.Body>
               {query.data.map((r) => (
                 <Table.Row key={r.channel}>
-                  {columns.map((c) => (
-                    <Table.Cell key={c.key}>{String(r[c.key])}</Table.Cell>
-                  ))}
+                  <Table.Cell>{r.channel}</Table.Cell>
+                  <Table.Cell>
+                    <DevicePhotoCell name={r.sourceName} devices={devices} />
+                  </Table.Cell>
+                  <Table.Cell>{r.connector}</Table.Cell>
+                  <Table.Cell>{r.routing}</Table.Cell>
+                  <Table.Cell>{r.zone}</Table.Cell>
+                  <Table.Cell>{r.owner}</Table.Cell>
                 </Table.Row>
               ))}
             </Table.Body>
@@ -517,7 +545,7 @@ function InputListTable({ setupId }: { setupId: string }) {
   );
 }
 
-function RiderTable({ setupId }: { setupId: string }) {
+function RiderTable({ setupId, devices }: { setupId: string; devices?: GraphDevice[] }) {
   const query = useQuery({
     queryKey: ["rider", setupId],
     queryFn: () => api.getRider(setupId),
@@ -551,7 +579,9 @@ function RiderTable({ setupId }: { setupId: string }) {
               {query.data.map((r: RiderRow, i: number) => (
                 <Table.Row key={i}>
                   <Table.Cell>{r.category}</Table.Cell>
-                  <Table.Cell>{r.name}</Table.Cell>
+                  <Table.Cell>
+                    <DevicePhotoCell name={r.name} devices={devices} />
+                  </Table.Cell>
                   <Table.Cell>{r.quantity}</Table.Cell>
                   <Table.Cell>{r.isUserOwned ? "наше" : "площадка"}</Table.Cell>
                   <Table.Cell>{r.note ?? ""}</Table.Cell>

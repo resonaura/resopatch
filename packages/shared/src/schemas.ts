@@ -61,6 +61,7 @@ export const createDeviceSchema = z.object({
   power: powerProfileSchema.default({}),
   pedal: pedalProfileSchema.optional(),
   imageUrl: z.string().optional(),
+  imageUrls: z.array(z.string()).optional(),
   notes: z.string().optional(),
   attrs: z.record(z.string(), z.unknown()).default({}),
 });

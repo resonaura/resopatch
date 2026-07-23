@@ -7,12 +7,15 @@ import { DeviceTypeIcon } from '../lib/deviceIcons';
 
 /** Same fallback-to-type-icon convention as DeviceNode's thumbnail — kept as its own tiny
  *  component here rather than shared, since Sidebar and DeviceNode intentionally have no
- *  dependency on each other's internals. */
+ *  dependency on each other's internals. Storage images are fetched through /img/?w=64
+ *  so the browser doesn't download a full-res photo just to show a 16×16 icon. */
 function DeviceThumb({ device, className }: { device: Pick<GraphDevice, 'imageUrl' | 'type'>; className: string }) {
   if (device.imageUrl) {
-    return <img src={device.imageUrl} alt="" className={`shrink-0 rounded object-cover ${className}`} />;
+    const isStorage = !device.imageUrl.startsWith('data:') && !/^https?:\/\//i.test(device.imageUrl);
+    const src = isStorage ? `/img/${device.imageUrl}?w=128` : device.imageUrl;
+    return <img src={src} alt="" className={`shrink-0 aspect-square rounded object-contain bg-black/20 p-0.5 ${className}`} />;
   }
-  return <DeviceTypeIcon type={device.type} className={`shrink-0 text-default-500 ${className}`} />;
+  return <DeviceTypeIcon type={device.type} className={`shrink-0 aspect-square text-default-500 ${className}`} />;
 }
 
 const GROUPS: { status: string; title: string }[] = [
@@ -89,7 +92,7 @@ export default function Sidebar({
                         selectedId === d.id ? 'border-l-accent bg-surface-secondary' : 'border-l-transparent'
                       }`}
                     >
-                      <DeviceThumb device={d} className="h-4 w-4" />
+                      <DeviceThumb device={d} className="h-7 w-7" />
                       <span className="truncate">{d.name}</span>
                     </button>
                   ))}

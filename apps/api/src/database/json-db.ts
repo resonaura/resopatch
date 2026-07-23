@@ -174,6 +174,7 @@ export const devicesRepo = new JsonRepository<Device>(
       pedalHasMidiControl: null,
       pedalSmartModes: null,
       imageUrl: null,
+      imageUrls: null,
       notes: null,
       attrs: {},
     }) as Partial<Device>,
