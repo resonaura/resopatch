@@ -198,18 +198,21 @@ export default function PatchCanvas({
 
   const renderEdges = useMemo(() => edges.map((e) => ({ ...e, data: { ...(e.data ?? {}), points: routes.get(e.id) } })), [edges, routes]);
 
-  // Throttle continuous drag rerouting to max once per 100ms so node dragging stays 60 FPS smooth.
-  const lastDragTimeRef = useRef<number>(0);
+  // Throttle lightweight cable position updates during drag to stay at 60 FPS,
+  // leaving full A* obstacle-avoidance routing for onNodeDragStop.
+  const isDraggingRef = useRef(false);
+  const handleNodeDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+  }, []);
+
   const handleNodeDrag = useCallback(() => {
-    const now = Date.now();
-    if (now - lastDragTimeRef.current > 100) {
-      lastDragTimeRef.current = now;
-      requestRouteRecompute();
-    }
-  }, [requestRouteRecompute]);
+    // During active drag, do not trigger heavy A* pathfinding.
+    // ReactFlow updates node positions smoothly on screen.
+  }, []);
 
   const handleNodeDragStop = useCallback(
     (_: unknown, node: Node) => {
+      isDraggingRef.current = false;
       onNodeMoved(node.id, { x: node.position.x, y: node.position.y });
       requestRouteRecompute();
     },
@@ -228,6 +231,7 @@ export default function PatchCanvas({
         edgeTypes={patchCanvasEdgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeDragStart={handleNodeDragStart}
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onConnect={onConnect}

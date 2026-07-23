@@ -15,15 +15,11 @@ import {
   Wand2,
 } from "lucide-react";
 import {
-  CABLE_COLORS,
-  CABLE_DASH,
-  CABLE_WIDTH_SCALE,
-  CableType,
-  getPowerCableStyle,
   type InputListRow,
   type PortDto,
   type RiderRow,
 } from "@resopatch/shared";
+import { graphCableToEdge } from "../lib/graphCableToEdge";
 import { api, type GraphDevice } from "../api/client";
 import type { DeviceNodeData } from "../components/DeviceNode";
 import PatchCanvas from "../components/PatchCanvas";
@@ -171,75 +167,21 @@ export default function Constructor({
     return map;
   }, [graph]);
 
+  const portById = useMemo(() => {
+    const map = new Map<string, GraphDevice['ports'][number]>();
+    for (const d of graph?.devices ?? []) {
+      for (const p of d.ports) map.set(p.id, p);
+    }
+    return map;
+  }, [graph]);
+
   const initialEdges: Edge[] = useMemo(
     () =>
       mainGraph.externalCables.map((cable) => {
         const isSelected = selection?.kind === "cable" && selection.id === cable.id;
-        const sPort = graph?.devices.flatMap((d) => d.ports).find((p) => p.id === cable.sourcePortId);
-        const tPort = graph?.devices.flatMap((d) => d.ports).find((p) => p.id === cable.targetPortId);
-        const sDev = deviceByPortId.get(cable.sourcePortId);
-        const tDev = deviceByPortId.get(cable.targetPortId);
-
-        const voltage = sPort?.power.voltageV ?? tPort?.power.voltageV ?? sDev?.power.voltageV ?? tDev?.power.voltageV;
-        const currentType = sPort?.power.currentType ?? tPort?.power.currentType ?? sDev?.power.currentType ?? tDev?.power.currentType;
-
-        let stroke = CABLE_COLORS[cable.cableType];
-        let widthScale = CABLE_WIDTH_SCALE[cable.cableType];
-        let dash = CABLE_DASH[cable.cableType];
-
-        if (cable.cableType === CableType.POWER_LINE) {
-          const portType = sPort?.portType ?? tPort?.portType;
-          const devType = sDev?.type ?? tDev?.type;
-          const powerStyle = getPowerCableStyle(voltage, currentType, portType, devType);
-          stroke = powerStyle.stroke;
-          widthScale = powerStyle.widthScale;
-          dash = powerStyle.dash ?? dash;
-        }
-
-        const sIsMains = sPort?.portType === 'POWER_SCHUKO' || sPort?.portType === 'POWER_IEC' || sDev?.type === 'POWER_STRIP';
-        const tIsMains = tPort?.portType === 'POWER_SCHUKO' || tPort?.portType === 'POWER_IEC' || tDev?.type === 'POWER_STRIP';
-        const isPowerAdapter = cable.cableType === CableType.POWER_LINE && ((sIsMains && !tIsMains) || (tIsMains && !sIsMains));
-
-        let powerConverter = null;
-        if (isPowerAdapter) {
-          const targetVoltage = tPort?.power.voltageV ?? sPort?.power.voltageV ?? tDev?.power.voltageV ?? sDev?.power.voltageV ?? 9;
-          const targetCurrent = tPort?.power.currentType ?? sPort?.power.currentType ?? tDev?.power.currentType ?? sDev?.power.currentType ?? 'DC';
-          const styleInfo = getPowerCableStyle(targetVoltage, targetCurrent, null, null);
-          powerConverter = {
-            fromVoltage: '120V AC',
-            toVoltage: `${targetVoltage}V ${targetCurrent}`,
-            adapterName: 'БП',
-            dcColor: styleInfo.stroke,
-          };
-          if (styleInfo.dash) dash = styleInfo.dash;
-        }
-
-        return {
-          id: cable.id,
-          source: portToDevice.get(cable.sourcePortId) ?? "",
-          sourceHandle: cable.sourcePortId,
-          target: portToDevice.get(cable.targetPortId) ?? "",
-          targetHandle: cable.targetPortId,
-          label: cable.color ?? undefined,
-          selected: isSelected,
-          type: "routed",
-          data: {
-            powerConverter,
-            texture:
-              cable.textureStartUrl || cable.textureEndUrl || cable.textureMiddleUrl
-                ? { start: cable.textureStartUrl, end: cable.textureEndUrl, middle: cable.textureMiddleUrl }
-                : undefined,
-          },
-          style: {
-            stroke,
-            strokeWidth: (isSelected ? 3 : 1.5) * widthScale,
-            strokeDasharray: dash,
-          },
-          animated: cable.cableType === CableType.CONTROL_LINK,
-          zIndex: isSelected ? 1 : 0,
-        };
+        return graphCableToEdge(cable, portById, deviceByPortId, portToDevice, { selected: isSelected });
       }),
-    [mainGraph.externalCables, portToDevice, selection, graph, deviceByPortId],
+    [mainGraph.externalCables, portToDevice, portById, deviceByPortId, selection],
   );
 
   const movePosition = useMutation({
