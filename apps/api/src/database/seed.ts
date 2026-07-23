@@ -1089,12 +1089,13 @@ async function main() {
   await mkCable({ sourcePortId: pedalPorts[2].out.id, targetPortId: danyaVComboIn.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.5 });
 
   const e835s = await mkDevice({
-    name: 'Sennheiser e835s (на комбик Дани-вокала)',
+    name: 'Sennheiser e835s (микрофон комбика)',
     type: DeviceType.MICROPHONE,
     ownerRole: 'Даня-вокал',
-    position: { x: 850, y: 480 },
+    parentDeviceId: danyaVCombo.id,
+    position: { x: 1050, y: 480 },
     imageUrl: 'dan-vocalist-guitar-amp-mic.webp',
-    notes: 'Целевое состояние по rider.md (CH11) — не успели поставить на первом лайве, обкатать вживую (docs/stage-setup.md §2.2).',
+    notes: 'Целевое состояние по rider.md (CH11) — стойка с микрофоном расположена перед диффузором комбика.',
   });
   const e835sOut = await mkPort(e835s, { name: 'Out', portType: PortType.XLR_M, direction: PortDirection.OUT });
   await mkFurniture({ deviceId: e835s.id, kind: FurnitureKind.MIC_STAND, isVenueProvided: true });

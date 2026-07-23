@@ -495,7 +495,7 @@ export default function Inspector({
 }) {
   if (!selection) {
     return (
-      <div className="min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-4 text-sm text-default-500">
+      <div className="h-full min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-4 text-sm text-default-500">
         Выбери устройство или кабель на канвасе.
         <br />
         <br />
@@ -511,7 +511,7 @@ export default function Inspector({
     if (!device) return null;
     const children = graph.devices.filter((d) => d.parentDeviceId === device.id);
     return (
-      <div className="min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
+      <div className="h-full min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
         <h3 className="mb-2.5 text-sm font-semibold">{device.name}</h3>
         <RiderSpecSheet key={`${device.id}-rider`} device={device} />
         <div className="mt-3">
@@ -531,7 +531,7 @@ export default function Inspector({
   const cable = graph.cables.find((c) => c.id === selection.id);
   if (!cable) return null;
   return (
-    <div className="min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
+    <div className="h-full min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
       <h3 className="mb-2.5 text-sm font-semibold">Кабель</h3>
       <CableForm key={cable.id} cable={cable} setupId={setupId} graph={graph} />
     </div>

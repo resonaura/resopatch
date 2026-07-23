@@ -14,7 +14,6 @@ const FONTAUDIO_ICON: Partial<Record<string, string>> = {
   [DeviceType.VOCAL_PROCESSOR]: 'fad:modsine',
   [DeviceType.MIDI_DEVICE]: 'fad:midiplug',
   [DeviceType.PEDAL]: 'fad:roundswitch-on',
-  [DeviceType.PEDALBOARD]: 'fad:drumpad',
   [DeviceType.POWER_SUPPLY]: 'fad:powerswitch',
   [DeviceType.POWER_SPLITTER]: 'fad:modularplug',
   [DeviceType.POWER_STRIP]: 'fad:thunderbolt',
@@ -32,9 +31,24 @@ const LUCIDE_ICON: Partial<Record<string, LucideIcon>> = {
   [DeviceType.ACCESSORY]: Package,
 };
 
+function PedalboardIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <rect x="4.5" y="9.5" width="4" height="5" rx="0.5" fill="currentColor" fillOpacity="0.25" />
+      <rect x="10" y="9.5" width="4" height="5" rx="0.5" fill="currentColor" fillOpacity="0.25" />
+      <rect x="15.5" y="9.5" width="4" height="5" rx="0.5" fill="currentColor" fillOpacity="0.25" />
+      <circle cx="6.5" cy="8" r="0.75" fill="currentColor" />
+      <circle cx="12" cy="8" r="0.75" fill="currentColor" />
+      <circle cx="17.5" cy="8" r="0.75" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function DeviceTypeIcon({ type, className }: { type: string; className?: string }) {
-  const fontaudioIcon = FONTAUDIO_ICON[type];
   const combinedClass = `shrink-0 aspect-square inline-block ${className ?? 'h-3.5 w-3.5'}`;
+  if (type === DeviceType.PEDALBOARD) return <PedalboardIcon className={combinedClass} />;
+  const fontaudioIcon = FONTAUDIO_ICON[type];
   if (fontaudioIcon) return <Icon icon={fontaudioIcon} className={combinedClass} />;
   const LucideFallback = LUCIDE_ICON[type] ?? Mic2;
   return <LucideFallback className={combinedClass} strokeWidth={2} />;

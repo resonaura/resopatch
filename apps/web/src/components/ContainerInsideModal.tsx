@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Button, Modal } from '@heroui/react';
 import { Layers, Plus, X } from 'lucide-react';
 import type { Connection } from '@xyflow/react';
 import type { GraphCable, GraphDevice } from '../api/client';
 import { containerInternalGraph } from '../lib/containerGraph';
 import PatchCanvas from './PatchCanvas';
+import Inspector, { type Selection } from './Inspector';
 import { CABLE_COLORS, CABLE_DASH, CABLE_WIDTH_SCALE, CableType, DeviceType, InventoryStatus, getPowerCableStyle } from '@resopatch/shared';
 import type { Node, Edge } from '@xyflow/react';
 import type { DeviceNodeData } from './DeviceNode';
@@ -94,6 +95,7 @@ export default function ContainerInsideModal({
   onConnect,
   onNodeMoved,
 }: ContainerInsideModalProps) {
+  const [modalSelection, setModalSelection] = useState<Selection>(null);
   const { nodes: childDevices, cables: internalCables } = useMemo(
     () => containerInternalGraph(allDevices, allCables, containerDevice.id),
     [allDevices, allCables, containerDevice.id],
@@ -347,28 +349,45 @@ export default function ContainerInsideModal({
                 </Button>
               </div>
             </div>
-            <div className="relative min-h-0 flex-1 p-0 overflow-hidden bg-background">
-              {childDevices.length === 0 ? (
-                <div className="flex h-full flex-col items-center justify-center gap-3 text-default-500">
-                  <p>В этом педалборде пока нет устройств.</p>
-                  <Button size="sm" onPress={() => onAddChild(containerDevice.id)}>
-                    <Plus className="h-4 w-4" />
-                    Добавить устройство
-                  </Button>
-                </div>
-              ) : (
-                <PatchCanvas
-                  nodes={nodes}
-                  edges={edges}
-                  onNodeClick={onSelectChild}
-                  onEdgeClick={() => {}}
-                  onPaneClick={() => {}}
-                  onConnect={onConnect}
-                  onNodeMoved={onNodeMoved}
-                  minimap={false}
-                  fitPadding={0.06}
+            <div className="flex min-h-0 flex-1 overflow-hidden bg-background">
+              <div className="relative min-h-0 flex-1 p-0 overflow-hidden">
+                {childDevices.length === 0 ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-3 text-default-500">
+                    <p>В этом педалборде пока нет устройств.</p>
+                    <Button size="sm" onPress={() => onAddChild(containerDevice.id)}>
+                      <Plus className="h-4 w-4" />
+                      Добавить устройство
+                    </Button>
+                  </div>
+                ) : (
+                  <PatchCanvas
+                    nodes={nodes}
+                    edges={edges}
+                    onNodeClick={(id) => {
+                      setModalSelection({ kind: 'device', id });
+                      onSelectChild(id);
+                    }}
+                    onEdgeClick={(id) => setModalSelection({ kind: 'cable', id })}
+                    onPaneClick={() => setModalSelection(null)}
+                    onConnect={onConnect}
+                    onNodeMoved={onNodeMoved}
+                    minimap={false}
+                    fitPadding={0.06}
+                  />
+                )}
+              </div>
+              <div className="w-[320px] h-full flex-none overflow-hidden border-l border-default-200 bg-surface">
+                <Inspector
+                  graph={{ devices: allDevices, cables: allCables, adapters: [] }}
+                  selection={modalSelection ?? { kind: 'device', id: containerDevice.id }}
+                  setupId={containerDevice.setupId}
+                  onAddChild={onAddChild}
+                  onSelectDevice={(id) => {
+                    setModalSelection({ kind: 'device', id });
+                    onSelectChild(id);
+                  }}
                 />
-              )}
+              </div>
             </div>
           </Modal.Dialog>
         </Modal.Container>
