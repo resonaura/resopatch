@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Chip, Disclosure } from '@heroui/react';
-import { ListChecks, ScrollText, SlidersHorizontal, ToggleLeft, Zap } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ListChecks, ScrollText, SlidersHorizontal, ToggleLeft, Zap } from 'lucide-react';
 import { DeviceType, PortDirection, type PowerProfile } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
 import { ProgressiveImage } from '../lib/img';
@@ -31,6 +31,83 @@ function formatPower(power: PowerProfile): string | null {
   return parts.length > 0 ? parts.join(', ') : null;
 }
 
+function RiderImageBanner({ device }: { device: GraphDevice }) {
+  if (device.type === DeviceType.PEDALBOARD) return null;
+
+  const urls: string[] = device.imageUrls?.length
+    ? device.imageUrls
+    : device.imageUrl
+    ? [device.imageUrl]
+    : [];
+
+  if (urls.length === 0) return null;
+
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const prev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((i) => (i === 0 ? urls.length - 1 : i - 1));
+  };
+
+  const next = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((i) => (i === urls.length - 1 ? 0 : i + 1));
+  };
+
+  return (
+    <div className="group relative w-full overflow-hidden rounded-md border border-default-200 bg-black/30 h-44">
+      <div
+        className="flex h-full w-full transition-transform duration-300 ease-in-out"
+        style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+      >
+        {urls.map((url, i) => {
+          const isStorage = !url.startsWith('data:') && !/^https?:\/\//i.test(url);
+          return (
+            <div key={url} className="relative flex-1 h-full w-full shrink-0 flex-none flex items-center justify-center p-2">
+              {isStorage ? (
+                <ProgressiveImage src={url} alt={`${device.name} view ${i + 1}`} className="h-full w-full max-h-full max-w-full" objectFit="contain" />
+              ) : (
+                <img src={url} alt="" className="max-h-full max-w-full object-contain m-auto" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {urls.length > 1 && (
+        <>
+          <button
+            onClick={prev}
+            className="absolute left-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white shadow transition-all hover:bg-black hover:scale-105 active:scale-95"
+            title="Предыдущий вид"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={next}
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white shadow transition-all hover:bg-black hover:scale-105 active:scale-95"
+            title="Следующий вид"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+          <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-black/75 px-2 py-0.5 shadow">
+            {urls.map((_, i) => (
+              <span
+                key={i}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentIndex(i);
+                }}
+                className={`h-1.5 cursor-pointer rounded-full transition-all ${i === currentIndex ? 'w-3.5 bg-accent' : 'w-1.5 bg-white/40 hover:bg-white'}`}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** Read-only "technical passport" for a device — every input/output, its electrical spec, knobs,
  *  footswitch behavior and effect list, in one glance. This is the app's answer to "click a node,
  *  see the full rider spec": rather than a second modal stacked on top of the inspector (which
@@ -59,22 +136,7 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
       </Disclosure.Heading>
       <Disclosure.Content>
         <div className="flex flex-col gap-3 pb-3 text-xs">
-          {device.type !== DeviceType.PEDALBOARD && (device.imageUrl || (device.imageUrls && device.imageUrls.length > 0)) && (
-            <div className="flex w-full overflow-hidden rounded-md border border-default-200 bg-black/30 h-36">
-              {(device.imageUrls?.length ? device.imageUrls : [device.imageUrl!]).map((url) => {
-                const isStorage = !url.startsWith('data:') && !/^https?:\/\//i.test(url);
-                return (
-                  <div key={url} className="relative flex-1 h-full flex items-center justify-center p-1">
-                    {isStorage ? (
-                      <ProgressiveImage src={url} alt={device.name} className="h-full w-full max-h-full max-w-full" objectFit="contain" />
-                    ) : (
-                      <img src={url} alt="" className="max-h-full max-w-full object-contain m-auto" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <RiderImageBanner device={device} />
           {(manufacturer || model) && (
             <div className="text-default-500">
               {[manufacturer, model].filter(Boolean).join(' — ')}

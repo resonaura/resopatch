@@ -76,27 +76,36 @@ function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 
 
   return (
     <div className="group relative w-full overflow-hidden border-b border-default-200/60 bg-black/20" style={{ height: '140px' }}>
-      {/* Current view */}
-      <BannerImage url={urls[currentIndex]} alt={`${device.name} view ${currentIndex + 1}`} isOnly={true} />
+      {/* Sliding Track */}
+      <div
+        className="flex h-full w-full transition-transform duration-300 ease-in-out"
+        style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+      >
+        {urls.map((url, i) => (
+          <div key={url} className="h-full w-full shrink-0 flex-none">
+            <BannerImage url={url} alt={`${device.name} view ${i + 1}`} isOnly={true} />
+          </div>
+        ))}
+      </div>
 
       {/* Prev/Next arrows */}
       <button
         onClick={prev}
-        className="absolute left-1 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-80 shadow transition-opacity hover:opacity-100 hover:bg-black"
+        className="absolute left-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white shadow transition-all hover:bg-black hover:scale-105 active:scale-95"
         title="Предыдущий вид"
       >
         <ChevronLeft className="h-3.5 w-3.5" />
       </button>
       <button
         onClick={next}
-        className="absolute right-1 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-80 shadow transition-opacity hover:opacity-100 hover:bg-black"
+        className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white shadow transition-all hover:bg-black hover:scale-105 active:scale-95"
         title="Следующий вид"
       >
         <ChevronRight className="h-3.5 w-3.5" />
       </button>
 
       {/* Slide Dots */}
-      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-black/70 px-2 py-0.5 shadow">
+      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-black/75 px-2 py-0.5 shadow">
         {urls.map((_, i) => (
           <span
             key={i}
@@ -104,7 +113,7 @@ function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 
               e.stopPropagation();
               setCurrentIndex(i);
             }}
-            className={`h-1.5 cursor-pointer rounded-full transition-all ${i === currentIndex ? 'w-3 bg-accent' : 'w-1.5 bg-white/40 hover:bg-white'}`}
+            className={`h-1.5 cursor-pointer rounded-full transition-all ${i === currentIndex ? 'w-3.5 bg-accent' : 'w-1.5 bg-white/40 hover:bg-white'}`}
           />
         ))}
       </div>

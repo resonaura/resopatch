@@ -260,15 +260,34 @@ export function computeAutoLayout(
   };
 
   place(andrey, 0, 0);
-  const centerX = andrey.width + ZONE_GAP_X;
-  place(barabanschik, centerX, 0);
-  place(vokal, centerX, barabanschik.height + ZONE_GAP_Y);
-  const centerWidth = Math.max(barabanschik.width, vokal.width);
-  const serviceX = centerX + centerWidth + ZONE_GAP_X;
+  const vokalX = andrey.width > 0 ? andrey.width + ZONE_GAP_X : 0;
+  place(vokal, vokalX, 0);
+  const drumsX = vokalX + (vokal.width > 0 ? vokal.width + ZONE_GAP_X : 0);
+  place(barabanschik, drumsX, 0);
+  const serviceX = drumsX + (barabanschik.width > 0 ? barabanschik.width + ZONE_GAP_X : 0);
   place(service, serviceX, 0);
 
-  const tallestColumn = Math.max(andrey.height, barabanschik.height + ZONE_GAP_Y + vokal.height, service.height);
+  const tallestColumn = Math.max(andrey.height, vokal.height, barabanschik.height, service.height);
   place(inactive, 0, tallestColumn + ZONE_GAP_Y);
+
+  // Ensure amp microphone (Sennheiser e835s) sits directly next to Danya-vocal's guitar combo amp (Egnater Tweaker 40W)
+  const egnaterCombo = mainDevices.find(
+    (d) => d.name.includes('Egnater') || (d.ownerRole === 'Даня-вокал' && d.type === DeviceType.AMPLIFIER),
+  );
+  const ampMicDev = mainDevices.find(
+    (d) => d.name.includes('e835s') || d.name.includes('комбика') || (d.name.includes('Sennheiser') && d.ownerRole === 'Даня-вокал'),
+  );
+
+  if (egnaterCombo && ampMicDev) {
+    const comboPos = positions.get(egnaterCombo.id);
+    if (comboPos) {
+      const comboSize = sizedOf(egnaterCombo.id);
+      positions.set(ampMicDev.id, {
+        x: comboPos.x + comboSize.width + 60,
+        y: comboPos.y,
+      });
+    }
+  }
 
   const childrenByParent = new Map<string, Device[]>();
   for (const d of devices) {
