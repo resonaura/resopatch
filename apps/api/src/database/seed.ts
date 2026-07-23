@@ -137,18 +137,39 @@ async function main() {
 
   // ---------------------------------------------------------------------------------------
   // Power infrastructure: the venue's own wall outlet (root of the whole power graph — both
-  // Ankers plug into it, or into whatever the venue actually gives us on the day), two Anker
-  // strips (one per side of stage), + Andrey's isolated pedalboard PSU. See docs/stage-setup.md §5.
   // ---------------------------------------------------------------------------------------
-  const venueOutlet = await mkDevice({
-    name: 'Розетка площадки',
+  // Power infrastructure: two venue wall outlets (one per side) + two Anker extension cords
+  // (one per side of stage), + Andrey's isolated pedalboard PSU. See docs/stage-setup.md §5.
+  // ---------------------------------------------------------------------------------------
+  const venueOutlet1 = await mkDevice({
+    name: 'Розетка площадки (сторона Андрея)',
     type: DeviceType.POWER_STRIP,
+    ownerRole: 'Андрей',
     inventoryStatus: InventoryStatus.VENUE_PROVIDED,
-    position: { x: -600, y: 850 },
-    notes: 'Стена/щиток площадки — куда физически втыкаются оба удлинителя Anker. Количество и тип розеток на месте не гарантированы (docs/stage-setup.md §5.1).',
+    position: { x: -600, y: 250 },
+    notes: 'Стена/щиток площадки — куда втыкается удлинитель Anker стороны Андрея.',
   });
-  const venueOutlet1 = await mkPort(venueOutlet, { name: 'Розетка 1 (→ Anker, сторона Андрея)', portType: PortType.POWER_SCHUKO, direction: PortDirection.OUT, power: { currentType: CurrentType.AC } });
-  const venueOutlet2 = await mkPort(venueOutlet, { name: 'Розетка 2 (→ Anker, сторона Дани-вокала)', portType: PortType.POWER_SCHUKO, direction: PortDirection.OUT, power: { currentType: CurrentType.AC } });
+  const venueOutlet1Port = await mkPort(venueOutlet1, {
+    name: 'Розетка',
+    portType: PortType.POWER_SCHUKO,
+    direction: PortDirection.OUT,
+    power: { currentType: CurrentType.AC },
+  });
+
+  const venueOutlet2 = await mkDevice({
+    name: 'Розетка площадки (сторона Дани-вокала)',
+    type: DeviceType.POWER_STRIP,
+    ownerRole: 'Даня-вокал',
+    inventoryStatus: InventoryStatus.VENUE_PROVIDED,
+    position: { x: 600, y: 850 },
+    notes: 'Стена/щиток площадки — куда втыкается удлинитель Anker стороны Дани-вокала.',
+  });
+  const venueOutlet2Port = await mkPort(venueOutlet2, {
+    name: 'Розетка',
+    portType: PortType.POWER_SCHUKO,
+    direction: PortDirection.OUT,
+    power: { currentType: CurrentType.AC },
+  });
 
   const anker1 = await mkDevice({
     name: 'Anker Surge Protector 2000J — сторона Андрея',
@@ -210,8 +231,8 @@ async function main() {
   await mkPort(anker2, { name: 'USB-A #2', portType: PortType.USB_A, direction: PortDirection.OUT, power: { maxOutputPowerW: 12 } });
   await mkPort(anker2, { name: 'USB-C (PD)', portType: PortType.USB_C, direction: PortDirection.OUT, power: { maxOutputPowerW: 20 } });
 
-  await mkCable({ sourcePortId: venueOutlet1.id, targetPortId: anker1Plug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'white' });
-  await mkCable({ sourcePortId: venueOutlet2.id, targetPortId: anker2Plug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'white' });
+  await mkCable({ sourcePortId: venueOutlet1Port.id, targetPortId: anker1Plug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'white' });
+  await mkCable({ sourcePortId: venueOutlet2Port.id, targetPortId: anker2Plug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'white' });
 
   // ---------------------------------------------------------------------------------------
   // Andrey — stage left. Guitar/bass → pedalboard → UMC404HD, plus his personal post-gig-1

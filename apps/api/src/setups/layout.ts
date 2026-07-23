@@ -289,6 +289,22 @@ export function computeAutoLayout(
     }
   }
 
+  // Pin venue wall outlets directly next to their respective Anker extension cords
+  for (const role of ['Андрей', 'Даня-вокал']) {
+    const anker = mainDevices.find((d) => d.name.includes('Anker') && d.ownerRole === role);
+    const outlet = mainDevices.find((d) => d.name.includes('Розетка площадки') && d.ownerRole === role);
+    if (anker && outlet) {
+      const ankerPos = positions.get(anker.id);
+      if (ankerPos) {
+        const outletSize = sizedOf(outlet.id);
+        positions.set(outlet.id, {
+          x: Math.max(0, ankerPos.x - outletSize.width - 60),
+          y: ankerPos.y,
+        });
+      }
+    }
+  }
+
   const childrenByParent = new Map<string, Device[]>();
   for (const d of devices) {
     if (!d.parentDeviceId) continue;
