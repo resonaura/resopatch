@@ -105,6 +105,15 @@ export default function Constructor({
     if (selection) setInspectorOpen(true);
   }, [selection]);
 
+  const connectedPortIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of graph?.cables ?? []) {
+      set.add(c.sourcePortId);
+      set.add(c.targetPortId);
+    }
+    return set;
+  }, [graph]);
+
   const initialNodes: Node[] = useMemo(
     () =>
       (graph?.devices ?? [])
@@ -124,6 +133,7 @@ export default function Constructor({
               device,
               children: childrenByParent.get(device.id) ?? [],
               boundaryPorts,
+              connectedPortIds,
               onSelectChild,
               onOpenInside: (id: string) => setInsideContainerId(id),
             } satisfies DeviceNodeData,
@@ -136,6 +146,7 @@ export default function Constructor({
       mainGraph,
       childrenByParent,
       deviceByPortId,
+      connectedPortIds,
       onSelectChild,
       selection,
     ],

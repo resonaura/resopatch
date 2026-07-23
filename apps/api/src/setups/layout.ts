@@ -233,7 +233,16 @@ export function computeAutoLayout(
 
   const mainDevices = devices.filter((d) => !d.parentDeviceId);
 
-  const sizeOf = (id: string) => sizes.get(id) ?? { width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT };
+  const sizeOf = (id: string) => {
+    const dev = deviceById.get(id);
+    const measured = sizes.get(id);
+    const portCount = dev ? ports.filter((p) => p.deviceId === dev.id).length : 0;
+    const hasImage = dev && dev.type !== DeviceType.PEDALBOARD && (dev.imageUrl || (dev.imageUrls && dev.imageUrls.length > 0));
+    const minHeight = (hasImage ? 140 : 0) + 60 + portCount * 23;
+    const height = Math.max(measured?.height ?? FALLBACK_HEIGHT, minHeight);
+    const width = Math.max(measured?.width ?? FALLBACK_WIDTH, 240);
+    return { width, height };
+  };
   const sizedOf = (id: string): SizedDevice => ({ id, ...sizeOf(id) });
 
   const groups: Record<ZoneName, Device[]> = { andrey: [], barabanschik: [], vokal: [], service: [], inactive: [] };

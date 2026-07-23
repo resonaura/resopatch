@@ -1,7 +1,7 @@
-import { memo } from 'react';
+import { memo, useState, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Chip } from '@heroui/react';
-import { Layers } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Layers } from 'lucide-react';
 import { DeviceType, InventoryStatus, PortDirection } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
@@ -41,9 +41,8 @@ function BannerImage({ url, alt, isOnly }: { url: string; alt: string; isOnly: b
 }
 
 /** Full-width photo banner across the top of a device card. Fixed-height rectangle
- *  (max 140px) so the node is always a clean shape regardless of image aspect ratio.
- *  When `imageUrls` has multiple entries they are shown side-by-side (front + back etc).
- *  Falls back to the single `imageUrl` for devices that only have one view. */
+ *  (max 140px). When `imageUrls` has multiple entries it renders an interactive slider
+ *  allowing the user to slide left/right between all provided views. */
 function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'imageUrls' | 'name' | 'type'> }) {
   if (device.type === DeviceType.PEDALBOARD) return null;
 
@@ -55,14 +54,60 @@ function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 
 
   if (urls.length === 0) return null;
 
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  if (urls.length === 1) {
+    return (
+      <div className="flex w-full overflow-hidden border-b border-default-200/60 bg-black/20" style={{ height: '140px' }}>
+        <BannerImage url={urls[0]} alt={device.name} isOnly={true} />
+      </div>
+    );
+  }
+
+  const prev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((i) => (i === 0 ? urls.length - 1 : i - 1));
+  };
+
+  const next = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentIndex((i) => (i === urls.length - 1 ? 0 : i + 1));
+  };
+
   return (
-    <div
-      className="flex w-full overflow-hidden border-b border-default-200/60 bg-black/20"
-      style={{ height: '140px' }}
-    >
-      {urls.map((url, i) => (
-        <BannerImage key={url} url={url} alt={i === 0 ? device.name : ''} isOnly={urls.length === 1} />
-      ))}
+    <div className="group relative w-full overflow-hidden border-b border-default-200/60 bg-black/20" style={{ height: '140px' }}>
+      {/* Current view */}
+      <BannerImage url={urls[currentIndex]} alt={`${device.name} view ${currentIndex + 1}`} isOnly={true} />
+
+      {/* Prev/Next arrows */}
+      <button
+        onClick={prev}
+        className="absolute left-1 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-80 shadow transition-opacity hover:opacity-100 hover:bg-black"
+        title="Предыдущий вид"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+      </button>
+      <button
+        onClick={next}
+        className="absolute right-1 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-80 shadow transition-opacity hover:opacity-100 hover:bg-black"
+        title="Следующий вид"
+      >
+        <ChevronRight className="h-3.5 w-3.5" />
+      </button>
+
+      {/* Slide Dots */}
+      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-black/70 px-2 py-0.5 shadow">
+        {urls.map((_, i) => (
+          <span
+            key={i}
+            onClick={(e) => {
+              e.stopPropagation();
+              setCurrentIndex(i);
+            }}
+            className={`h-1.5 cursor-pointer rounded-full transition-all ${i === currentIndex ? 'w-3 bg-accent' : 'w-1.5 bg-white/40 hover:bg-white'}`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -105,10 +150,24 @@ const STATUS_COLOR: Record<string, 'success' | 'default' | 'warning' | 'accent'>
   [InventoryStatus.VENUE_PROVIDED]: 'accent',
 };
 
-function PortRow({ port, subtitle }: { port: GraphDevice['ports'][number]; subtitle?: string }) {
+function PortRow({
+  port,
+  subtitle,
+  isConnected,
+  isDimmed,
+}: {
+  port: GraphDevice['ports'][number];
+  subtitle?: string;
+  isConnected?: boolean;
+  isDimmed?: boolean;
+}) {
   const channelColor = portChannelColor(port.name);
   return (
-    <div className="relative flex items-center gap-1.5 border-b border-white/5 px-3.5 py-1.5 last:border-b-0">
+    <div
+      className={`relative flex items-center gap-1.5 border-b border-white/5 px-3.5 py-1.5 last:border-b-0 transition-opacity duration-200 ${
+        isDimmed ? 'opacity-40 hover:opacity-90' : 'opacity-100 font-medium'
+      }`}
+    >
       <Handle type="target" position={Position.Left} id={port.id} />
       <Handle type="source" position={Position.Left} id={`${port.id}-src-left`} />
       {channelColor && <span className="h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-black/40" style={{ backgroundColor: channelColor }} />}
@@ -117,8 +176,74 @@ function PortRow({ port, subtitle }: { port: GraphDevice['ports'][number]; subti
         {port.name}
         {subtitle && <span className="block truncate text-[9px] text-default-500/70">{subtitle}</span>}
       </span>
+      {isConnected && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent/80" />}
       <Handle type="source" position={Position.Right} id={port.id} />
       <Handle type="target" position={Position.Right} id={`${port.id}-tgt-right`} />
+    </div>
+  );
+}
+
+function PortsSection({
+  ports,
+  connectedPortIds,
+}: {
+  ports: GraphDevice['ports'];
+  connectedPortIds: Set<string>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const unusedCount = useMemo(() => ports.filter((p) => !connectedPortIds.has(p.id)).length, [ports, connectedPortIds]);
+  const shouldCollapse = ports.length > 4 && unusedCount > 0;
+
+  // When collapsing, only show connected ports (or top 2 if none connected).
+  // When expanded, render ALL ports in their exact array index order so their position is preserved!
+  const visiblePorts = useMemo(() => {
+    if (!shouldCollapse || expanded) return ports;
+    const connected = ports.filter((p) => connectedPortIds.has(p.id));
+    return connected.length > 0 ? connected : ports.slice(0, 2);
+  }, [ports, connectedPortIds, shouldCollapse, expanded]);
+
+  const hiddenCount = ports.length - visiblePorts.length;
+
+  return (
+    <div className="border-t border-default-200 transition-all duration-300">
+      <div className="flex flex-col">
+        {visiblePorts.map((port) => {
+          const isConnected = connectedPortIds.has(port.id);
+          return (
+            <PortRow
+              key={port.id}
+              port={port}
+              isConnected={isConnected}
+              isDimmed={!isConnected}
+            />
+          );
+        })}
+      </div>
+      {shouldCollapse && hiddenCount > 0 && !expanded && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(true);
+          }}
+          className="flex w-full items-center justify-center gap-1 py-1.5 text-[10px] font-medium text-default-400 hover:bg-white/5 hover:text-foreground transition-colors border-t border-white/5"
+        >
+          <ChevronDown className="h-3 w-3" />
+          Показать все порты ({hiddenCount} скрыто)
+        </button>
+      )}
+      {shouldCollapse && expanded && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(false);
+          }}
+          className="flex w-full items-center justify-center gap-1 py-1 text-[9.5px] font-medium text-default-500 hover:bg-white/5 hover:text-foreground transition-colors border-t border-white/5"
+        >
+          <ChevronUp className="h-3 w-3" />
+          Свернуть неиспользуемые
+        </button>
+      )}
     </div>
   );
 }
@@ -173,13 +298,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
         </Chip>
       </div>
       {device.ownerRole && <div className="px-2.5 pb-1.5 text-[10px] text-default-500">{device.ownerRole}</div>}
-      {ports.length > 0 && (
-        <div className="border-t border-default-200">
-          {ports.map((port) => (
-            <PortRow key={port.id} port={port} />
-          ))}
-        </div>
-      )}
+      {ports.length > 0 && <PortsSection ports={ports} connectedPortIds={(data.connectedPortIds as Set<string> | undefined) ?? new Set()} />}
       {isContainer && (
         <>
           {boundaryPorts.length > 0 && (

@@ -233,6 +233,15 @@ export default function ContainerInsideModal({
     return map;
   }, [displayedDevices]);
 
+  const connectedPortIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of allCables) {
+      set.add(c.sourcePortId);
+      set.add(c.targetPortId);
+    }
+    return set;
+  }, [allCables]);
+
   const nodes: Node[] = useMemo(
     () =>
       displayedDevices.map((device) => {
@@ -245,12 +254,13 @@ export default function ContainerInsideModal({
             device,
             children: isVirtual ? [] : childrenByParent.get(device.id) ?? [],
             boundaryPorts: [],
+            connectedPortIds,
             onSelectChild,
             onOpenInside: () => {},
           } satisfies DeviceNodeData,
         };
       }),
-    [displayedDevices, childrenByParent, onSelectChild],
+    [displayedDevices, childrenByParent, connectedPortIds, onSelectChild],
   );
 
   const edges: Edge[] = useMemo(
