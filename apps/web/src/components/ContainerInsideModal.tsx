@@ -70,8 +70,8 @@ export default function ContainerInsideModal({
     const signal = childDevices.filter((d) => d.type !== DeviceType.POWER_SUPPLY && d.type !== DeviceType.POWER_SPLITTER && d.type !== DeviceType.POWER_STRIP);
 
     const COLS = 4;
-    const GAP_X = 320; // 240px card + 80px gap
-    const ROW_HEIGHT = 280; // 220px card + 60px gap
+    const GAP_X = 360; // 240px card + 120px gap
+    const ROW_HEIGHT = 440; // ~250px card (including possible image banner) + 190px gap
 
     const result: GraphDevice[] = [];
 

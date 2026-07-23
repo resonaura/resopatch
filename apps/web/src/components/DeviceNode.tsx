@@ -86,10 +86,17 @@ function PortRow({ port, subtitle }: { port: GraphDevice['ports'][number]; subti
 
 /** Small square thumbnail used wherever a device needs to be told apart at a glance (node header,
  *  nested ported-child row, inventory list) — falls back to the type icon when no photo is set,
- *  so callers never need an `if (imageUrl)` branch of their own. */
+ *  so callers never need an `if (imageUrl)` branch of their own.
+ *
+ *  Storage images (relative paths into the API image store) are fetched through the
+ *  /img/ optimisation endpoint at 64 px so the browser doesn't download a full-res
+ *  photo just to render a 16 × 16 square. */
 function DeviceThumb({ device, className }: { device: Pick<GraphDevice, 'imageUrl' | 'type'>; className: string }) {
   if (device.imageUrl) {
-    return <img src={device.imageUrl} alt="" className={`shrink-0 aspect-square rounded object-contain object-center ${className}`} />;
+    const thumbSrc = isStorageImage(device.imageUrl)
+      ? `/img/${device.imageUrl}?w=64`
+      : device.imageUrl;
+    return <img src={thumbSrc} alt="" className={`shrink-0 aspect-square rounded object-contain object-center ${className}`} />;
   }
   return <DeviceTypeIcon type={device.type} className={`shrink-0 aspect-square text-default-500 ${className}`} />;
 }
@@ -115,7 +122,8 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
     >
       <DeviceImageBanner device={device} />
       <div className="flex items-center gap-1.5 px-2.5 pt-2">
-        <DeviceThumb device={device} className="h-4 w-4" />
+        {/* Hide the small thumb when there is already a full-width banner above */}
+        {!device.imageUrl && <DeviceThumb device={device} className="h-4 w-4" />}
         <span className="truncate font-semibold text-foreground" title={device.type}>
           {device.name}
         </span>
@@ -170,7 +178,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
                 className="flex items-center gap-1.5 rounded px-1 py-0.5 text-left hover:bg-white/5"
                 title={child.notes ?? child.name}
               >
-                <DeviceThumb device={child} className="h-3 w-3" />
+                <DeviceThumb device={child} className="h-5 w-5" />
                 <span className="truncate text-[10.5px] text-default-500">{child.name}</span>
               </button>
             ))}
