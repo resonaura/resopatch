@@ -1092,7 +1092,6 @@ async function main() {
     name: 'Sennheiser e835s (микрофон комбика)',
     type: DeviceType.MICROPHONE,
     ownerRole: 'Даня-вокал',
-    parentDeviceId: danyaVCombo.id,
     position: { x: 1050, y: 480 },
     imageUrl: 'dan-vocalist-guitar-amp-mic.webp',
     notes: 'Целевое состояние по rider.md (CH11) — стойка с микрофоном расположена перед диффузором комбика.',

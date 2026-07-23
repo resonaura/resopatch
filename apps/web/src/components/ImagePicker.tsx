@@ -35,13 +35,16 @@ export default function ImagePicker({
     }
   };
 
+  const isStorage = value && !value.startsWith('data:') && !/^https?:\/\//i.test(value);
+  const previewSrc = isStorage ? `/img/${value}?w=128` : value;
+
   return (
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
       <div className="flex items-start gap-2.5">
         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-default-200 bg-surface-secondary">
-          {value ? (
-            <img src={value} alt="" className="h-full w-full object-cover" />
+          {previewSrc ? (
+            <img src={previewSrc} alt="" className="h-full w-full object-contain p-0.5 bg-black/20" />
           ) : (
             <ImageOff className="h-4 w-4 text-default-500" />
           )}
