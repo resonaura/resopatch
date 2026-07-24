@@ -2,25 +2,24 @@
   "name": "@resopatch/shared",
   "version": "0.1.0",
   "private": true,
-  "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.ts",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.mjs",
-      "require": "./dist/index.js"
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts --clean",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch"
+    "build": "tsdown src/index.ts --format esm --dts --clean",
+    "dev": "tsdown src/index.ts --format esm --dts --watch --no-clean"
   },
   "dependencies": {
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "tsdown": "^0.22.14",
+    "typescript": "~6"
   }
 }

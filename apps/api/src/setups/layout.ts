@@ -1,8 +1,8 @@
 import dagre from '@dagrejs/dagre';
 import { DeviceType, InventoryStatus } from '@resopatch/shared';
-import { Device } from '../database/entities/device.entity';
-import { Cable } from '../database/entities/cable.entity';
-import { Port } from '../database/entities/port.entity';
+import { Device } from '../database/entities/device.entity.js';
+import { Cable } from '../database/entities/cable.entity.js';
+import { Port } from '../database/entities/port.entity.js';
 
 const FALLBACK_WIDTH = 260;
 const FALLBACK_HEIGHT = 240;
@@ -288,19 +288,42 @@ export function computeAutoLayout(
     }
   }
 
-  // Pin venue wall outlets directly next to their respective Anker extension cords
+  // Same idea as the amp mic above: the combo's own dedicated venue outlet is cabled straight to
+  // it (not through an Anker), so pin it directly next to the combo too rather than leaving it
+  // wherever the generic power-infra column lands it.
+  const comboOutletDev = mainDevices.find((d) => d.name.includes('Розетка площадки (комбик'));
+  if (egnaterCombo && comboOutletDev) {
+    const comboPos = positions.get(egnaterCombo.id);
+    if (comboPos) {
+      const comboSize = sizedOf(egnaterCombo.id);
+      positions.set(comboOutletDev.id, {
+        x: comboPos.x,
+        y: comboPos.y + comboSize.height + 60,
+      });
+    }
+  }
+
+  // Pin venue wall outlets, and any device's own charger/PSU node, directly next to whichever
+  // Anker extension cord they actually belong to (by owner) — otherwise power-infra devices just
+  // get shelf-packed together in rank order, with no relation to which Anker they're plugged into.
   for (const role of ['Андрей', 'Даня-вокал']) {
     const anker = mainDevices.find((d) => d.name.includes('Anker') && d.ownerRole === role);
-    const outlet = mainDevices.find((d) => d.name.includes('Розетка площадки') && d.ownerRole === role);
-    if (anker && outlet) {
-      const ankerPos = positions.get(anker.id);
-      if (ankerPos) {
-        const outletSize = sizedOf(outlet.id);
-        positions.set(outlet.id, {
-          x: Math.max(0, ankerPos.x - outletSize.width - 60),
-          y: ankerPos.y,
-        });
-      }
+    if (!anker) continue;
+    const ankerPos = positions.get(anker.id);
+    if (!ankerPos) continue;
+
+    const outlet = mainDevices.find((d) => d.name.includes('Розетка площадки') && !d.name.includes('комбик') && d.ownerRole === role);
+    let stackY = ankerPos.y;
+    if (outlet) {
+      const outletSize = sizedOf(outlet.id);
+      positions.set(outlet.id, { x: Math.max(0, ankerPos.x - outletSize.width - 60), y: stackY });
+      stackY += outletSize.height + 60;
+    }
+
+    const psu = mainDevices.find((d) => d.name.startsWith('БП ') && d.type === DeviceType.POWER_SUPPLY && d.ownerRole === role);
+    if (psu) {
+      const psuSize = sizedOf(psu.id);
+      positions.set(psu.id, { x: Math.max(0, ankerPos.x - psuSize.width - 60), y: stackY });
     }
   }
 

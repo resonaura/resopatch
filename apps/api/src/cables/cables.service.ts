@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { CableDto, CreateCableDto, UpdateCableDto, validateConnection } from '@resopatch/shared';
-import { applyCableDto, toCableDto } from '../database/mappers';
-import { adaptersRepo, cablesRepo, devicesRepo, portsRepo, In } from '../database/json-db';
+import { applyCableDto, toCableDto } from '../database/mappers.js';
+import { adaptersRepo, cablesRepo, devicesRepo, portsRepo, In } from '../database/json-db.js';
 
 @Injectable()
 export class CablesService {

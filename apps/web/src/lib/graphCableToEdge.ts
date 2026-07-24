@@ -11,6 +11,7 @@ import {
   CABLE_DASH,
   CABLE_WIDTH_SCALE,
   CableType,
+  DeviceType,
   getPowerCableStyle,
 } from '@resopatch/shared';
 import type { GraphCable, GraphDevice } from '../api/client';
@@ -56,8 +57,14 @@ export function graphCableToEdge(
     tPort?.portType === 'POWER_SCHUKO' ||
     tPort?.portType === 'POWER_IEC' ||
     tDev?.type === 'POWER_STRIP';
+  // A dedicated PowerSupply device node already renders its own card with this info —
+  // annotating the cable too would just show the same "БП" fact twice. The badge is only
+  // useful for the older pattern where a wall charger is modeled inline as a plain Adapter
+  // (see MOTU/MX400/FEX800 in seed.ts) rather than as its own node.
+  const touchesPowerSupplyNode = sDev?.type === DeviceType.POWER_SUPPLY || tDev?.type === DeviceType.POWER_SUPPLY;
   const isPowerAdapter =
     cable.cableType === CableType.POWER_LINE &&
+    !touchesPowerSupplyNode &&
     ((sIsMains && !tIsMains) || (tIsMains && !sIsMains));
 
   let powerConverter = null;

@@ -4,22 +4,22 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AdaptersModule } from './adapters/adapters.module';
-import { AuthModule } from './auth/auth.module';
-import { CablesModule } from './cables/cables.module';
-import { CacheModule } from './cache/cache.module';
-import { DatabaseModule } from './database/database.module';
-import { ImageCacheVariant } from './database/entities/image-cache-variant.entity';
-import { ImageSourceFile } from './database/entities/image-source-file.entity';
-import { DevicesModule } from './devices/devices.module';
-import { ExportModule } from './export/export.module';
-import { FurnitureModule } from './furniture/furniture.module';
-import { validateImageEnv } from './images/config';
-import { ImagesModule } from './images/images.module';
-import { ManifestModule } from './manifest/manifest.module';
-import { PortsModule } from './ports/ports.module';
-import { SetupsModule } from './setups/setups.module';
-import { WatcherModule } from './watcher/watcher.module';
+import { AdaptersModule } from './adapters/adapters.module.js';
+import { AuthModule } from './auth/auth.module.js';
+import { CablesModule } from './cables/cables.module.js';
+import { CacheModule } from './cache/cache.module.js';
+import { DatabaseModule } from './database/database.module.js';
+import { ImageCacheVariant } from './database/entities/image-cache-variant.entity.js';
+import { ImageSourceFile } from './database/entities/image-source-file.entity.js';
+import { DevicesModule } from './devices/devices.module.js';
+import { ExportModule } from './export/export.module.js';
+import { FurnitureModule } from './furniture/furniture.module.js';
+import { validateImageEnv } from './images/config.js';
+import { ImagesModule } from './images/images.module.js';
+import { ManifestModule } from './manifest/manifest.module.js';
+import { PortsModule } from './ports/ports.module.js';
+import { SetupsModule } from './setups/setups.module.js';
+import { WatcherModule } from './watcher/watcher.module.js';
 
 @Module({
   imports: [

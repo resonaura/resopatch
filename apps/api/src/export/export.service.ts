@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import puppeteer from 'puppeteer';
-import { SetupsService } from '../setups/setups.service';
+import { SetupsService } from '../setups/setups.service.js';
 
 @Injectable()
 export class ExportService {

@@ -6,8 +6,8 @@ import {
   Polarity,
   PortDirection,
   PortType,
-} from './enums';
-import { PowerProfile } from './types';
+} from './enums.js';
+import { PowerProfile } from './types.js';
 
 export interface ConnectionInput {
   sourcePortType: PortType;

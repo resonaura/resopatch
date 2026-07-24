@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
-import { SetupsModule } from '../setups/setups.module';
-import { ExportController } from './export.controller';
-import { ExportService } from './export.service';
+import { AuthModule } from '../auth/auth.module.js';
+import { SetupsModule } from '../setups/setups.module.js';
+import { ExportController } from './export.controller.js';
+import { ExportService } from './export.service.js';
 
 @Module({
   imports: [AuthModule, SetupsModule],

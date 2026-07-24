@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
-import { ImageCacheVariant } from './image-cache-variant.entity';
+import { ImageCacheVariant } from './image-cache-variant.entity.js';
 
 /**
  * One row per file under the image storage dir (device/gear photos). Separate sqlite db from

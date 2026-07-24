@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreatePortDto, PortDto, UpdatePortDto } from '@resopatch/shared';
-import { applyPortDto, toPortDto } from '../database/mappers';
-import { portsRepo } from '../database/json-db';
+import { applyPortDto, toPortDto } from '../database/mappers.js';
+import { portsRepo } from '../database/json-db.js';
 
 @Injectable()
 export class PortsService {

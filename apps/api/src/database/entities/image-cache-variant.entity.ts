@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
-import { ImageSourceFile } from './image-source-file.entity';
+import { ImageSourceFile } from './image-source-file.entity.js';
 
 @Entity('image_cache_variants')
 @Index(['sourceFile', 'variantKey'], { unique: true })

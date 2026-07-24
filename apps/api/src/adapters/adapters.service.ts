@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AdapterDto, CreateAdapterDto, UpdateAdapterDto } from '@resopatch/shared';
-import { applyAdapterDto, toAdapterDto } from '../database/mappers';
-import { adaptersRepo } from '../database/json-db';
+import { applyAdapterDto, toAdapterDto } from '../database/mappers.js';
+import { adaptersRepo } from '../database/json-db.js';
 
 @Injectable()
 export class AdaptersService {

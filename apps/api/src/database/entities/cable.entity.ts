@@ -1,7 +1,7 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, CreateDateColumn } from 'typeorm';
 import { CableType } from '@resopatch/shared';
-import { Port } from './port.entity';
-import { Adapter } from './adapter.entity';
+import { Port } from './port.entity.js';
+import { Adapter } from './adapter.entity.js';
 
 @Entity({ name: 'cables' })
 export class Cable {
@@ -45,6 +45,11 @@ export class Cable {
 
   @Column({ type: 'boolean', default: false })
   isPatchCable: boolean;
+
+  /** A plain reference photo of the cable — shown in thumbnails (e.g. the staff checklist), as
+   *  opposed to the texture fields below which are for rendering the wire's path on the canvas. */
+  @Column({ type: 'varchar', nullable: true })
+  imageUrl: string | null;
 
   /** Data URLs (or plain URLs) for a custom cable texture, split into the two end caps and the
    *  repeating middle section — bent/stamped along the routed path at render time. */

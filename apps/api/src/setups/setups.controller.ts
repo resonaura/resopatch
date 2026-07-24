@@ -1,8 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, UsePipes } from '@nestjs/common';
 import { autoLayoutSchema, createSetupSchema, updateSetupSchema } from '@resopatch/shared';
-import { AuthGuard } from '../auth/auth.guard';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { SetupsService } from './setups.service';
+import { AuthGuard } from '../auth/auth.guard.js';
+import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { SetupsService } from './setups.service.js';
 
 @UseGuards(AuthGuard)
 @Controller('setups')

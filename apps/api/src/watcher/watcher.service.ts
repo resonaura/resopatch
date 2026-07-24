@@ -2,8 +2,8 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { Interval } from '@nestjs/schedule';
 import { FSWatcher, watch } from 'chokidar';
-import { ImagePipelineConfig } from '../images/config';
-import { CacheService } from '../cache/cache.service';
+import { ImagePipelineConfig } from '../images/config.js';
+import { CacheService } from '../cache/cache.service.js';
 
 const HOURLY_MS = 60 * 60 * 1000;
 

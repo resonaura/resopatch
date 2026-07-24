@@ -2,8 +2,8 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcryptjs';
 import { ChangePasswordDto, LoginDto } from '@resopatch/shared';
-import { AuthCredential } from '../database/entities/auth-credential.entity';
-import { authRepo } from '../database/json-db';
+import { AuthCredential } from '../database/entities/auth-credential.entity.js';
+import { authRepo } from '../database/json-db.js';
 
 const DEFAULT_PASSPHRASE = 'admin';
 const SALT_ROUNDS = 10;

@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
-import { DatabaseModule } from '../database/database.module';
-import { PortsController } from './ports.controller';
-import { PortsService } from './ports.service';
+import { AuthModule } from '../auth/auth.module.js';
+import { DatabaseModule } from '../database/database.module.js';
+import { PortsController } from './ports.controller.js';
+import { PortsService } from './ports.service.js';
 
 @Module({
   imports: [AuthModule, DatabaseModule],

@@ -2,10 +2,11 @@
   "name": "@resopatch/api",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "nodemon --watch src --ext ts --exec \"node -r ts-node/register -r tsconfig-paths/register src/main.ts\"",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/main.js",
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/src/main.js",
     "seed": "tsx src/database/seed.ts"
   },
   "dependencies": {
@@ -13,16 +14,17 @@
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.28",
     "@nestjs/jwt": "^11.0.2",
-    "@nestjs/platform-express": "^11.1.28",
+    "@nestjs/platform-fastify": "^11.1.28",
     "@nestjs/schedule": "^6.0.1",
     "@nestjs/typeorm": "^11.0.3",
     "@dagrejs/dagre": "^3.0.0",
+    "@fastify/cookie": "^11.1.2",
     "@resopatch/shared": "workspace:*",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.11.1",
     "chokidar": "^4.0.3",
-    "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
+    "fastify": "^5.10.0",
     "puppeteer": "^25.3.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
@@ -32,14 +34,12 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@nestjs/cli": "^11.0.24",
+    "@swc/cli": "^0.8.1",
+    "@swc/core": "^1.15.46",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/cookie-parser": "^1.4.10",
-    "@types/express": "^5.0.6",
     "@types/node": "^26.1.1",
-    "nodemon": "^3.1.14",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
     "tsx": "^4.23.1",
-    "typescript": "^5.9.3"
+    "typescript": "~6"
   }
 }

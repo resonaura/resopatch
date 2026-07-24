@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { AuthModule } from '../auth/auth.module';
-import { DatabaseModule } from '../database/database.module';
-import { DevicesController } from './devices.controller';
-import { DevicesService } from './devices.service';
+import { AuthModule } from '../auth/auth.module.js';
+import { DatabaseModule } from '../database/database.module.js';
+import { DevicesController } from './devices.controller.js';
+import { DevicesService } from './devices.service.js';
 
 @Module({
   imports: [AuthModule, DatabaseModule],

@@ -1,4 +1,5 @@
-import { CableType } from './enums';
+import { CableType } from './enums.js';
+// race-test probe
 
 /** Apple HIG dark-mode system colors, mapped to signal types for the patch map. */
 export const CABLE_COLORS: Record<CableType, string> = {
@@ -35,6 +36,9 @@ export const CABLE_WIDTH_SCALE: Record<CableType, number> = {
 
 /** Dynamic visual styling for power cables based on voltage rating (120V AC mains, 18V, 12V, 9V, 5V),
  *  connector port type, and AC vs DC current type.
+ *  - USB-C PD (any negotiated voltage): System Indigo (#5E5CE6) — called out on its own regardless
+ *    of voltage tier, since PD negotiates a range (5/9/15/20V) and the connector identity matters
+ *    more than the momentary voltage.
  *  - 120V AC Mains / Power Strips / Schuko / IEC: High Voltage Red (#FF3B30)
  *  - 18V: Dark Purple (#9B51E0)
  *  - 12V: System Yellow (#FFD60A)
@@ -47,11 +51,12 @@ export function getPowerCableStyle(
   portType?: string | null,
   deviceType?: string | null,
 ): { stroke: string; widthScale: number; dash?: string } {
-  const isMains =
-    portType === 'POWER_SCHUKO' ||
-    portType === 'POWER_IEC' ||
-    deviceType === 'POWER_STRIP' ||
-    deviceType === 'POWER_SUPPLY';
+  if (portType === 'USB_C') {
+    // USB-C PD — Indigo
+    return { stroke: '#5E5CE6', widthScale: 1.4 };
+  }
+
+  const isMains = portType === 'POWER_SCHUKO' || portType === 'POWER_IEC' || deviceType === 'POWER_STRIP';
 
   const effectiveVoltage = voltageV ?? (isMains ? 120 : 9);
   const effectiveCurrent = currentType ?? (isMains ? 'AC' : 'DC');

@@ -1,6 +1,6 @@
 import { Column, Entity, JoinColumn, OneToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { FurnitureKind } from '@resopatch/shared';
-import { Device } from './device.entity';
+import { Device } from './device.entity.js';
 
 @Entity({ name: 'furniture' })
 export class Furniture {

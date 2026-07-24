@@ -16,6 +16,7 @@
  */
 import 'dotenv/config';
 import 'reflect-metadata';
+import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import {
   CableType,
@@ -34,9 +35,9 @@ import {
   PortType,
   PowerSourceType,
 } from '@resopatch/shared';
-import { Device } from './entities/device.entity';
-import { Port } from './entities/port.entity';
-import { applyAdapterDto, applyCableDto, applyDeviceDto, applyFurnitureDto, applyPortDto } from './mappers';
+import { Device } from './entities/device.entity.js';
+import { Port } from './entities/port.entity.js';
+import { applyAdapterDto, applyCableDto, applyDeviceDto, applyFurnitureDto, applyPortDto } from './mappers.js';
 import {
   adaptersRepo,
   authRepo as authRepoStore,
@@ -47,8 +48,8 @@ import {
   resetDatabase,
   setupsRepo,
   In,
-} from './json-db';
-import { computeAutoLayout } from '../setups/layout';
+} from './json-db.js';
+import { computeAutoLayout } from '../setups/layout.js';
 
 async function main() {
   // Wipes the JSON store back to empty — the one genuinely destructive step, and only ever run
@@ -165,6 +166,21 @@ async function main() {
     notes: 'Стена/щиток площадки — куда втыкается удлинитель Anker стороны Дани-вокала.',
   });
   const venueOutlet2Port = await mkPort(venueOutlet2, {
+    name: 'Розетка',
+    portType: PortType.POWER_SCHUKO,
+    direction: PortDirection.OUT,
+    power: { currentType: CurrentType.AC },
+  });
+
+  const venueOutlet3 = await mkDevice({
+    name: 'Розетка площадки (комбик Дани-вокала)',
+    type: DeviceType.POWER_STRIP,
+    ownerRole: 'Даня-вокал',
+    inventoryStatus: InventoryStatus.VENUE_PROVIDED,
+    position: { x: 750, y: 650 },
+    notes: 'Отдельная розетка стены/щитка площадки прямо у комбика — не через удлинитель Anker.',
+  });
+  const venueOutlet3Port = await mkPort(venueOutlet3, {
     name: 'Розетка',
     portType: PortType.POWER_SCHUKO,
     direction: PortDirection.OUT,
@@ -991,7 +1007,7 @@ async function main() {
   });
   const tu3In = await mkPort(tu3, { name: 'Input (с гитары Дани-вокала)', portType: PortType.TS_14, direction: PortDirection.IN });
   const tu3Out = await mkPort(tu3, { name: 'Output (с mute при настройке)', portType: PortType.TS_14, direction: PortDirection.OUT });
-  const tu3Power = await mkPort(tu3, {
+  await mkPort(tu3, {
     name: 'Power In (upstream ❓)',
     portType: PortType.DC_BARREL,
     direction: PortDirection.IN,
@@ -1102,7 +1118,7 @@ async function main() {
   await mkPort(danyaVCombo, { name: 'FX Loop Return (не используется)', portType: PortType.TS_14, direction: PortDirection.IN });
   await mkPort(danyaVCombo, { name: 'Speaker Out (4/8/16 Ω, не используется — комбо, кабинет не внешний)', portType: PortType.TS_14, direction: PortDirection.OUT });
   const danyaVComboPower = await mkPort(danyaVCombo, { name: 'Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN, power: { currentType: CurrentType.AC } });
-  await mkCable({ sourcePortId: anker2SchukoOuts[1].id, targetPortId: danyaVComboPower.id, cableType: CableType.POWER_LINE, length: 2 });
+  await mkCable({ sourcePortId: venueOutlet3Port.id, targetPortId: danyaVComboPower.id, cableType: CableType.POWER_LINE, length: 2 });
 
   await mkCable({ sourcePortId: danyaVGuitarOut.id, targetPortId: pedalPorts[0].in.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.3 });
   await mkCable({ sourcePortId: pedalPorts[0].out.id, targetPortId: pedalPorts[1].in.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.2, isPatchCable: true });
@@ -1151,7 +1167,9 @@ async function main() {
     position: { x: 1050, y: -150 },
     powerRequired: true,
     powerSourceType: PowerSourceType.AC_MAINS,
-    notes: 'Блок питания 140W для ноутбука плейбеков Дани-вокала.',
+    imageUrl: 'apple-charger.webp',
+    attrs: { manufacturer: 'Apple' },
+    notes: 'Родной блок питания 140W для ноутбука плейбеков Дани-вокала.',
   });
   const playbackLaptopPsuPlug = await mkPort(playbackLaptopPsu, { name: 'Вилка (в Anker)', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN });
   const playbackLaptopPsuOut = await mkPort(playbackLaptopPsu, { name: 'USB-C Out (140W)', portType: PortType.USB_C, direction: PortDirection.OUT, power: { maxOutputPowerW: 140 } });
@@ -1225,21 +1243,23 @@ async function main() {
     notes: 'Ноутбук Андрея для софт-синтезаторов и виртуальных клавишных инструментов.',
   });
   const synthLaptopPowerIn = await mkPort(synthLaptop, { name: 'MagSafe / USB-C Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN });
+  const synthLaptopUsbC = await mkPort(synthLaptop, { name: 'USB-C (клавиши, вход MIDI/аудио)', portType: PortType.USB_C, direction: PortDirection.BI });
 
   const synthLaptopPsu = await mkDevice({
-    name: 'БП Apple 140W USB-C (синты)',
+    name: 'БП Anker 140W USB-C GaN (синты/клавиши)',
     type: DeviceType.POWER_SUPPLY,
     ownerRole: 'Андрей',
     position: { x: -600, y: -250 },
     powerRequired: true,
     powerSourceType: PowerSourceType.AC_MAINS,
-    attrs: { isKeysOnly: true },
-    notes: 'Блок питания 140W для синтезаторного ноутбука Андрея.',
+    imageUrl: 'anker-charger.avif',
+    attrs: { manufacturer: 'Anker', isKeysOnly: true },
+    notes: 'Зарядка синтезаторного ноутбука Андрея — не родной Apple-адаптер, а компактный Anker GaN charger.',
   });
   const synthLaptopPsuPlug = await mkPort(synthLaptopPsu, { name: 'Вилка (в Anker)', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN });
   const synthLaptopPsuOut = await mkPort(synthLaptopPsu, { name: 'USB-C Out (140W)', portType: PortType.USB_C, direction: PortDirection.OUT, power: { maxOutputPowerW: 140 } });
 
-  await mkCable({ sourcePortId: anker1SchukoOuts[1].id, targetPortId: synthLaptopPsuPlug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'black' });
+  await mkCable({ sourcePortId: anker1SchukoOuts[3].id, targetPortId: synthLaptopPsuPlug.id, cableType: CableType.POWER_LINE, length: 1.5, color: 'black' });
   await mkCable({ sourcePortId: synthLaptopPsuOut.id, targetPortId: synthLaptopPowerIn.id, cableType: CableType.POWER_LINE, length: 2, color: 'white' });
 
   const cmeSyncBox = await mkDevice({
@@ -1327,73 +1347,34 @@ async function main() {
   await mkFurniture({ deviceId: playbackLaptop.id, kind: FurnitureKind.TABLE, isVenueProvided: true });
 
   // ---------------------------------------------------------------------------------------
-  // MIDI infrastructure — owned, but not part of the current (simplified) active setup.
-  // See docs/stage-setup.md §7.
-  // ---------------------------------------------------------------------------------------
-  const midiThru = await mkDevice({
-    name: 'CME MIDI Thru5 WC',
-    type: DeviceType.MIDI_DEVICE,
-    inventoryStatus: InventoryStatus.OWNED_INACTIVE,
-    position: { x: -900, y: 700 },
-    imageUrl: 'midi-thru5.png',
-    attrs: { ins: 1, outs: 5, widiCoreCapable: true },
-    notes: 'Для будущего большого сета — сейчас не участвует в активном сетапе (докупать/подключать не нужно).',
-  });
-  await mkPort(midiThru, { name: 'MIDI In', portType: PortType.MIDI_DIN, direction: PortDirection.IN });
-  for (let i = 1; i <= 5; i++) {
-    await mkPort(midiThru, { name: `MIDI Thru ${i}`, portType: PortType.MIDI_DIN, direction: PortDirection.OUT });
-  }
-  await mkPort(midiThru, { name: 'USB-C (питание, опция)', portType: PortType.USB_C, direction: PortDirection.IN });
-  await mkPort(midiThru, {
-    name: 'Power In (9V, опция)',
-    portType: PortType.DC_BARREL,
-    direction: PortDirection.IN,
-    power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 3, polarity: Polarity.CENTER_NEGATIVE },
-  });
-
-  for (let i = 1; i <= 3; i++) {
-    await mkDevice({
-      name: `MIDI-кабель 5-pin DIN #${i}`,
-      type: DeviceType.ACCESSORY,
-      inventoryStatus: InventoryStatus.OWNED_INACTIVE,
-      position: { x: -800 + i * 40, y: 750 },
-    });
-  }
-
-  // ---------------------------------------------------------------------------------------
-  // 🔜 Big-set future gear — owned but not deployed, no cabling yet (open questions in
-  // docs/stage-setup.md §11 need answers before this can be wired up for real).
+  // Клавиши (Setup Mode "С клавишами") — the physical controller itself, wired into the
+  // synth laptop above. This replaces an earlier draft (separate "big set" keyboard + second
+  // laptop + a different MIDI Thru5 WC splitter, none of it ever cabled) that predated the
+  // actual design landing on: same MacBook-based synth rig, CME U6MIDI Pro for clock sync,
+  // and this keyboard feeding it directly over USB-C.
   // ---------------------------------------------------------------------------------------
   const keyboard = await mkDevice({
     name: 'Arturia KeyLab Essential 61 mk3',
     type: DeviceType.KEYBOARD,
-    inventoryStatus: InventoryStatus.OWNED_INACTIVE,
-    position: { x: -900, y: 1000 },
+    ownerRole: 'Андрей',
+    position: { x: -800, y: -100 },
     imageUrl: 'andrii-keys.png',
-    notes:
-      'Для будущего большого сета. Открытые вопросы: тот же ли ноут с плейбеками используется или второй; своя стойка или пюпитр площадки; как переключается UMC404HD между хостами (docs/stage-setup.md §11).',
+    attrs: { manufacturer: 'Arturia', model: 'KeyLab Essential 61 mk3', isKeysOnly: true },
+    notes: 'MIDI-контроллер клавиш, подключается по USB-C к синтезаторному ноутбуку Андрея.',
   });
-  await mkPort(keyboard, { name: 'USB-C', portType: PortType.USB_C, direction: PortDirection.BI });
+  const keyboardUsbC = await mkPort(keyboard, { name: 'USB-C', portType: PortType.USB_C, direction: PortDirection.BI });
   await mkFurniture({ deviceId: keyboard.id, kind: FurnitureKind.KEYBOARD_STAND, isVenueProvided: false });
+
+  await mkCable({ sourcePortId: keyboardUsbC.id, targetPortId: synthLaptopUsbC.id, cableType: CableType.USB_DATA, length: 1.5 });
 
   await mkDevice({
     name: 'Педаль сустейна (к клавишам)',
     type: DeviceType.ACCESSORY,
-    inventoryStatus: InventoryStatus.OWNED_INACTIVE,
+    ownerRole: 'Андрей',
     parentDeviceId: keyboard.id,
-    position: { x: -800, y: 1000 },
+    position: { x: -800, y: -50 },
+    attrs: { isKeysOnly: true },
   });
-
-  const secondLaptop = await mkDevice({
-    name: 'Ноут для клавиш (big set — ❓ тот же или второй)',
-    type: DeviceType.LAPTOP,
-    inventoryStatus: InventoryStatus.OWNED_INACTIVE,
-    position: { x: -900, y: 1150 },
-    powerRequired: true,
-    powerSourceType: PowerSourceType.USB_C_PD,
-    hostUsbType: HostUsbType.USB_C,
-  });
-  await mkPort(secondLaptop, { name: 'USB-C', portType: PortType.USB_C, direction: PortDirection.BI });
 
   // Lay everything out instead of leaving the arbitrary hand-picked x/y above as the persisted
   // state — same algorithm the dashboard's "Упорядочить" button calls, just with sizes estimated
@@ -1434,7 +1415,7 @@ export async function seedDatabase() {
   await main();
 }
 
-if (require.main === module) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   main().catch((e) => {
     console.error(e);
     process.exitCode = 1;

@@ -1,8 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, UsePipes } from '@nestjs/common';
 import { createCableSchema, updateCableSchema } from '@resopatch/shared';
-import { AuthGuard } from '../auth/auth.guard';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { CablesService } from './cables.service';
+import { AuthGuard } from '../auth/auth.guard.js';
+import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { CablesService } from './cables.service.js';
 
 @UseGuards(AuthGuard)
 @Controller('cables')

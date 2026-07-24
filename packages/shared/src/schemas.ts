@@ -11,7 +11,7 @@ import {
   PortType,
   PowerSourceType,
   SignalFormat,
-} from './enums';
+} from './enums.js';
 
 // Preserves the literal union (e.g. DeviceType) through z.enum(), instead of widening to `string` —
 // otherwise every DTO field typed from one of these enums would lose its literal type everywhere.
@@ -101,6 +101,7 @@ export const createCableSchema = z.object({
   isUserOwned: z.boolean().default(true),
   color: z.string().optional(),
   isPatchCable: z.boolean().default(false),
+  imageUrl: z.string().nullable().optional(),
   textureStartUrl: z.string().nullable().optional(),
   textureEndUrl: z.string().nullable().optional(),
   textureMiddleUrl: z.string().nullable().optional(),

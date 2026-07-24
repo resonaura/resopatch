@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AutoLayoutDto, CreateSetupDto, DeviceType, InventoryStatus, InputListRow, RiderRow, SetupDto, UpdateSetupDto } from '@resopatch/shared';
-import { toAdapterDto, toCableDto, toDeviceDto, toFurnitureDto, toPortDto, toSetupDto } from '../database/mappers';
-import { adaptersRepo, cablesRepo, devicesRepo, furnitureRepo, portsRepo, setupsRepo, In } from '../database/json-db';
-import { computeAutoLayout } from './layout';
+import { toAdapterDto, toCableDto, toDeviceDto, toFurnitureDto, toPortDto, toSetupDto } from '../database/mappers.js';
+import { adaptersRepo, cablesRepo, devicesRepo, furnitureRepo, portsRepo, setupsRepo, In } from '../database/json-db.js';
+import { computeAutoLayout } from './layout.js';
 
 @Injectable()
 export class SetupsService {

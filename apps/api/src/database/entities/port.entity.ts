@@ -1,6 +1,6 @@
 import { Column, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
 import { CurrentType, Polarity, PortDirection, PortType, SignalFormat } from '@resopatch/shared';
-import { Device } from './device.entity';
+import { Device } from './device.entity.js';
 
 @Entity({ name: 'ports' })
 export class Port {

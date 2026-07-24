@@ -427,7 +427,7 @@ export default function Constructor({
           )}
           {view === "input-list" && <InputListTable setupId={setupId} devices={graph.devices} />}
           {view === "rider" && <RiderTable setupId={setupId} devices={graph.devices} />}
-          {view === "checklist" && <StaffChecklist devices={graph.devices} setupId={setupId} />}
+          {view === "checklist" && <StaffChecklist devices={graph.devices} cables={graph.cables} setupId={setupId} />}
         </div>
 
         <button

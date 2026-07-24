@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import sharp from 'sharp';
-import { IntrinsicSize, OptimizeOptions, OptimizedAsset } from './types';
+import { IntrinsicSize, OptimizeOptions, OptimizedAsset } from './types.js';
 
 // WebP hard-caps each dimension at 16383px, and AVIF encoding gets unreasonably slow
 // well before that too. A source with an extreme aspect ratio can blow past that on

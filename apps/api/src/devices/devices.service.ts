@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CableType, CreateDeviceDto, DeviceDto, PowerBudgetResult, UpdateDeviceDto } from '@resopatch/shared';
-import { applyDeviceDto, toDeviceDto } from '../database/mappers';
-import { cablesRepo, devicesRepo, portsRepo, In } from '../database/json-db';
+import { applyDeviceDto, toDeviceDto } from '../database/mappers.js';
+import { cablesRepo, devicesRepo, portsRepo, In } from '../database/json-db.js';
 
 @Injectable()
 export class DevicesService {

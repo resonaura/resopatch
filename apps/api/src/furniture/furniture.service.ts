@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateFurnitureDto, FurnitureDto, UpdateFurnitureDto } from '@resopatch/shared';
-import { applyFurnitureDto, toFurnitureDto } from '../database/mappers';
-import { devicesRepo, furnitureRepo, In } from '../database/json-db';
+import { applyFurnitureDto, toFurnitureDto } from '../database/mappers.js';
+import { devicesRepo, furnitureRepo, In } from '../database/json-db.js';
 
 @Injectable()
 export class FurnitureService {

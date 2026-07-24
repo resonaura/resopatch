@@ -1,6 +1,6 @@
 import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
 import { PortType } from '@resopatch/shared';
-import { Cable } from './cable.entity';
+import { Cable } from './cable.entity.js';
 
 @Entity({ name: 'adapters' })
 export class Adapter {

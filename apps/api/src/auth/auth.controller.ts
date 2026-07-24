@@ -1,9 +1,9 @@
 import { Body, Controller, HttpCode, Patch, Post, Res, UseGuards, UsePipes } from '@nestjs/common';
-import { Response } from 'express';
+import type { FastifyReply } from 'fastify';
 import { changePasswordSchema, loginSchema } from '@resopatch/shared';
-import { AuthGuard } from './auth.guard';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { AuthService } from './auth.service';
+import { AuthGuard } from './auth.guard.js';
+import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
+import { AuthService } from './auth.service.js';
 
 @Controller('auth')
 export class AuthController {
@@ -12,20 +12,21 @@ export class AuthController {
   @Post('login')
   @HttpCode(200)
   @UsePipes(new ZodValidationPipe(loginSchema))
-  async login(@Body() body: ReturnType<typeof loginSchema.parse>, @Res({ passthrough: true }) res: Response) {
+  async login(@Body() body: ReturnType<typeof loginSchema.parse>, @Res({ passthrough: true }) res: FastifyReply) {
     const token = await this.authService.login(body);
-    res.cookie('token', token, {
+    res.setCookie('token', token, {
+      path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      maxAge: 1000 * 60 * 60 * 24 * 30,
+      maxAge: 60 * 60 * 24 * 30,
     });
     return { ok: true };
   }
 
   @Post('logout')
   @HttpCode(200)
-  logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('token');
+  logout(@Res({ passthrough: true }) res: FastifyReply) {
+    res.clearCookie('token', { path: '/' });
     return { ok: true };
   }
 

@@ -2,13 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { HostUsbType, InventoryStatus, PowerSourceType } from '@resopatch/shared';
-import { Setup } from './entities/setup.entity';
-import { Device } from './entities/device.entity';
-import { Port } from './entities/port.entity';
-import { Adapter } from './entities/adapter.entity';
-import { Cable } from './entities/cable.entity';
-import { Furniture } from './entities/furniture.entity';
-import { AuthCredential } from './entities/auth-credential.entity';
+import { Setup } from './entities/setup.entity.js';
+import { Device } from './entities/device.entity.js';
+import { Port } from './entities/port.entity.js';
+import { Adapter } from './entities/adapter.entity.js';
+import { Cable } from './entities/cable.entity.js';
+import { Furniture } from './entities/furniture.entity.js';
+import { AuthCredential } from './entities/auth-credential.entity.js';
 
 interface DbShape {
   setups: Setup[];
@@ -204,6 +204,7 @@ export const cablesRepo = new JsonRepository<Cable>(
       isUserOwned: true,
       color: null,
       isPatchCable: false,
+      imageUrl: null,
       textureStartUrl: null,
       textureEndUrl: null,
       textureMiddleUrl: null,

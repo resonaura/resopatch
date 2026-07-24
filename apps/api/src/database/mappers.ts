@@ -17,12 +17,12 @@ import {
   UpdateFurnitureDto,
   UpdatePortDto,
 } from '@resopatch/shared';
-import { Setup } from './entities/setup.entity';
-import { Device } from './entities/device.entity';
-import { Port } from './entities/port.entity';
-import { Adapter } from './entities/adapter.entity';
-import { Cable } from './entities/cable.entity';
-import { Furniture } from './entities/furniture.entity';
+import { Setup } from './entities/setup.entity.js';
+import { Device } from './entities/device.entity.js';
+import { Port } from './entities/port.entity.js';
+import { Adapter } from './entities/adapter.entity.js';
+import { Cable } from './entities/cable.entity.js';
+import { Furniture } from './entities/furniture.entity.js';
 
 export function toSetupDto(s: Setup): SetupDto {
   return { id: s.id, name: s.name, description: s.description };
@@ -173,6 +173,7 @@ export function toCableDto(c: Cable): CableDto {
     isUserOwned: c.isUserOwned,
     color: c.color,
     isPatchCable: c.isPatchCable,
+    imageUrl: c.imageUrl,
     textureStartUrl: c.textureStartUrl,
     textureEndUrl: c.textureEndUrl,
     textureMiddleUrl: c.textureMiddleUrl,
@@ -188,6 +189,7 @@ export function applyCableDto(entity: Cable, dto: Partial<CreateCableDto> & Part
   if (dto.isUserOwned !== undefined) entity.isUserOwned = dto.isUserOwned;
   if (dto.color !== undefined) entity.color = dto.color ?? null;
   if (dto.isPatchCable !== undefined) entity.isPatchCable = dto.isPatchCable;
+  if (dto.imageUrl !== undefined) entity.imageUrl = dto.imageUrl ?? null;
   if (dto.textureStartUrl !== undefined) entity.textureStartUrl = dto.textureStartUrl ?? null;
   if (dto.textureEndUrl !== undefined) entity.textureEndUrl = dto.textureEndUrl ?? null;
   if (dto.textureMiddleUrl !== undefined) entity.textureMiddleUrl = dto.textureMiddleUrl ?? null;

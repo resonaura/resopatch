@@ -18,9 +18,9 @@ import {
   Polarity,
   PowerSourceType,
 } from '@resopatch/shared';
-import { Setup } from './setup.entity';
-import { Port } from './port.entity';
-import { Furniture } from './furniture.entity';
+import { Setup } from './setup.entity.js';
+import { Port } from './port.entity.js';
+import { Furniture } from './furniture.entity.js';
 
 /**
  * A device is any physical item in the setup: an audio interface, a pedal, a power splitter,

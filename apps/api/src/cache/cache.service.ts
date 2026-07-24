@@ -4,13 +4,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Repository } from 'typeorm';
-import { ImagePipelineConfig } from '../images/config';
-import { ImageCacheVariant } from '../database/entities/image-cache-variant.entity';
-import { ImageSourceFile } from '../database/entities/image-source-file.entity';
-import { HasherService } from '../pipeline/hasher.service';
-import { OptimizerService } from '../pipeline/optimizer.service';
-import { BREAKPOINTS, DEFAULT_QUALITY, RASTER_FORMATS } from './constants';
-import { ImageManifest, ResolvedVariant, VariantSpec } from './types';
+import { ImagePipelineConfig } from '../images/config.js';
+import { ImageCacheVariant } from '../database/entities/image-cache-variant.entity.js';
+import { ImageSourceFile } from '../database/entities/image-source-file.entity.js';
+import { HasherService } from '../pipeline/hasher.service.js';
+import { OptimizerService } from '../pipeline/optimizer.service.js';
+import { BREAKPOINTS, DEFAULT_QUALITY, RASTER_FORMATS } from './constants.js';
+import { ImageManifest, ResolvedVariant, VariantSpec } from './types.js';
 
 async function fileExists(filePath: string): Promise<boolean> {
   try {

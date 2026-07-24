@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Checkbox, Disclosure, Input, Label, ListBox, Select, TextArea, TextField, toast } from '@heroui/react';
+import { Button, Disclosure, Input, Label, ListBox, Select, TextArea, TextField, toast } from '@heroui/react';
 import { Cable as CableIcon, Layers, Package, Plus, StickyNote, Trash2, Zap, type LucideIcon } from 'lucide-react';
 import {
   CableType,
@@ -17,6 +17,7 @@ import {
 } from '@resopatch/shared';
 import { api, type GraphCable, type GraphDevice, type GraphResponse } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
+import CheckboxField from './CheckboxField';
 import ImagePicker from './ImagePicker';
 import RiderSpecSheet from './RiderSpecSheet';
 
@@ -170,9 +171,9 @@ function DeviceForm({
       </TextField>
 
       <Section title="Питание" icon={Zap}>
-        <Checkbox isSelected={form.powerRequired} onChange={(v) => commitField('powerRequired', v)}>
+        <CheckboxField isSelected={form.powerRequired} onChange={(v) => commitField('powerRequired', v)}>
           Требует питание
-        </Checkbox>
+        </CheckboxField>
         {enumSelect(Object.values(PowerSourceType), form.powerSourceType, (v) => commitField('powerSourceType', v), 'Источник питания')}
         {enumSelect(Object.values(HostUsbType), form.hostUsbType, (v) => commitField('hostUsbType', v), 'Тип USB-хоста')}
         <div className="grid grid-cols-2 gap-2">
@@ -245,17 +246,17 @@ function DeviceForm({
       {form.type === DeviceType.PEDAL && (
         <Section title="Педаль" icon={Layers}>
           <div className="grid grid-cols-2 gap-2">
-            <Checkbox isSelected={form.pedal?.isStereoIn ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoIn: v })}>
+            <CheckboxField isSelected={form.pedal?.isStereoIn ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoIn: v })}>
               Стерео вход
-            </Checkbox>
-            <Checkbox isSelected={form.pedal?.isStereoOut ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoOut: v })}>
+            </CheckboxField>
+            <CheckboxField isSelected={form.pedal?.isStereoOut ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoOut: v })}>
               Стерео выход
-            </Checkbox>
+            </CheckboxField>
           </div>
           <div className="grid grid-cols-2 gap-2 items-end">
-            <Checkbox isSelected={form.pedal?.hasPresets ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasPresets: v })}>
+            <CheckboxField isSelected={form.pedal?.hasPresets ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasPresets: v })}>
               Есть пресеты
-            </Checkbox>
+            </CheckboxField>
             <TextField>
               <Label>Кол-во пресетов</Label>
               <Input
@@ -268,9 +269,9 @@ function DeviceForm({
               />
             </TextField>
           </div>
-          <Checkbox isSelected={form.pedal?.hasMidiControl ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasMidiControl: v })}>
+          <CheckboxField isSelected={form.pedal?.hasMidiControl ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasMidiControl: v })}>
             MIDI-управление пресетами
-          </Checkbox>
+          </CheckboxField>
           <TextField>
             <Label>Smart-режимы (через запятую)</Label>
             <Input
@@ -413,6 +414,13 @@ function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: stri
         <Label>Цвет</Label>
         <Input defaultValue={cable.color ?? ''} onBlur={(e) => save.mutate({ color: e.target.value || undefined })} />
       </TextField>
+      <Section title="Фото кабеля" icon={CableIcon}>
+        <ImagePicker
+          label="Общее фото (для чеклиста и списков)"
+          value={cable.imageUrl ?? undefined}
+          onChange={(url) => save.mutate({ imageUrl: url ?? null })}
+        />
+      </Section>
       <Section title="Текстура кабеля" icon={CableIcon}>
         <ImagePicker
           label="Начало кабеля"
@@ -430,12 +438,12 @@ function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: stri
           onChange={(url) => save.mutate({ textureMiddleUrl: url ?? null })}
         />
       </Section>
-      <Checkbox isSelected={cable.isPatchCable} onChange={(v) => save.mutate({ isPatchCable: v })}>
+      <CheckboxField isSelected={cable.isPatchCable} onChange={(v) => save.mutate({ isPatchCable: v })}>
         Патч-кабель
-      </Checkbox>
-      <Checkbox isSelected={cable.isUserOwned} onChange={(v) => save.mutate({ isUserOwned: v })}>
+      </CheckboxField>
+      <CheckboxField isSelected={cable.isUserOwned} onChange={(v) => save.mutate({ isUserOwned: v })}>
         Наш кабель (не площадки)
-      </Checkbox>
+      </CheckboxField>
       {cable.adapterName && <p className="text-xs text-default-500">Через переходник: {cable.adapterName}</p>}
       <Button variant="danger" fullWidth onPress={() => remove.mutate()} className="mt-2">
         <Trash2 className="h-3.5 w-3.5" />

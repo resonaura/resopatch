@@ -10,7 +10,7 @@ import {
   PortType,
   PowerSourceType,
   SignalFormat,
-} from './enums';
+} from './enums.js';
 
 export interface Position {
   x: number;
@@ -98,6 +98,9 @@ export interface CableDto {
   isUserOwned: boolean;
   color: string | null;
   isPatchCable: boolean;
+  /** A plain reference photo of the cable (what it looks like) — distinct from the texture fields
+   *  below, which are used to render the repeating pattern along the wire's path on the canvas. */
+  imageUrl: string | null;
   textureStartUrl: string | null;
   textureEndUrl: string | null;
   textureMiddleUrl: string | null;
