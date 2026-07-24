@@ -179,6 +179,19 @@ function PatchCanvasInner({
   /** Coalesce drag re-routes to one rAF — same full pipeline as drag-stop. */
   const dragRouteRafRef = useRef(0);
 
+  // Re-score nipples when cards finish measuring (critical inside pedalboard modal —
+  // fixed grid positions arrive before port-row heights are known).
+  const measureKey = useMemo(
+    () =>
+      nodes
+        .map(
+          (n) =>
+            `${n.id}:${Math.round(n.measured?.width ?? n.width ?? 0)}x${Math.round(n.measured?.height ?? n.height ?? 0)}`,
+        )
+        .join('|'),
+    [nodes],
+  );
+
   // Dual-nipple score: try L/R × L/R snaps on the WASM mid-path, keep the clear one.
   useEffect(() => {
     const { nodeLookup } = storeApi.getState();
@@ -507,7 +520,7 @@ function PatchCanvasInner({
         handleFixRef.current = false;
       });
     }
-  }, [avoidRoutes, edges, storeApi, setEdges]);
+  }, [avoidRoutes, edges, storeApi, setEdges, measureKey]);
 
   const layoutKey = useMemo(() => {
     const nodePart = initialNodes
@@ -528,6 +541,24 @@ function PatchCanvasInner({
     const t = window.setTimeout(() => refreshRouting(), 60);
     return () => window.clearTimeout(t);
   }, [layoutKey, refreshRouting]);
+
+  // After first measure (modal open / expand ports), force WASM + nipple re-pick.
+  const lastMeasureKeyRef = useRef('');
+  useEffect(() => {
+    if (!measureKey || measureKey === lastMeasureKeyRef.current) return;
+    // Skip empty-all-zero measure (pre-layout).
+    if (!measureKey.includes('x') || measureKey.replace(/[0|x:]/g, '') === '') return;
+    const hasReal = nodes.some(
+      (n) => (n.measured?.height ?? n.height ?? 0) > 40 && (n.measured?.width ?? n.width ?? 0) > 40,
+    );
+    if (!hasReal) return;
+    lastMeasureKeyRef.current = measureKey;
+    const t = window.setTimeout(() => {
+      setEdges((prev) => withNearestNipples(prev, nodes));
+      refreshRouting();
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [measureKey, nodes, refreshRouting, setEdges]);
 
   const renderEdges = useMemo(
     () =>
@@ -642,6 +673,9 @@ function PatchCanvasInner({
       maxZoom={2.5}
       colorMode="dark"
       connectionLineType={ConnectionLineType.SmoothStep}
+      // Read-only graph: setup is fixed; no interactive wiring from the canvas.
+      nodesConnectable={false}
+      edgesReconnectable={false}
       // Never lift edges over nodes — PSU cards and devices must stay above copper.
       elevateEdgesOnSelect={false}
     >

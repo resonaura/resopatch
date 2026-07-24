@@ -180,6 +180,7 @@ export default function CableCanvasFilters({
   onCategoryChange,
   onToggleConnector,
   onToggleZone,
+  onReset,
 }: {
   cables: GraphCable[];
   devices: GraphDevice[];
@@ -189,9 +190,12 @@ export default function CableCanvasFilters({
   onCategoryChange: (c: CableCategory) => void;
   onToggleConnector: (connector: string) => void;
   onToggleZone: (zone: string) => void;
+  onReset?: () => void;
 }) {
   const { t } = useI18n();
   const noZone = t('cables.noZone');
+  const filtersActive =
+    category !== 'all' || hiddenConnectors.size > 0 || hiddenZones.size > 0;
 
   const portToDevice = useMemo(() => {
     const map = new Map<string, GraphDevice>();
@@ -301,6 +305,16 @@ export default function CableCanvasFilters({
             );
           })}
         </div>
+      )}
+
+      {onReset && filtersActive && (
+        <button
+          type="button"
+          onClick={onReset}
+          className="rounded-md border border-default-200 px-2 py-0.5 text-[10px] font-medium text-default-500 transition-colors hover:bg-surface-secondary hover:text-foreground"
+        >
+          {t('cables.resetFilters')}
+        </button>
       )}
     </div>
   );

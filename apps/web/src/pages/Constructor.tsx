@@ -1,7 +1,7 @@
 import { Button, Spinner, Table, Tabs } from "@heroui/react";
 import { type PortDto, type RiderRow } from "@resopatch/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Connection, Edge, Node } from "@xyflow/react";
+import type { Edge, Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
     Armchair,
@@ -33,11 +33,8 @@ import CableCanvasFilters, {
 import ContainerInsideModal from "../components/ContainerInsideModal";
 import type { DeviceNodeData } from "../components/DeviceNode";
 import Inspector, { type Selection } from "../components/Inspector";
-import NewCableModal from "../components/NewCableModal";
-import NewDeviceModal from "../components/NewDeviceModal";
 import PatchCanvas from "../components/PatchCanvas";
 import SettingsModal from "../components/SettingsModal";
-import Sidebar from "../components/Sidebar";
 import StaffChecklist from "../components/StaffChecklist";
 import {
     computeAutoLayout,
@@ -139,16 +136,8 @@ export default function Constructor({
   const graph = graphQuery.data;
 
   const [selection, setSelection] = useState<Selection>(null);
-  const [showNewDevice, setShowNewDevice] = useState(false);
-  const [newDeviceParentId, setNewDeviceParentId] = useState<string | null>(
-    null,
-  );
   const [showSettings, setShowSettings] = useState(false);
-  const [pendingConnection, setPendingConnection] = useState<Connection | null>(
-    null,
-  );
   const [view, setView] = useState<"canvas" | "input-list" | "rider" | "checklist">("canvas");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [insideContainerId, setInsideContainerId] = useState<string | null>(null);
 
@@ -550,34 +539,12 @@ export default function Constructor({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- topology + revision only
   }, [graph, setupId]);
 
-  const onConnect = useCallback((connection: Connection) => {
-    if (!connection.sourceHandle || !connection.targetHandle) return;
-    setPendingConnection(connection);
-  }, []);
-
   if (!graph || !activeGraph)
     return (
       <div className="flex h-full items-center justify-center">
         <Spinner size="lg" />
       </div>
     );
-
-  const pendingSourcePort = pendingConnection
-    ? activeGraph.devices
-        .flatMap((d) => d.ports)
-        .find((p) => p.id === pendingConnection.sourceHandle)
-    : null;
-  const pendingTargetPort = pendingConnection
-    ? activeGraph.devices
-        .flatMap((d) => d.ports)
-        .find((p) => p.id === pendingConnection.targetHandle)
-    : null;
-  const pendingSourceDevice = pendingConnection
-    ? activeGraph.devices.find((d) => d.id === pendingConnection.source)
-    : null;
-  const pendingTargetDevice = pendingConnection
-    ? activeGraph.devices.find((d) => d.id === pendingConnection.target)
-    : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -665,46 +632,13 @@ export default function Constructor({
         </div>
       </header>
       <div className="relative flex min-h-0 flex-1">
-        {sidebarOpen && (
-          <div
-            className="absolute inset-0 z-20 bg-black/40 sm:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-        <div
-          className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${
-            sidebarOpen
-              ? "absolute inset-y-0 left-0 z-30 w-[85vw] max-w-[280px] shadow-2xl sm:static sm:z-auto sm:w-[260px] sm:max-w-none sm:shadow-none"
-              : "w-0"
-          }`}
-        >
-          <Sidebar
-            devices={graph.devices}
-            cables={graph.cables}
-            selectedId={selection?.id ?? null}
-            onSelect={(id) => selectItem({ kind: "device", id })}
-            onSelectCable={(id) => selectItem({ kind: "cable", id })}
-            onNewDevice={() => {
-              setNewDeviceParentId(null);
-              setShowNewDevice(true);
-            }}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => setSidebarOpen((v) => !v)}
-          title={sidebarOpen ? t('constructor.hideInventory') : t('constructor.showInventory')}
-          className="flex w-5 flex-none items-center justify-center border-r border-default-200 bg-surface text-default-500 hover:bg-surface-secondary hover:text-foreground"
-        >
-          {sidebarOpen ? (
-            <ChevronLeft className="h-3.5 w-3.5" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5" />
-          )}
-        </button>
-
         <div className="relative min-h-0 flex-1">
-          {view === "canvas" && (
+          {/*
+            Unmount main canvas while the pedalboard modal is open. avoid-nodes-edge uses a
+            global route store — two PatchCanvas instances fight over it and leave the main
+            scheme with broken paths after the modal closes.
+          */}
+          {view === "canvas" && !insideContainerId && (
             <PatchCanvas
               nodes={initialNodes}
               edges={initialEdges}
@@ -712,7 +646,7 @@ export default function Constructor({
               onNodeClick={(id) => selectItem({ kind: "device", id })}
               onEdgeClick={(id) => selectItem({ kind: "cable", id })}
               onPaneClick={() => setSelection(null)}
-              onConnect={onConnect}
+              onConnect={() => {}}
               onNodeMoved={(id, position) => {
                 if (autoLayout.isPending) return;
                 movePosition.mutate({
@@ -726,9 +660,8 @@ export default function Constructor({
               }}
             />
           )}
-          {view === "canvas" && (
+          {view === "canvas" && !insideContainerId && (
             <>
-              {/* Leave room on the right for Arrange so filters never cover it. */}
               <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[calc(100%-8.5rem)]">
                 <CableCanvasFilters
                   cables={activeGraph.cables}
@@ -753,9 +686,13 @@ export default function Constructor({
                       return next;
                     })
                   }
+                  onReset={() => {
+                    setCableCategory("all");
+                    setHiddenConnectors(new Set());
+                    setHiddenCableZones(new Set());
+                  }}
                 />
               </div>
-              {/* Top-right: keep clear of MiniMap (bottom-right) and Controls (bottom-left). */}
               <Button
                 size="sm"
                 variant="secondary"
@@ -808,21 +745,10 @@ export default function Constructor({
             graph={graph}
             selection={selection}
             setupId={setupId}
-            onAddChild={(parentId) => {
-              setNewDeviceParentId(parentId);
-              setShowNewDevice(true);
-            }}
             onSelectDevice={(id) => selectItem({ kind: "device", id })}
           />
         </div>
       </div>
-      {showNewDevice && (
-        <NewDeviceModal
-          setupId={setupId}
-          defaultParentId={newDeviceParentId}
-          onClose={() => setShowNewDevice(false)}
-        />
-      )}
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {insideContainerId && graph && (
         <ContainerInsideModal
@@ -833,11 +759,6 @@ export default function Constructor({
           allCables={graph.cables}
           onClose={() => setInsideContainerId(null)}
           onSelectChild={(id) => selectItem({ kind: "device", id })}
-          onAddChild={(containerId) => {
-            setNewDeviceParentId(containerId);
-            setShowNewDevice(true);
-          }}
-          onConnect={onConnect}
           onNodeMoved={(id, position) =>
             movePosition.mutate({ id, position, epoch: arrangeEpochRef.current })
           }
@@ -845,22 +766,6 @@ export default function Constructor({
           isAutoLayoutPending={autoLayout.isPending}
         />
       )}
-      {pendingConnection &&
-        pendingSourcePort &&
-        pendingTargetPort &&
-        pendingSourceDevice &&
-        pendingTargetDevice && (
-          <NewCableModal
-            setupId={setupId}
-            sourcePortId={pendingSourcePort.id}
-            targetPortId={pendingTargetPort.id}
-            sourcePort={pendingSourcePort}
-            targetPort={pendingTargetPort}
-            sourceDeviceName={formatI18nText(pendingSourceDevice.name, language)}
-            targetDeviceName={formatI18nText(pendingTargetDevice.name, language)}
-            onClose={() => setPendingConnection(null)}
-          />
-        )}
     </div>
   );
 }

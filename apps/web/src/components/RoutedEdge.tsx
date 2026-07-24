@@ -1,11 +1,11 @@
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react';
 import {
     buildAdaptiveCableLabel,
+    cableLabelIconPorts,
     formatCableGenderPair,
     formatCableLabel,
     formatConnectorPair,
     shortConnectorLabel,
-    cableLabelIconPorts,
 } from '../lib/cableLabel';
 import { maxLabelWidthForRun, MIN_LABEL_RUN_PX } from '../lib/cableLabelClearance';
 import { findLabelPoint, roundedPathFromPoints, sampleAlongPath, type Point } from '../lib/edgeRouting';
@@ -16,12 +16,10 @@ import { PortTypeIcon } from '../lib/portIcons';
 
 // Re-export label helpers so existing imports from this module keep working.
 export {
-    buildAdaptiveCableLabel,
-    formatCableGenderPair,
+    buildAdaptiveCableLabel, cableLabelIconPorts, formatCableGenderPair,
     formatCableLabel,
     formatConnectorPair,
-    shortConnectorLabel,
-    cableLabelIconPorts,
+    shortConnectorLabel
 };
 
 export interface RoutedEdgeData {
@@ -208,13 +206,43 @@ function findBestMidpoint(points?: Point[], sourceX?: number, sourceY?: number, 
   return findLabelPoint(points, [], fallback);
 }
 
+/**
+ * Force path endpoints onto the live handle pixels RF reports (sourceX/Y, targetX/Y).
+ * Routed mid-path can lag behind measure/nipple picks — especially inside the pedalboard
+ * modal — so without this the stroke misses the nipples.
+ */
+function pinPathToHandles(
+  points: Point[] | undefined,
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+): Point[] | undefined {
+  if (!points || points.length < 2) return points;
+  if (![sourceX, sourceY, targetX, targetY].every((n) => Number.isFinite(n))) return points;
+
+  const pts = points.map((p) => ({ x: p.x, y: p.y }));
+  pts[0] = { x: sourceX, y: sourceY };
+  pts[pts.length - 1] = { x: targetX, y: targetY };
+
+  // Keep the first/last stubs horizontal at the true nipple Y.
+  if (pts.length >= 2) {
+    pts[1] = { x: pts[1].x, y: sourceY };
+  }
+  if (pts.length >= 3) {
+    pts[pts.length - 2] = { x: pts[pts.length - 2].x, y: targetY };
+  }
+  return pts;
+}
+
 /** Renders whatever path `CableRouter` (in Constructor.tsx) computed for this edge and cached
  *  onto `data.points`. Falls back to a straight line between the handles for the one render
  *  before routing has run — e.g. a cable just created this session. */
 export default function RoutedEdge({ id, data, style, markerEnd, sourceX, sourceY, targetX, targetY }: EdgeProps) {
   const { t, language } = useI18n();
   const edgeData = data as RoutedEdgeData | undefined;
-  const points = edgeData?.points;
+  const rawPoints = edgeData?.points;
+  const points = pinPathToHandles(rawPoints, sourceX, sourceY, targetX, targetY);
   // PSU badge (edge label or real node) owns the mid-cable slot — no text caption then.
   const hasPsuInfo = !!(edgeData?.powerConverter || edgeData?.psuAsNode);
   const powerConverter =

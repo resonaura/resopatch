@@ -1,17 +1,17 @@
-import { useState, useMemo } from 'react';
 import { Button, Modal } from '@heroui/react';
-import { Layers, Plus, Wand2, X } from 'lucide-react';
-import type { Connection } from '@xyflow/react';
+import { DeviceType, InventoryStatus } from '@resopatch/shared';
+import type { Edge, Node } from '@xyflow/react';
+import { Layers, Wand2, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type { GraphCable, GraphDevice } from '../api/client';
 import { containerInternalGraph } from '../lib/containerGraph';
-import { useI18n } from '../lib/i18n';
-import PatchCanvas from './PatchCanvas';
-import Inspector, { type Selection } from './Inspector';
-import { DeviceType, InventoryStatus } from '@resopatch/shared';
-import { graphCableToEdge } from '../lib/graphCableToEdge';
 import { getDisplayName } from '../lib/deviceNaming';
-import type { Node, Edge } from '@xyflow/react';
+import { graphCableToEdge } from '../lib/graphCableToEdge';
+import { useI18n } from '../lib/i18n';
+import { pickNearestSourceHandle, pickNearestTargetHandle } from '../lib/portHandles';
 import type { DeviceNodeData } from './DeviceNode';
+import Inspector, { type Selection } from './Inspector';
+import PatchCanvas from './PatchCanvas';
 
 export interface ContainerInsideModalProps {
   containerDevice: GraphDevice;
@@ -19,8 +19,6 @@ export interface ContainerInsideModalProps {
   allCables: GraphCable[];
   onClose: () => void;
   onSelectChild: (id: string) => void;
-  onAddChild: (containerId: string) => void;
-  onConnect: (connection: Connection) => void;
   onNodeMoved: (id: string, position: { x: number; y: number }) => void;
   onRunAutoLayout: () => void;
   isAutoLayoutPending: boolean;
@@ -96,8 +94,6 @@ export default function ContainerInsideModal({
   allCables,
   onClose,
   onSelectChild,
-  onAddChild,
-  onConnect,
   onNodeMoved,
   onRunAutoLayout,
   isAutoLayoutPending,
@@ -194,11 +190,15 @@ export default function ContainerInsideModal({
         const extPort = sourceInChild ? allPortById.get(cable.targetPortId) : allPortById.get(cable.sourcePortId);
         if (!extDev || !extPort) continue;
 
+        // Clone port so we never mutate the live graph's port list (shared refs).
+        const portClone = { ...extPort };
         const virtualDev = createdBoundaryDevices.get(extDev.id);
         if (!virtualDev) {
-          const isLeft = !sourceInChild; // If target is in child, connection enters from left
-          const posX = isLeft ? -360 : 1340;
-          const posY = (isLeft ? leftCount++ : rightCount++) * 240;
+          // External device that *feeds into* the board sits on the left (cable enters pedals).
+          // External that *receives* from the board sits on the right.
+          const isLeft = !sourceInChild;
+          const posX = isLeft ? -380 : 1380;
+          const posY = (isLeft ? leftCount++ : rightCount++) * 260;
 
           const newVirtualDev = {
             id: `virtual-ext-${extDev.id}`,
@@ -210,18 +210,19 @@ export default function ContainerInsideModal({
             ownerRole: extDev.ownerRole,
             parentDeviceId: null,
             position: { x: posX, y: posY },
-            ports: [extPort],
+            ports: [portClone],
             powerRequired: false,
             powerSourceType: 'NONE',
             hostUsbType: 'NONE',
             imageUrl: extDev.imageUrl,
             furniture: null,
+            attrs: {},
           } as GraphDevice;
           createdBoundaryDevices.set(extDev.id, newVirtualDev);
           bNodes.push(newVirtualDev);
         } else {
-          if (!virtualDev.ports.some((p) => p.id === extPort.id)) {
-            virtualDev.ports.push(extPort);
+          if (!virtualDev.ports.some((p) => p.id === portClone.id)) {
+            virtualDev.ports = [...virtualDev.ports, portClone];
           }
         }
         bCables.push(cable);
@@ -271,13 +272,27 @@ export default function ContainerInsideModal({
     [displayedDevices, childrenByParent, connectedPortIds, onSelectChild],
   );
 
-  const edges: Edge[] = useMemo(
-    () =>
-      displayedCables.map((cable) =>
-        graphCableToEdge(cable, allPortById, allPortToDevice, portToNodeId),
-      ),
-    [displayedCables, portToNodeId, allPortById, allPortToDevice],
-  );
+  const edges: Edge[] = useMemo(() => {
+    const raw = displayedCables.map((cable) =>
+      graphCableToEdge(cable, allPortById, allPortToDevice, portToNodeId),
+    );
+    // Pre-pick L/R faces from the fixed grid so WASM starts on the facing nipples
+    // (before RF has measured port rows).
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    return raw.map((e) => {
+      const s = byId.get(e.source);
+      const t = byId.get(e.target);
+      if (!s || !t || !e.sourceHandle || !e.targetHandle) return e;
+      // Approximate card size until measured — pedal cards are ~240 wide.
+      const sw = 240;
+      const tw = 240;
+      const sCx = s.position.x + sw / 2;
+      const tCx = t.position.x + tw / 2;
+      const src = pickNearestSourceHandle(e.sourceHandle, sCx, tCx);
+      const tgt = pickNearestTargetHandle(e.targetHandle, sCx, tCx);
+      return { ...e, sourceHandle: src.id, targetHandle: tgt.id };
+    });
+  }, [displayedCables, portToNodeId, allPortById, allPortToDevice, nodes]);
 
   return (
     <Modal>
@@ -298,10 +313,6 @@ export default function ContainerInsideModal({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" onPress={() => onAddChild(containerDevice.id)}>
-                  <Plus className="h-4 w-4" />
-                  {t('containerModal.addPedal')}
-                </Button>
                 <Button size="sm" variant="secondary" onPress={onClose}>
                   <X className="h-4 w-4" />
                 </Button>
@@ -312,24 +323,27 @@ export default function ContainerInsideModal({
                 {childDevices.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center gap-3 text-default-500">
                     <p>{t('containerModal.empty')}</p>
-                    <Button size="sm" onPress={() => onAddChild(containerDevice.id)}>
-                      <Plus className="h-4 w-4" />
-                      {t('containerModal.addDevice')}
-                    </Button>
                   </div>
                 ) : (
                   <>
                     <PatchCanvas
+                      key={`inside-${containerDevice.id}`}
                       nodes={nodes}
                       edges={edges}
+                      layoutSyncKey={displayedDevices.length * 1000 + displayedCables.length}
                       onNodeClick={(id) => {
+                        // Virtual external stubs are not selectable inventory.
+                        if (id.startsWith('virtual-ext-')) return;
                         setModalSelection({ kind: 'device', id });
                         onSelectChild(id);
                       }}
                       onEdgeClick={(id) => setModalSelection({ kind: 'cable', id })}
                       onPaneClick={() => setModalSelection(null)}
-                      onConnect={onConnect}
-                      onNodeMoved={onNodeMoved}
+                      onConnect={() => {}}
+                      onNodeMoved={(id, position) => {
+                        if (id.startsWith('virtual-ext-')) return;
+                        onNodeMoved(id, position);
+                      }}
                       minimap={false}
                       fitPadding={0.06}
                     />
@@ -351,7 +365,6 @@ export default function ContainerInsideModal({
                   graph={{ devices: allDevices, cables: allCables, adapters: [] }}
                   selection={modalSelection ?? { kind: 'device', id: containerDevice.id }}
                   setupId={containerDevice.setupId}
-                  onAddChild={onAddChild}
                   onSelectDevice={(id) => {
                     setModalSelection({ kind: 'device', id });
                     onSelectChild(id);

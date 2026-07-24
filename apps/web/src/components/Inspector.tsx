@@ -13,7 +13,7 @@ import {
     type UpdateDeviceDto,
 } from '@resopatch/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cable as CableIcon, Layers, Package, Plus, StickyNote, Trash2, Zap, type LucideIcon } from 'lucide-react';
+import { Cable as CableIcon, Layers, Package, StickyNote, Trash2, Zap, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { api, type GraphCable, type GraphDevice, type GraphResponse } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
@@ -151,13 +151,11 @@ function DeviceForm({
   device,
   setupId,
   children,
-  onAddChild,
   onSelectChild,
 }: {
   device: GraphDevice;
   setupId: string;
   children: GraphDevice[];
-  onAddChild: () => void;
   onSelectChild: (id: string) => void;
 }) {
   const qc = useQueryClient();
@@ -589,29 +587,23 @@ function DeviceForm({
             </Button>
           </div>
         ))}
-        <Button size="sm" variant="secondary" onPress={() => addPort.mutate()}>
-          <Plus className="h-3.5 w-3.5" />
-          {t('inspector.addPort')}
-        </Button>
       </Section>
 
-      <Section title={t('inspector.kitSection').replace('{count}', String(children.length))} icon={Package}>
-        {children.map((child) => (
-          <button
-            key={child.id}
-            onClick={() => onSelectChild(child.id)}
-            className="flex items-center gap-2 rounded-md border border-default-200 px-2 py-1.5 text-left text-xs hover:bg-surface-secondary"
-          >
-            <DeviceTypeIcon type={child.type} className="h-3.5 w-3.5 shrink-0 text-default-500" />
-            <span className="truncate">{getDisplayName(child, t, language)}</span>
-          </button>
-        ))}
-        <Button size="sm" variant="secondary" onPress={onAddChild}>
-          <Plus className="h-3.5 w-3.5" />
-          {t('inspector.addChild')}
-        </Button>
-        <p className="text-[11px] text-default-500">{t('inspector.kitNotice')}</p>
-      </Section>
+      {children.length > 0 && (
+        <Section title={t('inspector.kitSection').replace('{count}', String(children.length))} icon={Package}>
+          {children.map((child) => (
+            <button
+              key={child.id}
+              onClick={() => onSelectChild(child.id)}
+              className="flex items-center gap-2 rounded-md border border-default-200 px-2 py-1.5 text-left text-xs hover:bg-surface-secondary"
+            >
+              <DeviceTypeIcon type={child.type} className="h-3.5 w-3.5 shrink-0 text-default-500" />
+              <span className="truncate">{getDisplayName(child, t, language)}</span>
+            </button>
+          ))}
+          <p className="text-[11px] text-default-500">{t('inspector.kitNotice')}</p>
+        </Section>
+      )}
 
       <Section title={t('inspector.notesSection')} icon={StickyNote}>
         <TextField>
@@ -747,13 +739,11 @@ export default function Inspector({
   graph,
   selection,
   setupId,
-  onAddChild,
   onSelectDevice,
 }: {
   graph: GraphResponse;
   selection: Selection;
   setupId: string;
-  onAddChild: (parentId: string) => void;
   onSelectDevice: (id: string) => void;
 }) {
   const { t, language } = useI18n();
@@ -785,7 +775,6 @@ export default function Inspector({
             device={device}
             setupId={setupId}
             children={children}
-            onAddChild={() => onAddChild(device.id)}
             onSelectChild={onSelectDevice}
           />
         </div>
