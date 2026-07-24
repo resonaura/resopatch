@@ -1244,6 +1244,7 @@ async function main() {
   });
   const synthLaptopPowerIn = await mkPort(synthLaptop, { name: 'MagSafe / USB-C Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN });
   const synthLaptopUsbC = await mkPort(synthLaptop, { name: 'USB-C (клавиши, вход MIDI/аудио)', portType: PortType.USB_C, direction: PortDirection.BI });
+  await mkFurniture({ deviceId: synthLaptop.id, kind: FurnitureKind.CHAIR, isVenueProvided: true });
 
   const synthLaptopPsu = await mkDevice({
     name: 'БП Anker 140W USB-C GaN (синты/клавиши)',

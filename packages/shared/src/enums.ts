@@ -120,6 +120,7 @@ export type InventoryStatus = (typeof InventoryStatus)[keyof typeof InventorySta
 export const FurnitureKind = {
   LAPTOP_STAND: 'LAPTOP_STAND',
   TABLE: 'TABLE',
+  CHAIR: 'CHAIR',
   GUITAR_STAND: 'GUITAR_STAND',
   KEYBOARD_STAND: 'KEYBOARD_STAND',
   MIC_STAND: 'MIC_STAND',

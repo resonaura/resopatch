@@ -8,6 +8,16 @@ body,
   margin: 0;
 }
 
+/* HeroUI's shipped dark theme sets --field-background to the exact same color as --surface, and
+ * zeroes out --field-border-width/--field-border — so any "field" component (Checkbox, Input,
+ * Select, ...) sitting on a card (bg-surface, the norm throughout this app) renders with zero
+ * contrast against its own container. Give fields back a visible outline matching the app's
+ * existing card borders (border-default-200 / --border). */
+:root {
+  --field-border-width: 1px;
+  --field-border: var(--border);
+}
+
 /* React Flow chrome that isn't a HeroUI component — kept minimal, themed to match. */
 .react-flow__attribution {
   display: none;

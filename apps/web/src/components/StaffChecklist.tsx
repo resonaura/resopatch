@@ -15,6 +15,8 @@ const CABLE_TYPE_LABEL: Record<string, string> = {
   CONTROL_LINK: 'Control link',
 };
 
+const UNOWNED = 'Общее оборудование';
+
 interface CableGroup {
   key: string;
   cableType: string;
@@ -73,14 +75,32 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
     setCheckedMap((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // Checking/unchecking a parent device (e.g. the pedalboard) carries its accessories along —
+  // you don't pack the board without the pedals bolted to it.
+  const toggleParent = (parent: GraphDevice, accessories: GraphDevice[]) => {
+    setCheckedMap((prev) => {
+      const next = { ...prev, [parent.id]: !prev[parent.id] };
+      for (const acc of accessories) next[acc.id] = next[parent.id];
+      return next;
+    });
+  };
+
   const resetAll = () => {
     if (confirm('Сбросить все отметки в чеклисте?')) {
       setCheckedMap({});
     }
   };
 
+  const portToDevice = useMemo(() => {
+    const map = new Map<string, GraphDevice>();
+    for (const d of devices) {
+      for (const p of d.ports) map.set(p.id, d);
+    }
+    return map;
+  }, [devices]);
+
   // Group top-level devices and their accessories by Owner (excluding venue-provided items)
-  const grouped = useMemo(() => {
+  const devicesByOwner = useMemo(() => {
     const bandDevices = devices.filter((d) => d.inventoryStatus !== InventoryStatus.VENUE_PROVIDED);
     const parentDevices = bandDevices.filter((d) => !d.parentDeviceId);
     const childrenMap = new Map<string, GraphDevice[]>();
@@ -96,7 +116,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
     const groups = new Map<string, { parent: GraphDevice; accessories: GraphDevice[] }[]>();
 
     for (const parent of parentDevices) {
-      const owner = parent.ownerRole?.trim() || 'Общее оборудование';
+      const owner = parent.ownerRole?.trim() || UNOWNED;
       const list = groups.get(owner) ?? [];
       list.push({
         parent,
@@ -109,22 +129,53 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
   }, [devices]);
 
   // Cables to pack: user-owned physical cables (excludes venue-provided runs and wireless
-  // control links, which aren't things you throw in a bag), grouped by type/length/color so
-  // e.g. "6x XLR 3m blue" shows as one row instead of six.
-  const cableGroups = useMemo(() => {
-    const groups = new Map<string, CableGroup>();
+  // control links, which aren't things you throw in a bag), grouped by owner (whoever's device
+  // the cable originates from) and then by type/length/color so e.g. "6x XLR 3m blue" shows as
+  // one row instead of six.
+  const cableGroupsByOwner = useMemo(() => {
+    const groups = new Map<string, Map<string, CableGroup>>();
     for (const c of cables) {
       if (!c.isUserOwned || c.cableType === 'CONTROL_LINK') continue;
+      const owner = portToDevice.get(c.sourcePortId)?.ownerRole?.trim() || UNOWNED;
+      const ownerGroups = groups.get(owner) ?? new Map<string, CableGroup>();
       const key = `${c.cableType}|${c.length}|${c.color ?? ''}`;
-      const group = groups.get(key) ?? { key, cableType: c.cableType, length: c.length, color: c.color, quantity: 0, imageUrl: null };
+      const group = ownerGroups.get(key) ?? { key, cableType: c.cableType, length: c.length, color: c.color, quantity: 0, imageUrl: null };
       group.quantity += 1;
       if (!group.imageUrl && c.imageUrl) group.imageUrl = c.imageUrl;
-      groups.set(key, group);
+      ownerGroups.set(key, group);
+      groups.set(owner, ownerGroups);
     }
-    return Array.from(groups.values()).sort((a, b) => a.cableType.localeCompare(b.cableType) || a.length - b.length);
-  }, [cables]);
+    const result = new Map<string, CableGroup[]>();
+    for (const [owner, ownerGroups] of groups) {
+      result.set(
+        owner,
+        Array.from(ownerGroups.values()).sort((a, b) => a.cableType.localeCompare(b.cableType) || a.length - b.length),
+      );
+    }
+    return result;
+  }, [cables, portToDevice]);
 
-  const cableChecked = cableGroups.filter((g) => checkedMap[`cable:${g.key}`]).length;
+  const allCableGroups = useMemo(() => Array.from(cableGroupsByOwner.values()).flat(), [cableGroupsByOwner]);
+  const cableChecked = allCableGroups.filter((g) => checkedMap[`cable:${g.key}`]).length;
+
+  // Union of everyone who owns either a device or a cable, in first-seen order.
+  const owners = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    for (const owner of devicesByOwner.keys()) {
+      if (!seen.has(owner)) {
+        seen.add(owner);
+        list.push(owner);
+      }
+    }
+    for (const owner of cableGroupsByOwner.keys()) {
+      if (!seen.has(owner)) {
+        seen.add(owner);
+        list.push(owner);
+      }
+    }
+    return list;
+  }, [devicesByOwner, cableGroupsByOwner]);
 
   // Compute total checkable items count
   const allCheckableItems = useMemo(() => {
@@ -135,13 +186,13 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
     return allCheckableItems.filter((item) => checkedMap[item.id]).length + cableChecked;
   }, [allCheckableItems, checkedMap, cableChecked]);
 
-  const totalCheckableCount = allCheckableItems.length + cableGroups.length;
+  const totalCheckableCount = allCheckableItems.length + allCableGroups.length;
   const progressPercent = totalCheckableCount > 0 ? Math.round((checkedCount / totalCheckableCount) * 100) : 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background p-4 overflow-y-auto">
       {/* Header Summary */}
-      <div className="mb-6 rounded-xl border border-default-200 bg-surface p-4 shadow-sm">
+      <div className="mb-6 shrink-0 rounded-xl border border-default-200 bg-surface p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/15 text-accent">
@@ -173,56 +224,23 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
         </div>
       </div>
 
-      {/* Cables */}
-      {cableGroups.length > 0 && (
-        <div className="mb-6 rounded-xl border border-default-200 bg-surface shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between border-b border-default-200 bg-surface-secondary/50 px-4 py-2.5">
-            <div className="flex items-center gap-2">
-              <CableIcon className="h-3.5 w-3.5 text-default-500" />
-              <span className="font-semibold text-sm text-foreground">Кабели</span>
-              <Chip size="sm" variant="soft">
-                {cableChecked}/{cableGroups.length}
-              </Chip>
-            </div>
-          </div>
-          <div className="divide-y divide-default-100">
-            {cableGroups.map((group) => {
-              const storageKeyForGroup = `cable:${group.key}`;
-              const isChecked = !!checkedMap[storageKeyForGroup];
-              return (
-                <div
-                  key={group.key}
-                  className={`flex items-center gap-3 p-3.5 transition-colors ${isChecked ? 'bg-accent/5' : 'hover:bg-surface-secondary/30'}`}
-                >
-                  <CheckboxField isSelected={isChecked} onChange={() => toggleCheck(storageKeyForGroup)} />
-                  <Thumb imageUrl={group.imageUrl} fallback={<CableIcon className="h-5 w-5" />} />
-                  <div className="min-w-0 flex-1">
-                    <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                      {CABLE_TYPE_LABEL[group.cableType] ?? group.cableType} — {group.length}м
-                      {group.color ? ` (${group.color})` : ''}
-                    </span>
-                  </div>
-                  <Chip size="sm" variant="soft" className="shrink-0">
-                    x{group.quantity}
-                  </Chip>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Checklist Groups by Owner */}
       <div className="flex flex-col gap-6">
-        {Array.from(grouped.entries()).map(([owner, items]) => {
-          const groupTotal = items.reduce((acc, curr) => acc + 1 + curr.accessories.length, 0);
-          const groupChecked = items.reduce((acc, curr) => {
+        {owners.map((owner) => {
+          const items = devicesByOwner.get(owner) ?? [];
+          const ownerCables = cableGroupsByOwner.get(owner) ?? [];
+
+          const deviceTotal = items.reduce((acc, curr) => acc + 1 + curr.accessories.length, 0);
+          const deviceChecked = items.reduce((acc, curr) => {
             let c = checkedMap[curr.parent.id] ? 1 : 0;
             for (const accItem of curr.accessories) {
               if (checkedMap[accItem.id]) c++;
             }
             return acc + c;
           }, 0);
+          const ownerCableChecked = ownerCables.filter((g) => checkedMap[`cable:${g.key}`]).length;
+          const groupTotal = deviceTotal + ownerCables.length;
+          const groupChecked = deviceChecked + ownerCableChecked;
 
           return (
             <div key={owner} className="rounded-xl border border-default-200 bg-surface shadow-sm overflow-hidden">
@@ -247,7 +265,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                       <div className="flex items-start gap-3">
                         <CheckboxField
                           isSelected={isChecked}
-                          onChange={() => toggleCheck(parent.id)}
+                          onChange={() => toggleParent(parent, accessories)}
                           className="mt-1"
                         />
 
@@ -298,6 +316,40 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                     </div>
                   );
                 })}
+
+                {/* Cables belonging to this owner */}
+                {ownerCables.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 px-3.5 pt-3 pb-1.5">
+                      <CableIcon className="h-3 w-3 text-default-500" />
+                      <span className="text-[11px] font-medium text-default-500 uppercase tracking-wide">
+                        Кабели ({ownerCables.length}):
+                      </span>
+                    </div>
+                    {ownerCables.map((group) => {
+                      const storageKeyForGroup = `cable:${group.key}`;
+                      const isChecked = !!checkedMap[storageKeyForGroup];
+                      return (
+                        <div
+                          key={group.key}
+                          className={`flex items-center gap-3 p-3.5 transition-colors ${isChecked ? 'bg-accent/5' : 'hover:bg-surface-secondary/30'}`}
+                        >
+                          <CheckboxField isSelected={isChecked} onChange={() => toggleCheck(storageKeyForGroup)} />
+                          <Thumb imageUrl={group.imageUrl} fallback={<CableIcon className="h-5 w-5" />} />
+                          <div className="min-w-0 flex-1">
+                            <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
+                              {CABLE_TYPE_LABEL[group.cableType] ?? group.cableType} — {group.length}м
+                              {group.color ? ` (${group.color})` : ''}
+                            </span>
+                          </div>
+                          <Chip size="sm" variant="soft" className="shrink-0">
+                            x{group.quantity}
+                          </Chip>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           );
