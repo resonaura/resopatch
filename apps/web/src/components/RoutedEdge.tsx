@@ -1,12 +1,28 @@
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react';
+import {
+    buildAdaptiveCableLabel,
+    formatCableGenderPair,
+    formatCableLabel,
+    formatConnectorPair,
+    shortConnectorLabel,
+    cableLabelIconPorts,
+} from '../lib/cableLabel';
 import { maxLabelWidthForRun, MIN_LABEL_RUN_PX } from '../lib/cableLabelClearance';
-import { cableTypeLabel } from '../lib/cableTypeLabel';
 import { findLabelPoint, roundedPathFromPoints, sampleAlongPath, type Point } from '../lib/edgeRouting';
-import type { CableEdgeMeta, CablePlugGender } from '../lib/graphCableToEdge';
+import type { CableEdgeMeta } from '../lib/graphCableToEdge';
 import { useI18n } from '../lib/i18n';
-import type { TranslationKey } from '../lib/i18n/dictionaries';
 import { formatI18nText } from '../lib/i18nText';
 import { PortTypeIcon } from '../lib/portIcons';
+
+// Re-export label helpers so existing imports from this module keep working.
+export {
+    buildAdaptiveCableLabel,
+    formatCableGenderPair,
+    formatCableLabel,
+    formatConnectorPair,
+    shortConnectorLabel,
+    cableLabelIconPorts,
+};
 
 export interface RoutedEdgeData {
   points?: Point[];
@@ -24,312 +40,6 @@ export interface RoutedEdgeData {
     middle?: string | null;
   } | null;
   [key: string]: unknown;
-}
-
-type TFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
-
-function genderWord(g: CablePlugGender, t: TFn): string {
-  return g === 'male' ? t('gender.male') : t('gender.female');
-}
-
-/** e.g. "папа-мама" / "male-female" from the two cable plug ends. */
-export function formatCableGenderPair(meta: CableEdgeMeta | null | undefined, t: TFn): string {
-  if (!meta?.sourcePlugGender || !meta?.targetPlugGender) return '';
-  return `${genderWord(meta.sourcePlugGender, t)}-${genderWord(meta.targetPlugGender, t)}`;
-}
-
-/**
- * Text grouping: collapse TS/TRS of the *same* caliber (never TRS→TS).
- * Different calibers (1/4″ vs 1/8″) may still appear as text “TRS 1/4″→TRS 1/8″”.
- * Specific TS vs TRS still matters vs XLR (TRS→XLR vs TS→XLR).
- */
-function connectorTextFamily(portType: string | null | undefined): string {
-  if (!portType) return '';
-  switch (portType) {
-    case 'XLR_M':
-    case 'XLR_F':
-      return 'xlr';
-    case 'COMBO_XLR_TRS':
-      return 'combo';
-    case 'TRS_14':
-    case 'TS_14':
-      return 'phone14';
-    case 'TRS_18':
-      return 'trs18';
-    case 'TRRS_18':
-      return 'trrs18';
-    case 'MIDI_DIN':
-      return 'midi';
-    case 'USB_C':
-    case 'USB_A':
-    case 'USB_B':
-      return 'usb';
-    case 'DC_BARREL':
-      return 'dc';
-    case 'POWER_IEC':
-    case 'POWER_SCHUKO':
-      return 'mains';
-    case 'WIRELESS':
-      return 'wireless';
-    default:
-      return portType;
-  }
-}
-
-/**
- * Icon media family. Phone plugs share one family; combo is dual-purpose (XLR+TRS)
- * and is resolved against the peer end so we never draw two icons for a combo jack.
- */
-function connectorIconFamily(portType: string | null | undefined): string {
-  if (!portType) return '';
-  switch (portType) {
-    case 'TRS_14':
-    case 'TS_14':
-    case 'TRS_18':
-    case 'TRRS_18':
-      return 'phone';
-    case 'XLR_M':
-    case 'XLR_F':
-      return 'xlr';
-    case 'COMBO_XLR_TRS':
-      return 'combo';
-    default:
-      return connectorTextFamily(portType);
-  }
-}
-
-/** True when the two ends deserve two different icons (not combo↔XLR/TRS, not phone↔phone). */
-function needsDoubleIcon(a: string, b: string): boolean {
-  const fa = connectorIconFamily(a);
-  const fb = connectorIconFamily(b);
-  if (!fa || !fb || fa === fb) return false;
-  // Combo jack accepts XLR *or* TRS — one cable, one icon.
-  if (fa === 'combo' && (fb === 'xlr' || fb === 'phone')) return false;
-  if (fb === 'combo' && (fa === 'xlr' || fa === 'phone')) return false;
-  return true;
-}
-
-/** Specific label key for a port (TS vs TRS stay distinct). */
-function specificConnectorKey(portType: string): TranslationKey | null {
-  switch (portType) {
-    case 'XLR_M':
-    case 'XLR_F':
-      return 'connectorFilter.xlr';
-    case 'COMBO_XLR_TRS':
-      return 'portType.COMBO_XLR_TRS';
-    case 'TRS_14':
-      return 'connectorFilter.trs14';
-    case 'TS_14':
-      return 'connectorFilter.ts14';
-    case 'TRS_18':
-      return 'connectorFilter.trs18';
-    case 'TRRS_18':
-      return 'connectorFilter.trrs18';
-    case 'MIDI_DIN':
-      return 'connectorFilter.midi';
-    case 'USB_C':
-    case 'USB_A':
-    case 'USB_B':
-      return 'connectorFilter.usb';
-    case 'DC_BARREL':
-      return 'connectorFilter.dc';
-    case 'POWER_IEC':
-    case 'POWER_SCHUKO':
-      return 'connectorFilter.mains';
-    case 'WIRELESS':
-      return 'connectorFilter.wireless';
-    default:
-      return null;
-  }
-}
-
-/**
- * Label when both ends share a broad family — prefer TRS for 1/4″ phone
- * (cable is TRS; mono jack just uses one channel).
- */
-function familyDefaultLabelKey(family: string): TranslationKey | null {
-  switch (family) {
-    case 'xlr':
-      return 'connectorFilter.xlr';
-    case 'phone14':
-      return 'connectorFilter.trs14';
-    case 'combo':
-      return 'portType.COMBO_XLR_TRS';
-    case 'trs18':
-      return 'connectorFilter.trs18';
-    case 'trrs18':
-      return 'connectorFilter.trrs18';
-    case 'midi':
-      return 'connectorFilter.midi';
-    case 'usb':
-      return 'connectorFilter.usb';
-    case 'dc':
-      return 'connectorFilter.dc';
-    case 'mains':
-      return 'connectorFilter.mains';
-    case 'wireless':
-      return 'connectorFilter.wireless';
-    default:
-      return null;
-  }
-}
-
-/**
- * Short connector label for one end. Specific TS/TRS when that end matters.
- */
-export function shortConnectorLabel(portType: string | null | undefined, t: TFn): string {
-  if (!portType) return '';
-  const key = specificConnectorKey(portType);
-  return key ? t(key) : portType;
-}
-
-/**
- * One type if both ends same text family (never TRS→TS).
- * Combo + XLR/TRS → single label from the non-combo end (combo is dual-purpose).
- * Mixed otherwise: specific labels (TRS→XLR vs TS→XLR still distinct).
- */
-export function formatConnectorPair(meta: CableEdgeMeta | null | undefined, t: TFn): string {
-  if (!meta) return '';
-  const src = meta.sourcePortType;
-  const tgt = meta.targetPortType;
-  if (!src && !tgt) return '';
-  if (!src) return shortConnectorLabel(tgt, t);
-  if (!tgt) return shortConnectorLabel(src, t);
-
-  const fa = connectorTextFamily(src);
-  const fb = connectorTextFamily(tgt);
-
-  // Combo jack: cable type is defined by the other end (XLR mic cable, TRS line, …).
-  if (fa === 'combo' && (fb === 'xlr' || fb === 'phone14' || fb === 'trs18' || fb === 'trrs18')) {
-    return shortConnectorLabel(tgt, t);
-  }
-  if (fb === 'combo' && (fa === 'xlr' || fa === 'phone14' || fa === 'trs18' || fa === 'trrs18')) {
-    return shortConnectorLabel(src, t);
-  }
-
-  if (fa && fa === fb) {
-    const key = familyDefaultLabelKey(fa);
-    return key ? t(key) : shortConnectorLabel(src, t);
-  }
-  return `${shortConnectorLabel(src, t)}→${shortConnectorLabel(tgt, t)}`;
-}
-
-/** Prefer TRS 1/4″ glyph for any phone jack end; XLR_M → XLR_F glyph. */
-function iconPortForType(portType: string): string {
-  if (portType === 'TS_14' || portType === 'TRS_18' || portType === 'TRRS_18') return 'TRS_14';
-  if (portType === 'XLR_M') return 'XLR_F';
-  return portType;
-}
-
-/**
- * Single icon for combo↔XLR/TRS (combo accepts both).
- * Double only for truly different media (phone↔USB, XLR↔power, …).
- */
-export function cableLabelIconPorts(meta: CableEdgeMeta | null | undefined): string[] {
-  if (!meta) return [];
-  const a = meta.sourcePortType;
-  const b = meta.targetPortType;
-  if (a && b) {
-    if (needsDoubleIcon(a, b)) {
-      return [iconPortForType(a), iconPortForType(b)];
-    }
-    // Prefer the non-combo end for the glyph when one side is combo.
-    if (a === 'COMBO_XLR_TRS' && b !== 'COMBO_XLR_TRS') return [iconPortForType(b)];
-    if (b === 'COMBO_XLR_TRS' && a !== 'COMBO_XLR_TRS') return [iconPortForType(a)];
-    return [iconPortForType(a)];
-  }
-  if (a) return [iconPortForType(a)];
-  if (b) return [iconPortForType(b)];
-  return [];
-}
-
-const PX_PER_CHAR = 5.1;
-const PX_PER_ICON = 11;
-const PX_PAD = 14;
-
-function estimateLabelWidth(text: string, iconCount: number): number {
-  return Math.ceil(text.length * PX_PER_CHAR + iconCount * PX_PER_ICON + PX_PAD);
-}
-
-export type AdaptiveCableLabel = {
-  text: string;
-  iconPorts: string[];
-  /** Full tooltip with every detail. */
-  fullText: string;
-};
-
-/**
- * Build the richest caption that fits `maxWidth` px on the cable run.
- * Always prefers connector text (+ both ends when mixed) and gender; then length/color/product…
- */
-export function buildAdaptiveCableLabel(
-  meta: CableEdgeMeta | null | undefined,
-  t: TFn,
-  lang: 'en' | 'ru',
-  maxWidth: number,
-): AdaptiveCableLabel | null {
-  if (!meta) return null;
-
-  const connector = formatConnectorPair(meta, t);
-  const gender = formatCableGenderPair(meta, t);
-  const length =
-    meta.length != null && Number.isFinite(meta.length) ? `${meta.length}${t('meter')}` : '';
-  const color = meta.color?.trim() || '';
-  const product = meta.productName?.trim() ? formatI18nText(meta.productName, lang) : '';
-  const medium = cableTypeLabel(meta.cableType, t);
-  const patch = meta.isPatchCable ? 'patch' : '';
-  const venue = !meta.isUserOwned ? t('cables.venueProvided') : '';
-  const adapter = meta.adapterName ? formatI18nText(meta.adapterName, lang) : '';
-
-  const icons = cableLabelIconPorts(meta);
-
-  // Detail ladders (richest → sparsest). Connector + gender stay as long as possible.
-  const ladders: string[][] = [
-    [connector, gender, length, color, product, medium, patch, venue, adapter],
-    [connector, gender, length, color, product, patch, venue, adapter],
-    [connector, gender, length, color, product],
-    [connector, gender, length, color],
-    [connector, gender, length],
-    [connector, gender],
-    [connector, length],
-    [connector],
-    [gender, length],
-    [gender],
-    [medium, length],
-    [medium],
-  ];
-
-  const fullParts = [connector, gender, length, color, product, medium, patch, venue, adapter].filter(Boolean);
-  const fullText = fullParts.join(' · ');
-
-  for (const ladder of ladders) {
-    const parts = ladder.filter(Boolean);
-    if (parts.length === 0) continue;
-    const text = parts.join(' · ');
-    if (estimateLabelWidth(text, icons.length) <= maxWidth) {
-      return { text, iconPorts: icons, fullText: fullText || text };
-    }
-  }
-
-  // Last resort: single shortest token if anything fits at all.
-  const fallback = connector || gender || medium;
-  if (fallback && estimateLabelWidth(fallback, Math.min(1, icons.length)) <= maxWidth) {
-    return {
-      text: fallback,
-      iconPorts: icons.slice(0, 1),
-      fullText: fullText || fallback,
-    };
-  }
-  return null;
-}
-
-/** @deprecated prefer buildAdaptiveCableLabel — kept for any external callers. */
-export function formatCableLabel(
-  meta: CableEdgeMeta | null | undefined,
-  t: TFn,
-  lang: 'en' | 'ru',
-): string {
-  return buildAdaptiveCableLabel(meta, t, lang, 10_000)?.text ?? '';
 }
 
 // How much of the path (in px) each end cap texture claims before the repeating middle texture

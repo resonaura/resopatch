@@ -4,17 +4,26 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Connection, Edge, Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
+    Armchair,
+    Briefcase,
+    Cable,
     CheckSquare,
     ChevronLeft,
     ChevronRight,
     ClipboardList,
+    Guitar,
+    Keyboard,
     LayoutGrid,
     ListMusic,
     LogOut,
+    Mic2,
+    Package,
+    Plug,
     Settings,
     Wand2,
+    type LucideIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, type GraphCable, type GraphDevice } from "../api/client";
 import CableCanvasFilters, {
     cablePassesFilters,
@@ -37,12 +46,78 @@ import {
     positionsToRecord,
 } from "../lib/autoLayout";
 import { splitMainCanvasGraph } from "../lib/containerGraph";
-import { portTypeLabel } from "../lib/enumLabels";
+import { DeviceTypeIcon } from "../lib/deviceIcons";
+import { formatRiderRowName, portTypeLabel } from "../lib/enumLabels";
 import { graphCableToEdge } from "../lib/graphCableToEdge";
 import { useI18n } from "../lib/i18n";
 import type { TranslationKey } from "../lib/i18n/dictionaries";
 import { formatI18nText } from "../lib/i18nText";
 import { formatOwnerRole } from "../lib/ownerRole";
+
+/** Simple furniture table (not Lucide Table2 — that's a spreadsheet/grid glyph). */
+function FurnitureTableIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      {/* tabletop */}
+      <path d="M3 10h18" />
+      <path d="M4 10v1.5c0 .8.7 1.5 1.5 1.5h13c.8 0 1.5-.7 1.5-1.5V10" />
+      {/* legs */}
+      <path d="M6 13v6" />
+      <path d="M18 13v6" />
+      <path d="M5 19h2" />
+      <path d="M17 19h2" />
+    </svg>
+  );
+}
+
+function RiderIconBox({ children }: { children: ReactNode }) {
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-default-200 bg-black/20 text-default-500">
+      {children}
+    </span>
+  );
+}
+
+/** Furniture kinds → icon (do NOT reuse device photo matching for these rows). */
+function furnitureIcon(kind: string, className = "h-4 w-4"): ReactNode {
+  if (kind === "TABLE" || kind === "LAPTOP_STAND") {
+    return <FurnitureTableIcon className={className} />;
+  }
+  const map: Record<string, LucideIcon> = {
+    CHAIR: Armchair,
+    GUITAR_STAND: Guitar,
+    KEYBOARD_STAND: Keyboard,
+    MIC_STAND: Mic2,
+    PEDALBOARD_CASE: Briefcase,
+  };
+  const Icon = map[kind] ?? Package;
+  return <Icon className={className} strokeWidth={2} />;
+}
+
+function findDeviceByDisplayName(
+  needle: string,
+  devices: GraphDevice[] | undefined,
+  language: "en" | "ru",
+): GraphDevice | undefined {
+  const n = needle.trim();
+  if (n.length < 2 || !devices?.length) return undefined;
+  return devices.find((d) => {
+    const dn = formatI18nText(d.name, language).trim();
+    if (!dn || dn.length < 2) return false;
+    if (dn === n) return true;
+    if (dn.length >= 4 && n.includes(dn)) return true;
+    if (n.length >= 4 && dn.includes(n)) return true;
+    return false;
+  });
+}
 
 export default function Constructor({
   setupId,
@@ -653,7 +728,8 @@ export default function Constructor({
           )}
           {view === "canvas" && (
             <>
-              <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[calc(100%-6rem)]">
+              {/* Leave room on the right for Arrange so filters never cover it. */}
+              <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[calc(100%-8.5rem)]">
                 <CableCanvasFilters
                   cables={activeGraph.cables}
                   devices={activeGraph.devices}
@@ -679,12 +755,13 @@ export default function Constructor({
                   }
                 />
               </div>
+              {/* Top-right: keep clear of MiniMap (bottom-right) and Controls (bottom-left). */}
               <Button
                 size="sm"
                 variant="secondary"
                 onPress={runAutoLayout}
                 isPending={autoLayout.isPending}
-                className="absolute bottom-3 right-3 z-10 shadow-lg"
+                className="absolute right-3 top-3 z-10 shadow-lg"
               >
                 <Wand2 className="h-3.5 w-3.5" />
                 {t('canvas.arrange')}
@@ -792,29 +869,108 @@ function DevicePhotoCell({
   name,
   matchName,
   devices,
+  /** When set, shown if no photo (e.g. stagebox / power strip type glyph). */
+  fallbackIcon,
 }: {
   name: string;
   /** Optional cleaner name used only for device image lookup. */
   matchName?: string;
   devices?: GraphDevice[];
+  fallbackIcon?: ReactNode;
 }) {
   const { language } = useI18n();
-  const needle = matchName ?? name;
-  const match = devices?.find((d) => {
-    const dn = formatI18nText(d.name, language);
-    return dn === needle || needle.includes(dn) || dn.includes(needle);
-  });
+  const needle = (matchName ?? name).trim();
+  const match = findDeviceByDisplayName(needle, devices, language);
   if (match?.imageUrl) {
-    const isStorage = !match.imageUrl.startsWith('data:') && !/^https?:\/\//i.test(match.imageUrl);
+    const isStorage = !match.imageUrl.startsWith("data:") && !/^https?:\/\//i.test(match.imageUrl);
     const src = isStorage ? `/img/${match.imageUrl}?w=128` : match.imageUrl;
     return (
       <div className="flex items-center gap-2">
-        <img src={src} alt="" className="h-8 w-8 shrink-0 rounded object-contain bg-black/20 p-0.5 border border-default-200" />
+        <img
+          src={src}
+          alt=""
+          className="h-8 w-8 shrink-0 rounded object-contain bg-black/20 p-0.5 border border-default-200"
+        />
+        <span className="font-medium">{name}</span>
+      </div>
+    );
+  }
+  if (fallbackIcon || match) {
+    return (
+      <div className="flex items-center gap-2">
+        <RiderIconBox>
+          {fallbackIcon ?? (match ? <DeviceTypeIcon type={match.type} className="h-4 w-4" /> : <Package className="h-4 w-4" />)}
+        </RiderIconBox>
         <span className="font-medium">{name}</span>
       </div>
     );
   }
   return <span className="font-medium">{name}</span>;
+}
+
+function RiderNameCell({
+  category,
+  rawName,
+  displayName,
+  devices,
+}: {
+  category: RiderRow["category"];
+  /** API raw name (enum for furniture/cables, i18n blob for equipment). */
+  rawName: string;
+  displayName: string;
+  devices?: GraphDevice[];
+}) {
+  const { language } = useI18n();
+
+  if (category === "FURNITURE") {
+    return (
+      <div className="flex items-center gap-2">
+        <RiderIconBox>{furnitureIcon(rawName)}</RiderIconBox>
+        <span className="font-medium">{displayName}</span>
+      </div>
+    );
+  }
+  if (category === "CABLE") {
+    return (
+      <div className="flex items-center gap-2">
+        <RiderIconBox>
+          <Cable className="h-4 w-4" strokeWidth={2} />
+        </RiderIconBox>
+        <span className="font-medium">{displayName}</span>
+      </div>
+    );
+  }
+  if (category === "POWER") {
+    return (
+      <div className="flex items-center gap-2">
+        <RiderIconBox>
+          <Plug className="h-4 w-4" strokeWidth={2} />
+        </RiderIconBox>
+        <span className="font-medium">{displayName}</span>
+      </div>
+    );
+  }
+  if (category === "ADAPTER") {
+    return (
+      <div className="flex items-center gap-2">
+        <RiderIconBox>
+          <Package className="h-4 w-4" strokeWidth={2} />
+        </RiderIconBox>
+        <span className="font-medium">{displayName}</span>
+      </div>
+    );
+  }
+
+  // EQUIPMENT (venue gear: stagebox, outlet/power strip, …) — photo if any, else type icon.
+  const match = findDeviceByDisplayName(displayName, devices, language);
+  const typeIcon = match ? (
+    <DeviceTypeIcon type={match.type} className="h-4 w-4" />
+  ) : (
+    <Package className="h-4 w-4" strokeWidth={2} />
+  );
+  return (
+    <DevicePhotoCell name={displayName} devices={devices} fallbackIcon={typeIcon} />
+  );
 }
 
 function InputListTable({ setupId, devices, hasKeys }: { setupId: string; devices?: GraphDevice[]; hasKeys: boolean }) {
@@ -863,10 +1019,22 @@ function InputListTable({ setupId, devices, hasKeys }: { setupId: string; device
                     <Table.Cell>
                       <DevicePhotoCell name={sourceLabel} matchName={deviceName} devices={devices} />
                     </Table.Cell>
-                    <Table.Cell>{portTypeLabel(r.connector, t)}</Table.Cell>
+                    <Table.Cell>{portTypeLabel(String(r.connector ?? ''), t)}</Table.Cell>
                     <Table.Cell>{routing}</Table.Cell>
-                    <Table.Cell>{formatOwnerRole(r.zone, t)}</Table.Cell>
-                    <Table.Cell>{formatOwnerRole(r.owner, t)}</Table.Cell>
+                    <Table.Cell>
+                      {(() => {
+                        const z = (r.zone ?? '').trim();
+                        if (!z || z === 'Stage' || z === '—') return t('constructor.zone.stage');
+                        return formatOwnerRole(z, t) || z;
+                      })()}
+                    </Table.Cell>
+                    <Table.Cell>
+                      {(() => {
+                        const o = (r.owner ?? '').trim();
+                        if (!o || o === '—') return '—';
+                        return formatOwnerRole(o, t) || o;
+                      })()}
+                    </Table.Cell>
                   </Table.Row>
                 );
               })}
@@ -913,11 +1081,17 @@ function RiderTable({ setupId, devices, hasKeys }: { setupId: string; devices?: 
             <Table.Body>
               {venueRows.map((r: RiderRow, i: number) => {
                 const categoryKey = `constructor.category.${r.category}` as TranslationKey;
+                const displayName = formatRiderRowName(r.category, r.name, t, language);
                 return (
                   <Table.Row key={i}>
                     <Table.Cell>{t(categoryKey)}</Table.Cell>
                     <Table.Cell>
-                      <DevicePhotoCell name={formatI18nText(r.name, language)} devices={devices} />
+                      <RiderNameCell
+                        category={r.category}
+                        rawName={r.name}
+                        displayName={displayName}
+                        devices={devices}
+                      />
                     </Table.Cell>
                     <Table.Cell>{r.quantity}</Table.Cell>
                     <Table.Cell>{formatI18nText(r.note ?? "", language)}</Table.Cell>

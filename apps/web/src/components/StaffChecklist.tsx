@@ -10,13 +10,15 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, type GraphCable, type GraphDevice } from '../api/client';
-import { cableTypeLabel } from '../lib/cableTypeLabel';
+import { buildAdaptiveCableLabel, cableMetaFromPorts } from '../lib/cableLabel';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { getDisplayName } from '../lib/deviceNaming';
+import type { CableEdgeMeta } from '../lib/graphCableToEdge';
 import { useI18n } from '../lib/i18n';
 import { formatI18nText } from '../lib/i18nText';
 import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
 import { formatOwnerRole } from '../lib/ownerRole';
+import { PortTypeIcon } from '../lib/portIcons';
 import CheckboxField from './CheckboxField';
 
 interface CableGroup {
@@ -27,6 +29,11 @@ interface CableGroup {
   productName: string | null;
   quantity: number;
   imageUrl: string | null;
+  isPatchCable: boolean;
+  isUserOwned: boolean;
+  adapterName: string | null;
+  sourcePortType: string | null;
+  targetPortType: string | null;
 }
 
 function isStorageImage(url: string): boolean {
@@ -250,6 +257,14 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
     return map;
   }, [devices]);
 
+  const portById = useMemo(() => {
+    const map = new Map<string, GraphDevice['ports'][number]>();
+    for (const d of devices) {
+      for (const p of d.ports) map.set(p.id, p);
+    }
+    return map;
+  }, [devices]);
+
   // Group top-level devices and their accessories by Owner (excluding venue-provided items)
   const devicesByOwner = useMemo(() => {
     const bandDevices = devices.filter((d) => d.inventoryStatus !== InventoryStatus.VENUE_PROVIDED);
@@ -280,19 +295,42 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
   }, [devices, unowned]);
 
   // Cables to pack: user-owned physical cables (excludes venue-provided runs and wireless
-  // control links, which aren't things you throw in a bag), grouped by owner (whoever's device
-  // the cable originates from) and then by type/length/color so e.g. "6x XLR 3m blue" shows as
-  // one row instead of six.
+  // control links). Group by owner + connector ends + length/color/product so the checklist
+  // line matches the on-wire caption (XLR · папа-мама · 3m · …).
   const cableGroupsByOwner = useMemo(() => {
     const groups = new Map<string, Map<string, CableGroup>>();
     for (const c of cables) {
       if (!c.isUserOwned || c.cableType === 'CONTROL_LINK') continue;
       const owner = portToDevice.get(c.sourcePortId)?.ownerRole?.trim() || unowned;
       const ownerGroups = groups.get(owner) ?? new Map<string, CableGroup>();
-      const key = `${c.cableType}|${c.length}|${c.color ?? ''}|${c.productName ?? ''}`;
+      const srcType = portById.get(c.sourcePortId)?.portType ?? null;
+      const tgtType = portById.get(c.targetPortId)?.portType ?? null;
+      const key = [
+        c.cableType,
+        c.length,
+        c.color ?? '',
+        c.productName ?? '',
+        srcType ?? '',
+        tgtType ?? '',
+        c.isPatchCable ? '1' : '0',
+        c.adapterName ?? '',
+      ].join('|');
       const group =
         ownerGroups.get(key) ??
-        { key, cableType: c.cableType, length: c.length, color: c.color, productName: c.productName, quantity: 0, imageUrl: null };
+        ({
+          key,
+          cableType: c.cableType,
+          length: c.length,
+          color: c.color,
+          productName: c.productName,
+          quantity: 0,
+          imageUrl: null,
+          isPatchCable: c.isPatchCable,
+          isUserOwned: c.isUserOwned,
+          adapterName: c.adapterName ?? null,
+          sourcePortType: srcType,
+          targetPortType: tgtType,
+        } satisfies CableGroup);
       group.quantity += 1;
       if (!group.imageUrl && c.imageUrl) group.imageUrl = c.imageUrl;
       ownerGroups.set(key, group);
@@ -306,7 +344,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
       );
     }
     return result;
-  }, [cables, portToDevice, unowned]);
+  }, [cables, portToDevice, portById, unowned]);
 
   const allCableGroups = useMemo(() => Array.from(cableGroupsByOwner.values()).flat(), [cableGroupsByOwner]);
   const cableChecked = allCableGroups.filter((g) => checkedMap[`cable:${g.key}`]).length;
@@ -430,6 +468,22 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                     {ownerCables.map((group) => {
                       const storageKeyForGroup = `cable:${group.key}`;
                       const isChecked = !!checkedMap[storageKeyForGroup];
+                      const meta: CableEdgeMeta = cableMetaFromPorts(
+                        {
+                          cableType: group.cableType,
+                          length: group.length,
+                          color: group.color,
+                          productName: group.productName,
+                          isPatchCable: group.isPatchCable,
+                          isUserOwned: group.isUserOwned,
+                          adapterName: group.adapterName,
+                        },
+                        group.sourcePortType,
+                        group.targetPortType,
+                      );
+                      const label = buildAdaptiveCableLabel(meta, t, language, 10_000);
+                      const iconPorts = label?.iconPorts ?? [];
+                      const title = label?.fullText || label?.text || group.cableType;
                       return (
                         <div
                           key={group.key}
@@ -439,15 +493,35 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                           <div onClick={(e) => e.stopPropagation()}>
                             <CheckboxField isSelected={isChecked} onChange={() => toggleCheck(storageKeyForGroup)} />
                           </div>
-                          <Thumb imageUrl={group.imageUrl} fallback={<CableIcon className={FALLBACK_ICON_CLASS} />} />
+                          <Thumb
+                            imageUrl={group.imageUrl}
+                            fallback={
+                              iconPorts.length > 0 ? (
+                                <span className="flex items-center gap-0.5">
+                                  {iconPorts.map((pt, i) => (
+                                    <PortTypeIcon key={`${pt}-${i}`} portType={pt} className="h-4 w-4" />
+                                  ))}
+                                </span>
+                              ) : (
+                                <CableIcon className={FALLBACK_ICON_CLASS} />
+                              )
+                            }
+                          />
                           <Chip size="sm" variant="soft" className="shrink-0">
                             x{group.quantity}
                           </Chip>
                           <div className="min-w-0 flex-1">
-                            <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                              {formatI18nText(group.productName, language) || cableTypeLabel(group.cableType, t)} — {group.length}{t('meter')}
-                              {group.color ? ` (${group.color})` : ''}
-                            </span>
+                            <div
+                              className={`flex flex-wrap items-center gap-1.5 text-sm font-semibold ${
+                                isChecked ? 'line-through text-default-400' : 'text-foreground'
+                              }`}
+                              title={title}
+                            >
+                              {iconPorts.map((pt, i) => (
+                                <PortTypeIcon key={`row-${pt}-${i}`} portType={pt} className="h-3.5 w-3.5 shrink-0" />
+                              ))}
+                              <span className="min-w-0">{title}</span>
+                            </div>
                           </div>
                         </div>
                       );

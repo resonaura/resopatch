@@ -23,7 +23,8 @@ export type ConnectorFilterId =
   | 'midi'
   | 'usb'
   | 'dc'
-  | 'mains'
+  | 'iec'
+  | 'nema'
   | 'wireless';
 
 const AUDIO_TYPES = new Set<string>([CableType.AUDIO_BALANCED, CableType.AUDIO_UNBALANCED]);
@@ -39,7 +40,8 @@ const CONNECTOR_ORDER: ConnectorFilterId[] = [
   'midi',
   'usb',
   'dc',
-  'mains',
+  'nema',
+  'iec',
   'wireless',
 ];
 
@@ -52,7 +54,8 @@ const CONNECTOR_LABEL_KEY: Record<ConnectorFilterId, TranslationKey> = {
   midi: 'connectorFilter.midi',
   usb: 'connectorFilter.usb',
   dc: 'connectorFilter.dc',
-  mains: 'connectorFilter.mains',
+  iec: 'connectorFilter.iec',
+  nema: 'connectorFilter.nema',
   wireless: 'connectorFilter.wireless',
 };
 
@@ -66,7 +69,8 @@ const CONNECTOR_ICON_PORT: Record<ConnectorFilterId, PortType> = {
   midi: PortType.MIDI_DIN,
   usb: PortType.USB_C,
   dc: PortType.DC_BARREL,
-  mains: PortType.POWER_SCHUKO,
+  iec: PortType.POWER_IEC,
+  nema: PortType.POWER_SCHUKO,
   wireless: PortType.WIRELESS,
 };
 
@@ -80,7 +84,8 @@ const CONNECTOR_DOT: Record<ConnectorFilterId, string> = {
   midi: '#a855f7',
   usb: '#6366f1',
   dc: '#f59e0b',
-  mains: '#ef4444',
+  iec: '#f97316',
+  nema: '#ef4444',
   wireless: '#94a3b8',
 };
 
@@ -109,8 +114,9 @@ export function connectorGroupsForPortType(portType: string): ConnectorFilterId[
     case PortType.DC_BARREL:
       return ['dc'];
     case PortType.POWER_IEC:
+      return ['iec'];
     case PortType.POWER_SCHUKO:
-      return ['mains'];
+      return ['nema'];
     case PortType.WIRELESS:
       return ['wireless'];
     default:
