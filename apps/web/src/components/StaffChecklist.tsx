@@ -1,15 +1,22 @@
-import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Chip } from '@heroui/react';
-import { RotateCcw, PackageCheck, Cable as CableIcon } from 'lucide-react';
-import { InventoryStatus } from '@resopatch/shared';
+import { DeviceType, InventoryStatus } from '@resopatch/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+    Cable as CableIcon,
+    ChevronDown,
+    ChevronRight,
+    PackageCheck,
+    RotateCcw,
+} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, type GraphCable, type GraphDevice } from '../api/client';
 import { cableTypeLabel } from '../lib/cableTypeLabel';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { getDisplayName } from '../lib/deviceNaming';
 import { useI18n } from '../lib/i18n';
-import { formatOwnerRole } from '../lib/ownerRole';
+import { formatI18nText } from '../lib/i18nText';
 import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
+import { formatOwnerRole } from '../lib/ownerRole';
 import CheckboxField from './CheckboxField';
 
 interface CableGroup {
@@ -46,6 +53,122 @@ function Thumb({ imageUrl, fallback }: { imageUrl: string | null | undefined; fa
 
 function ItemThumb({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'type'> }) {
   return <Thumb imageUrl={device.imageUrl} fallback={<DeviceTypeIcon type={device.type} className={FALLBACK_ICON_CLASS} />} />;
+}
+
+/** Pedalboards default collapsed; other parents with kids start expanded. */
+function ChecklistDeviceRow({
+  parent,
+  accessories,
+  checkedMap,
+  onToggleParent,
+  onToggleCheck,
+}: {
+  parent: GraphDevice;
+  accessories: GraphDevice[];
+  checkedMap: Record<string, boolean>;
+  onToggleParent: (parent: GraphDevice, accessories: GraphDevice[]) => void;
+  onToggleCheck: (id: string) => void;
+}) {
+  const { t, language } = useI18n();
+  const isPedalboard = parent.type === DeviceType.PEDALBOARD;
+  const [open, setOpen] = useState(!isPedalboard);
+  const isChecked = !!checkedMap[parent.id];
+  const hasKids = accessories.length > 0;
+
+  return (
+    <div
+      className={`p-3.5 transition-colors ${isChecked ? 'bg-accent/5' : 'hover:bg-surface-secondary/30'}`}
+    >
+      <div className="flex items-start gap-3">
+        <div onClick={(e) => e.stopPropagation()}>
+          <CheckboxField
+            isSelected={isChecked}
+            onChange={() => onToggleParent(parent, accessories)}
+            className="mt-1"
+          />
+        </div>
+
+        <ItemThumb device={parent} />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            {hasKids && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpen((v) => !v);
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded text-default-500 hover:bg-default-100 hover:text-foreground"
+                aria-expanded={open}
+                title={open ? t('deviceNode.collapseUnused') : t('deviceNode.showAllPorts').replace('{count}', String(accessories.length))}
+              >
+                {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onToggleParent(parent, accessories)}
+              className={`text-left font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}
+            >
+              {getDisplayName(parent, t, language)}
+            </button>
+            <Chip size="sm" variant="soft" className="text-[10px]">
+              {parent.type}
+            </Chip>
+            {hasKids && (
+              <span className="text-[10px] text-default-500">
+                {t('checklist.kit')} · {accessories.length}
+              </span>
+            )}
+            {parent.inventoryStatus !== InventoryStatus.OWNED_ACTIVE && (
+              <Chip size="sm" variant="soft" className="text-[10px]">
+                {parent.inventoryStatus}
+              </Chip>
+            )}
+          </div>
+
+          {parent.notes && (
+            <p className="mt-1 text-xs text-default-500">{formatI18nText(parent.notes, language)}</p>
+          )}
+
+          {hasKids && open && (
+            <div className="mt-3 flex flex-col gap-1.5 border-l-2 border-accent/40 pl-3">
+              <div className="text-[11px] font-medium text-default-500 uppercase tracking-wide">
+                {t('checklist.kit')} ({accessories.length}):
+              </div>
+              {accessories.map((acc) => {
+                const accChecked = !!checkedMap[acc.id];
+                return (
+                  <div
+                    key={acc.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleCheck(acc.id);
+                    }}
+                    className="flex cursor-pointer items-center gap-2 py-0.5"
+                  >
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <CheckboxField
+                        isSelected={accChecked}
+                        onChange={() => onToggleCheck(acc.id)}
+                      />
+                    </div>
+                    <ItemThumb device={acc} />
+                    <span
+                      className={`text-xs ${accChecked ? 'line-through text-default-400' : 'text-foreground'}`}
+                    >
+                      {getDisplayName(acc, t, language)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function StaffChecklist({ devices, cables, setupId }: { devices: GraphDevice[]; cables: GraphCable[]; setupId: string }) {
@@ -284,80 +407,16 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
               </div>
 
               <div className="divide-y divide-default-100">
-                {items.map(({ parent, accessories }) => {
-                  const isChecked = !!checkedMap[parent.id];
-
-                  return (
-                    <div
-                      key={parent.id}
-                      onClick={() => toggleParent(parent, accessories)}
-                      className={`cursor-pointer p-3.5 transition-colors ${isChecked ? 'bg-accent/5' : 'hover:bg-surface-secondary/30'}`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <CheckboxField
-                            isSelected={isChecked}
-                            onChange={() => toggleParent(parent, accessories)}
-                            className="mt-1"
-                          />
-                        </div>
-
-                        <ItemThumb device={parent} />
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                              {getDisplayName(parent, t, language)}
-                            </span>
-                            <Chip size="sm" variant="soft" className="text-[10px]">
-                              {parent.type}
-                            </Chip>
-                            {parent.inventoryStatus !== InventoryStatus.OWNED_ACTIVE && (
-                              <Chip size="sm" variant="soft" className="text-[10px]">
-                                {parent.inventoryStatus}
-                              </Chip>
-                            )}
-                          </div>
-
-                          {parent.notes && <p className="mt-1 text-xs text-default-500">{parent.notes}</p>}
-
-                          {/* Accessories & Child Devices */}
-                          {accessories.length > 0 && (
-                            <div className="mt-3 flex flex-col gap-1.5 border-l-2 border-accent/40 pl-3">
-                              <div className="text-[11px] font-medium text-default-500 uppercase tracking-wide">
-                                {t('checklist.kit')} ({accessories.length}):
-                              </div>
-                              {accessories.map((acc) => {
-                                const accChecked = !!checkedMap[acc.id];
-                                return (
-                                  <div
-                                    key={acc.id}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      toggleCheck(acc.id);
-                                    }}
-                                    className="flex cursor-pointer items-center gap-2 py-0.5"
-                                  >
-                                    <div onClick={(e) => e.stopPropagation()}>
-                                      <CheckboxField
-                                        isSelected={accChecked}
-                                        onChange={() => toggleCheck(acc.id)}
-                                      />
-                                    </div>
-                                    <ItemThumb device={acc} />
-                                    <span className={`text-xs ${accChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                                      {getDisplayName(acc, t, language)}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                {items.map(({ parent, accessories }) => (
+                  <ChecklistDeviceRow
+                    key={parent.id}
+                    parent={parent}
+                    accessories={accessories}
+                    checkedMap={checkedMap}
+                    onToggleParent={toggleParent}
+                    onToggleCheck={toggleCheck}
+                  />
+                ))}
 
                 {/* Cables belonging to this owner */}
                 {ownerCables.length > 0 && (
@@ -386,7 +445,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                           </Chip>
                           <div className="min-w-0 flex-1">
                             <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                              {group.productName ?? cableTypeLabel(group.cableType, t)} — {group.length}{t('meter')}
+                              {formatI18nText(group.productName, language) || cableTypeLabel(group.cableType, t)} — {group.length}{t('meter')}
                               {group.color ? ` (${group.color})` : ''}
                             </span>
                           </div>

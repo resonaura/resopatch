@@ -1,6 +1,6 @@
 import { Icon } from '@iconify/react';
-import { Cable, Plug, type LucideIcon } from 'lucide-react';
 import { PortType } from '@resopatch/shared';
+import { Cable, Plug, type LucideIcon } from 'lucide-react';
 
 const FONTAUDIO_PORT_ICON: Partial<Record<string, string>> = {
   [PortType.XLR_M]: 'fad:xlrplug',
@@ -31,9 +31,20 @@ export function isOutletPortType(portType: string): boolean {
   return portType === PortType.POWER_SCHUKO || portType === PortType.POWER_IEC;
 }
 
-export function PortTypeIcon({ portType, className }: { portType: string; className?: string }) {
+export function PortTypeIcon({
+  portType,
+  className,
+  /** `inherit` — use parent `color` (e.g. cable edge labels). Default keeps muted/outlet styling. */
+  tone = 'default',
+}: {
+  portType: string;
+  className?: string;
+  tone?: 'default' | 'inherit';
+}) {
   const outlet = isOutletPortType(portType);
-  const iconClassName = `${className ?? 'h-3 w-3'} ${outlet ? 'text-amber-400' : 'text-default-500'}`;
+  const colorClass =
+    tone === 'inherit' ? 'text-current' : outlet ? 'text-amber-400' : 'text-default-500';
+  const iconClassName = `${className ?? 'h-3 w-3'} ${colorClass}`;
   const glyph = FONTAUDIO_PORT_ICON[portType] ? (
     <Icon icon={FONTAUDIO_PORT_ICON[portType]!} className={iconClassName} />
   ) : (
@@ -43,10 +54,27 @@ export function PortTypeIcon({ portType, className }: { portType: string; classN
     })()
   );
 
-  if (!outlet) return <span className="flex shrink-0 items-center justify-center">{glyph}</span>;
+  if (tone === 'inherit' || !outlet) {
+    return <span className="flex shrink-0 items-center justify-center">{glyph}</span>;
+  }
   return (
     <span className="flex shrink-0 items-center justify-center rounded-full bg-amber-400/20 p-[3px] ring-1 ring-amber-400/60">
       {glyph}
     </span>
   );
+}
+
+/** Prefer a representative port type for cable-label icons (XLR > TRS > rest). */
+export function preferPortTypeForIcon(a: string | null | undefined, b: string | null | undefined): string | null {
+  const rank = (pt: string): number => {
+    if (pt.startsWith('XLR') || pt === 'COMBO_XLR_TRS') return 0;
+    if (pt === 'TRS_14' || pt === 'TS_14') return 1;
+    if (pt === 'TRS_18' || pt === 'TRRS_18') return 2;
+    if (pt === 'MIDI_DIN') return 3;
+    if (pt.startsWith('USB')) return 4;
+    if (pt === 'DC_BARREL' || pt.startsWith('POWER')) return 5;
+    return 9;
+  };
+  if (a && b) return rank(a) <= rank(b) ? a : b;
+  return a ?? b ?? null;
 }

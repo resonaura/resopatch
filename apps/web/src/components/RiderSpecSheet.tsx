@@ -1,19 +1,14 @@
-import { useState } from 'react';
 import { Chip, Disclosure } from '@heroui/react';
+import { DeviceType, POWER_PORT_TYPES, type PowerProfile } from '@resopatch/shared';
 import { ChevronLeft, ChevronRight, ListChecks, ScrollText, SlidersHorizontal, ToggleLeft, Zap } from 'lucide-react';
-import { DeviceType, PortDirection, type PowerProfile } from '@resopatch/shared';
+import { useState } from 'react';
 import type { GraphDevice } from '../api/client';
+import { polarityLabel, portDirectionLabel } from '../lib/enumLabels';
 import { useI18n } from '../lib/i18n';
 import { formatI18nText } from '../lib/i18nText';
 import { ProgressiveImage } from '../lib/img';
 import { PortTypeIcon } from '../lib/portIcons';
 import { readRiderAttrs } from '../lib/riderSpec';
-
-const DIRECTION_LABEL: Record<string, string> = {
-  [PortDirection.IN]: 'IN',
-  [PortDirection.OUT]: 'OUT',
-  [PortDirection.BI]: 'I/O',
-};
 
 function RiderImageBanner({ device }: { device: GraphDevice }) {
   const { t, language } = useI18n();
@@ -99,7 +94,7 @@ function RiderImageBanner({ device }: { device: GraphDevice }) {
  *  already opens as a drawer on node click, see Constructor.tsx), it lives at the top of the same
  *  panel the editable form (DeviceForm, below it) already occupies. */
 export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [open, setOpen] = useState(true);
   const { manufacturer, model, color, controls, footswitch, algorithms } = readRiderAttrs(device.attrs);
 
@@ -108,9 +103,7 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
     if (power.voltageV != null) parts.push(`${power.voltageV}V`);
     if (power.currentType) parts.push(power.currentType);
     if (power.currentMA != null) parts.push(`${power.currentMA}${t('milliamp')}`);
-    if (power.polarity === 'CENTER_POSITIVE') parts.push('Center Positive');
-    else if (power.polarity === 'CENTER_NEGATIVE') parts.push('Center Negative');
-    else if (power.polarity === 'ANY') parts.push(t('polarity.any'));
+    if (power.polarity) parts.push(polarityLabel(power.polarity, t));
     if (power.maxOutputPowerW != null) parts.push(t('riderSpec.powerSuffix').replace('{w}', String(power.maxOutputPowerW)));
     if (power.maxOutputCurrentMA != null && power.maxOutputPowerW == null)
       parts.push(t('riderSpec.currentSuffix').replace('{ma}', String(power.maxOutputCurrentMA)));
@@ -158,14 +151,15 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
               </div>
               <div className="flex flex-col gap-0.5">
                 {device.ports.map((port) => {
-                  const portPower = formatPower(port.power);
+                  // Electrical specs only belong on power ports — never on audio/MIDI/USB outs etc.
+                  const portPower = POWER_PORT_TYPES.includes(port.portType) ? formatPower(port.power) : null;
                   return (
                     <div key={port.id} className="flex items-center gap-1.5 rounded px-1 py-0.5 odd:bg-black/10">
                       <PortTypeIcon portType={port.portType} className="h-3 w-3" />
-                      <span className="min-w-0 flex-1 truncate">{port.name}</span>
+                      <span className="min-w-0 flex-1 truncate">{formatI18nText(port.name, language)}</span>
                       {portPower && <span className="shrink-0 text-[10px] text-default-500">{portPower}</span>}
                       <Chip size="sm" variant="soft" className="shrink-0">
-                        {DIRECTION_LABEL[port.direction]}
+                        {portDirectionLabel(port.direction, t)}
                       </Chip>
                     </div>
                   );

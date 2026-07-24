@@ -169,6 +169,7 @@ function PortRow({
   isConnected?: boolean;
   isDimmed?: boolean;
 }) {
+  const { language } = useI18n();
   const channelColor = portChannelColor(port.name);
   return (
     <div
@@ -180,9 +181,14 @@ function PortRow({
       <Handle type="source" position={Position.Left} id={`${port.id}-src-left`} />
       {channelColor && <span className="h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-black/40" style={{ backgroundColor: channelColor }} />}
       <PortTypeIcon portType={port.portType} />
-      <span className="block min-w-0 flex-1 truncate text-[10.5px] text-default-500" title={`${port.name}${subtitle ? ` · ${subtitle}` : ''} (${port.portType})`}>
-        {port.name}
-        {subtitle && <span className="block truncate text-[9px] text-default-500/70">{subtitle}</span>}
+      <span
+        className="block min-w-0 flex-1 truncate text-[10.5px] text-default-500"
+        title={`${formatI18nText(port.name, language)}${subtitle ? ` · ${subtitle}` : ''} (${port.portType})`}
+      >
+        {formatI18nText(port.name, language)}
+        {subtitle && (
+          <span className="block truncate text-[9px] text-default-500/70">{subtitle}</span>
+        )}
       </span>
       {isConnected && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent/80" />}
       <Handle type="source" position={Position.Right} id={port.id} />

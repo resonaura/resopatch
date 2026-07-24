@@ -1,10 +1,12 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Input, Label, ListBox, Modal, Select, TextField, toast } from '@heroui/react';
-import { Cable as CableIcon } from 'lucide-react';
 import { CableType, POWER_PORT_TYPES, PortType, type CreateCableDto, type PortDto } from '@resopatch/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Cable as CableIcon } from 'lucide-react';
+import { useState } from 'react';
 import { api } from '../api/client';
+import { cableTypeLabel, portTypeLabel } from '../lib/enumLabels';
 import { useI18n } from '../lib/i18n';
+import { formatI18nText } from '../lib/i18nText';
 
 function guessCableType(source: PortDto, target: PortDto): CableType {
   if (POWER_PORT_TYPES.includes(source.portType) && POWER_PORT_TYPES.includes(target.portType)) return CableType.POWER_LINE;
@@ -34,7 +36,7 @@ export default function NewCableModal({
   targetDeviceName: string;
   onClose: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const qc = useQueryClient();
   const [cableType, setCableType] = useState<CableType>(() => guessCableType(sourcePort, targetPort));
   const [length, setLength] = useState('1');
@@ -77,24 +79,24 @@ export default function NewCableModal({
             <Modal.Body className="flex flex-col gap-3">
               <div className="rounded-lg border border-default-200 bg-surface-secondary p-2.5 text-xs">
                 <div>
-                  {sourceDeviceName} — {sourcePort.name} ({sourcePort.portType})
+                  {sourceDeviceName} — {formatI18nText(sourcePort.name, language)} ({portTypeLabel(sourcePort.portType, t)})
                 </div>
                 <div className="text-default-500">→</div>
                 <div>
-                  {targetDeviceName} — {targetPort.name} ({targetPort.portType})
+                  {targetDeviceName} — {formatI18nText(targetPort.name, language)} ({portTypeLabel(targetPort.portType, t)})
                 </div>
               </div>
               <Select value={cableType} onChange={(v) => setCableType(v as CableType)}>
                 <Label>{t('newCableModal.type')}</Label>
                 <Select.Trigger>
-                  <Select.Value />
+                  <Select.Value>{cableTypeLabel(cableType, t)}</Select.Value>
                   <Select.Indicator />
                 </Select.Trigger>
                 <Select.Popover>
                   <ListBox>
                     {Object.values(CableType).map((ct) => (
-                      <ListBox.Item key={ct} id={ct} textValue={ct}>
-                        {ct}
+                      <ListBox.Item key={ct} id={ct} textValue={cableTypeLabel(ct, t)}>
+                        {cableTypeLabel(ct, t)}
                       </ListBox.Item>
                     ))}
                   </ListBox>
@@ -116,8 +118,12 @@ export default function NewCableModal({
                       {t('newCableModal.noAdapter')}
                     </ListBox.Item>
                     {(adapters.data ?? []).map((a) => (
-                      <ListBox.Item key={a.id} id={a.id} textValue={a.name}>
-                        {a.name} ({a.inputType} → {a.outputType})
+                      <ListBox.Item
+                        key={a.id}
+                        id={a.id}
+                        textValue={formatI18nText(a.name, language)}
+                      >
+                        {formatI18nText(a.name, language)} ({portTypeLabel(a.inputType, t)} → {portTypeLabel(a.outputType, t)})
                       </ListBox.Item>
                     ))}
                   </ListBox>

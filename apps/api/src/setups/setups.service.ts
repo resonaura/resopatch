@@ -114,10 +114,11 @@ export class SetupsService {
         const adapter = row.cable.adapterId ? adapterById.get(row.cable.adapterId) : undefined;
         return {
           channel: index + 1,
-          sourceName: `${sourceDevice?.name ?? '?'} — ${row.sourcePort.name}`,
+          sourceDeviceName: sourceDevice?.name ?? '?',
+          sourcePortName: row.sourcePort.name,
           connector: row.sourcePort.portType,
           direction: row.sourcePort.direction,
-          routing: adapter ? `Through ${adapter.name}` : `Direct from ${sourceDevice?.name ?? '?'}`,
+          adapterName: adapter?.name ?? null,
           phantomPower: false,
           zone: sourceDevice?.ownerRole ?? 'Stage',
           owner: sourceDevice?.ownerRole ?? '—',

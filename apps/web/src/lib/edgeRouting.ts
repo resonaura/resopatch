@@ -8,6 +8,7 @@
  * This file keeps: local A* findPath, geometric findBestPath, legacy fan-in, labels, SVG helpers.
  */
 
+import { PARALLEL_CABLE_GAP } from './cableLabelClearance';
 import type { EdgeRouteSpec, Point, RectObstacle } from './routingTypes';
 export type { EdgeRouteSpec, Point, RectObstacle } from './routingTypes';
 
@@ -23,12 +24,13 @@ const MIN_STUB = 20;
 // High turn cost so A* strongly prefers long straight runs over staircases when both work.
 const TURN_PENALTY = 22;
 const MAX_EXPANSIONS = 40000;
-// Minimum center-to-center spacing between parallel traces.
-const LANE_GAP = 18;
+
+// Minimum center-to-center spacing between parallel traces (label chip + air).
+const LANE_GAP = PARALLEL_CABLE_GAP;
 /** Half-gap: how far a finished trace's keep-out extends from its centerline. */
-const TRACE_CLEARANCE = 8;
+const TRACE_CLEARANCE = Math.round(PARALLEL_CABLE_GAP / 2) - 2;
 // Group near-coincident parallel runs (grid rounding / float noise), not only exact equals.
-const LANE_GROUP_TOLERANCE = 12;
+const LANE_GROUP_TOLERANCE = Math.round(PARALLEL_CABLE_GAP * 0.55);
 
 /** Grid resolution scales with how far apart a cable's ends are: a fine 16px grid keeps routing
  *  precise in crowded local clusters, but the same resolution applied to a cable spanning most of

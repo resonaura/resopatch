@@ -7,11 +7,13 @@
  *  - Never move pad endpoints; never push a cable through a foreign card body.
  */
 
+import { PARALLEL_CABLE_GAP } from './cableLabelClearance';
 import { pathHitsNodeBodies, type NodeBox } from './pathAvoidNodes';
 
 export type Point = { x: number; y: number };
 
-const DEFAULT_GAP = 16;
+/** Default lane gap leaves a little air for edge labels without wrecking dense fan-ins. */
+const DEFAULT_GAP = PARALLEL_CABLE_GAP;
 /** Same column/row only when almost exactly aligned. */
 const AXIS_TOL = 4;
 /**

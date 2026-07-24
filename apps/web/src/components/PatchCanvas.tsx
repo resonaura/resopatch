@@ -18,6 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useAvoidNodesRouterFromWorker, useAvoidRoutesStore } from 'avoid-nodes-edge';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PARALLEL_CABLE_GAP } from '../lib/cableLabelClearance';
 import { applyCableManagement, type EdgePortMeta } from '../lib/cableManage';
 import { findLabelPoint, type Point } from '../lib/edgeRouting';
 import {
@@ -253,7 +254,7 @@ function PatchCanvasInner({
       ownByEdge.set(m.edgeId, new Set([m.sourceId, m.targetId]));
     }
     const managed = applyCableManagement(next, meta, boxes);
-    const packed = nudgeParallelRuns(managed, 16, boxes, ownByEdge);
+    const packed = nudgeParallelRuns(managed, PARALLEL_CABLE_GAP, boxes, ownByEdge);
     let finalRoutes = new Map<string, Point[]>();
     for (const [id, pts] of packed) {
       finalRoutes.set(id, enforceOrthogonal(pts));
@@ -411,7 +412,7 @@ function PatchCanvasInner({
       const managed2 = applyCableManagement(detoured, meta, boxes);
       // Pack: allBoxes + ownByEdge so each power net ignores only its own PSU id.
       const allBoxes = [...boxes, ...adapterBoxes];
-      const packed2 = nudgeParallelRuns(managed2, 16, allBoxes, ownByEdge);
+      const packed2 = nudgeParallelRuns(managed2, PARALLEL_CABLE_GAP, allBoxes, ownByEdge);
       finalRoutes = new Map<string, Point[]>();
       for (const [id, pts] of packed2) {
         const foreignPsu = adapterBoxes.filter((b) => edgeIdFromPsuCard(b.id) !== id);

@@ -1,10 +1,11 @@
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Spinner, Toast } from '@heroui/react';
+import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, api } from './api/client';
 import { I18nProvider, useI18n } from './lib/i18n';
+import { formatI18nText } from './lib/i18nText';
 import { useCloudSync } from './lib/sync';
-import Login from './pages/Login';
 import Constructor from './pages/Constructor';
+import Login from './pages/Login';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
@@ -15,7 +16,7 @@ function CenterScreen({ children }: { children: React.ReactNode }) {
 }
 
 function Gate() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const qc = useQueryClient();
   useCloudSync(qc);
   const setups = useQuery({
@@ -47,7 +48,12 @@ function Gate() {
     return <CenterScreen>{t('app.noSetup')}</CenterScreen>;
   }
 
-  return <Constructor setupId={list[0].id} setupName={list[0].name} />;
+  return (
+    <Constructor
+      setupId={list[0].id}
+      setupName={formatI18nText(list[0].name, language)}
+    />
+  );
 }
 
 export default function App() {

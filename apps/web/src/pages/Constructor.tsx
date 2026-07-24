@@ -1,14 +1,9 @@
 import { Button, Spinner, Table, Tabs } from "@heroui/react";
-import {
-    type InputListRow,
-    type PortDto,
-    type RiderRow,
-} from "@resopatch/shared";
+import { type PortDto, type RiderRow } from "@resopatch/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Connection, Edge, Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
-    Cable as CableIcon,
     CheckSquare,
     ChevronLeft,
     ChevronRight,
@@ -20,8 +15,12 @@ import {
     Wand2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type GraphDevice } from "../api/client";
-import CableListView from "../components/CableListView";
+import { api, type GraphCable, type GraphDevice } from "../api/client";
+import CableCanvasFilters, {
+    cablePassesFilters,
+    zoneOfCable,
+    type CableCategory,
+} from "../components/CableCanvasFilters";
 import ContainerInsideModal from "../components/ContainerInsideModal";
 import type { DeviceNodeData } from "../components/DeviceNode";
 import Inspector, { type Selection } from "../components/Inspector";
@@ -38,8 +37,10 @@ import {
     positionsToRecord,
 } from "../lib/autoLayout";
 import { splitMainCanvasGraph } from "../lib/containerGraph";
+import { portTypeLabel } from "../lib/enumLabels";
 import { graphCableToEdge } from "../lib/graphCableToEdge";
 import { useI18n } from "../lib/i18n";
+import type { TranslationKey } from "../lib/i18n/dictionaries";
 import { formatI18nText } from "../lib/i18nText";
 import { formatOwnerRole } from "../lib/ownerRole";
 
@@ -71,10 +72,15 @@ export default function Constructor({
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(
     null,
   );
-  const [view, setView] = useState<"canvas" | "input-list" | "rider" | "checklist" | "cables">("canvas");
+  const [view, setView] = useState<"canvas" | "input-list" | "rider" | "checklist">("canvas");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [insideContainerId, setInsideContainerId] = useState<string | null>(null);
+
+  // Cable visibility filters (live on canvas — replaces the old Cables page).
+  const [cableCategory, setCableCategory] = useState<CableCategory>("all");
+  const [hiddenConnectors, setHiddenConnectors] = useState<Set<string>>(() => new Set());
+  const [hiddenCableZones, setHiddenCableZones] = useState<Set<string>>(() => new Set());
 
   const [setupMode, setSetupMode] = useState<'no-keys' | 'with-keys'>(() => {
     try {
@@ -103,7 +109,9 @@ export default function Constructor({
   /** Devices/cables visible for a given setup mode (Arrange must match the canvas). */
   const graphSliceForMode = useCallback(
     (mode: 'no-keys' | 'with-keys') => {
-      if (!graph) return { devices: [] as typeof graph.devices, cables: [] as typeof graph.cables };
+      if (!graph) {
+        return { devices: [] as GraphDevice[], cables: [] as GraphCable[] };
+      }
       if (mode === 'with-keys') {
         return { devices: graph.devices, cables: graph.cables };
       }
@@ -180,10 +188,13 @@ export default function Constructor({
         .map((device) => {
           const boundaryPortDtos =
             mainGraph.boundaryPortsByContainer.get(device.id) ?? [];
-          const boundaryPorts = boundaryPortDtos.map((port: PortDto) => ({
-            port,
-            deviceName: deviceByPortId.get(port.id)?.name ?? "",
-          }));
+          const boundaryPorts = boundaryPortDtos.map((port: PortDto) => {
+            const owner = deviceByPortId.get(port.id);
+            return {
+              port,
+              deviceName: owner ? formatI18nText(owner.name, language) : "",
+            };
+          });
           return {
             id: device.id,
             type: "device",
@@ -206,6 +217,7 @@ export default function Constructor({
       childrenByParent,
       deviceByPortId,
       connectedPortIds,
+      language,
       onSelectChild,
       selection,
     ],
@@ -238,14 +250,34 @@ export default function Constructor({
     return map;
   }, [activeGraph]);
 
-  const initialEdges: Edge[] = useMemo(
-    () =>
-      mainGraph.externalCables.map((cable) => {
+  const initialEdges: Edge[] = useMemo(() => {
+    const noZone = t("cables.noZone");
+    const filters = {
+      category: cableCategory,
+      hiddenConnectors,
+      hiddenZones: hiddenCableZones,
+    };
+    return mainGraph.externalCables
+      .filter((cable) =>
+        cablePassesFilters(cable, zoneOfCable(cable, deviceByPortId, noZone), filters, portById),
+      )
+      .map((cable) => {
         const isSelected = selection?.kind === "cable" && selection.id === cable.id;
-        return graphCableToEdge(cable, portById, deviceByPortId, portToDevice, { selected: isSelected });
-      }),
-    [mainGraph.externalCables, portToDevice, portById, deviceByPortId, selection],
-  );
+        return graphCableToEdge(cable, portById, deviceByPortId, portToDevice, {
+          selected: isSelected,
+        });
+      });
+  }, [
+    mainGraph.externalCables,
+    portToDevice,
+    portById,
+    deviceByPortId,
+    selection,
+    cableCategory,
+    hiddenConnectors,
+    hiddenCableZones,
+    t,
+  ]);
 
   /**
    * Epoch bumped on every Arrange. In-flight drag saves that started before
@@ -534,10 +566,6 @@ export default function Constructor({
                   <Tabs.Separator />
                   <span title={t('header.tab.checklist')}><CheckSquare className="h-3.5 w-3.5" /></span>
                 </Tabs.Tab>
-                <Tabs.Tab id="cables" aria-label={t('header.tab.cables')}>
-                  <Tabs.Separator />
-                  <span title={t('header.tab.cables')}><CableIcon className="h-3.5 w-3.5" /></span>
-                </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>
           </Tabs>
@@ -624,16 +652,44 @@ export default function Constructor({
             />
           )}
           {view === "canvas" && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onPress={runAutoLayout}
-              isPending={autoLayout.isPending}
-              className="absolute bottom-3 right-3 z-10 shadow-lg"
-            >
-              <Wand2 className="h-3.5 w-3.5" />
-              {t('canvas.arrange')}
-            </Button>
+            <>
+              <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[calc(100%-6rem)]">
+                <CableCanvasFilters
+                  cables={activeGraph.cables}
+                  devices={activeGraph.devices}
+                  category={cableCategory}
+                  hiddenConnectors={hiddenConnectors}
+                  hiddenZones={hiddenCableZones}
+                  onCategoryChange={setCableCategory}
+                  onToggleConnector={(connector) =>
+                    setHiddenConnectors((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(connector)) next.delete(connector);
+                      else next.add(connector);
+                      return next;
+                    })
+                  }
+                  onToggleZone={(zone) =>
+                    setHiddenCableZones((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(zone)) next.delete(zone);
+                      else next.add(zone);
+                      return next;
+                    })
+                  }
+                />
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onPress={runAutoLayout}
+                isPending={autoLayout.isPending}
+                className="absolute bottom-3 right-3 z-10 shadow-lg"
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                {t('canvas.arrange')}
+              </Button>
+            </>
           )}
           {view === "input-list" && (
             <InputListTable setupId={setupId} devices={activeGraph.devices} hasKeys={setupMode === "with-keys"} />
@@ -644,7 +700,6 @@ export default function Constructor({
           {view === "checklist" && (
             <StaffChecklist devices={activeGraph.devices} cables={activeGraph.cables} setupId={setupId} />
           )}
-          {view === "cables" && <CableListView devices={graph.devices} cables={graph.cables} />}
         </div>
 
         <button
@@ -733,8 +788,22 @@ export default function Constructor({
   );
 }
 
-function DevicePhotoCell({ name, devices }: { name: string; devices?: GraphDevice[] }) {
-  const match = devices?.find((d) => d.name === name || name.includes(d.name) || d.name.includes(name));
+function DevicePhotoCell({
+  name,
+  matchName,
+  devices,
+}: {
+  name: string;
+  /** Optional cleaner name used only for device image lookup. */
+  matchName?: string;
+  devices?: GraphDevice[];
+}) {
+  const { language } = useI18n();
+  const needle = matchName ?? name;
+  const match = devices?.find((d) => {
+    const dn = formatI18nText(d.name, language);
+    return dn === needle || needle.includes(dn) || dn.includes(needle);
+  });
   if (match?.imageUrl) {
     const isStorage = !match.imageUrl.startsWith('data:') && !/^https?:\/\//i.test(match.imageUrl);
     const src = isStorage ? `/img/${match.imageUrl}?w=128` : match.imageUrl;
@@ -767,38 +836,40 @@ function InputListTable({ setupId, devices, hasKeys }: { setupId: string; device
       </div>
     );
 
-  const columns: { key: keyof InputListRow; label: string }[] = [
-    { key: "channel", label: "CH" },
-    { key: "sourceName", label: t('constructor.table.source') },
-    { key: "connector", label: t('constructor.table.connector') },
-    { key: "routing", label: t('constructor.table.routing') },
-    { key: "zone", label: t('constructor.table.zone') },
-    { key: "owner", label: t('constructor.table.owner') },
-  ];
-
   return (
     <div className="h-full min-h-0 overflow-auto p-4">
       <Table>
         <Table.ScrollContainer>
           <Table.Content aria-label="Input list">
             <Table.Header>
-              {columns.map((c) => (
-                <Table.Column key={c.key}>{c.label}</Table.Column>
-              ))}
+              <Table.Column>CH</Table.Column>
+              <Table.Column>{t('constructor.table.source')}</Table.Column>
+              <Table.Column>{t('constructor.table.connector')}</Table.Column>
+              <Table.Column>{t('constructor.table.routing')}</Table.Column>
+              <Table.Column>{t('constructor.table.zone')}</Table.Column>
+              <Table.Column>{t('constructor.table.owner')}</Table.Column>
             </Table.Header>
             <Table.Body>
-              {query.data.map((r) => (
-                <Table.Row key={r.channel}>
-                  <Table.Cell>{r.channel}</Table.Cell>
-                  <Table.Cell>
-                    <DevicePhotoCell name={formatI18nText(r.sourceName, language)} devices={devices} />
-                  </Table.Cell>
-                  <Table.Cell>{r.connector}</Table.Cell>
-                  <Table.Cell>{r.routing}</Table.Cell>
-                  <Table.Cell>{formatI18nText(r.zone, language)}</Table.Cell>
-                  <Table.Cell>{formatOwnerRole(r.owner, t)}</Table.Cell>
-                </Table.Row>
-              ))}
+              {query.data.map((r) => {
+                const deviceName = formatI18nText(r.sourceDeviceName, language);
+                const portName = formatI18nText(r.sourcePortName, language);
+                const sourceLabel = portName ? `${deviceName} — ${portName}` : deviceName;
+                const routing = r.adapterName
+                  ? t('constructor.routing.adapter').replace('{adapter}', formatI18nText(r.adapterName, language))
+                  : t('constructor.routing.direct').replace('{source}', deviceName);
+                return (
+                  <Table.Row key={r.channel}>
+                    <Table.Cell>{r.channel}</Table.Cell>
+                    <Table.Cell>
+                      <DevicePhotoCell name={sourceLabel} matchName={deviceName} devices={devices} />
+                    </Table.Cell>
+                    <Table.Cell>{portTypeLabel(r.connector, t)}</Table.Cell>
+                    <Table.Cell>{routing}</Table.Cell>
+                    <Table.Cell>{formatOwnerRole(r.zone, t)}</Table.Cell>
+                    <Table.Cell>{formatOwnerRole(r.owner, t)}</Table.Cell>
+                  </Table.Row>
+                );
+              })}
             </Table.Body>
           </Table.Content>
         </Table.ScrollContainer>
@@ -840,16 +911,19 @@ function RiderTable({ setupId, devices, hasKeys }: { setupId: string; devices?: 
               <Table.Column>{t('constructor.table.note')}</Table.Column>
             </Table.Header>
             <Table.Body>
-              {venueRows.map((r: RiderRow, i: number) => (
-                <Table.Row key={i}>
-                  <Table.Cell>{r.category}</Table.Cell>
-                  <Table.Cell>
-                    <DevicePhotoCell name={formatI18nText(r.name, language)} devices={devices} />
-                  </Table.Cell>
-                  <Table.Cell>{r.quantity}</Table.Cell>
-                  <Table.Cell>{formatI18nText(r.note ?? "", language)}</Table.Cell>
-                </Table.Row>
-              ))}
+              {venueRows.map((r: RiderRow, i: number) => {
+                const categoryKey = `constructor.category.${r.category}` as TranslationKey;
+                return (
+                  <Table.Row key={i}>
+                    <Table.Cell>{t(categoryKey)}</Table.Cell>
+                    <Table.Cell>
+                      <DevicePhotoCell name={formatI18nText(r.name, language)} devices={devices} />
+                    </Table.Cell>
+                    <Table.Cell>{r.quantity}</Table.Cell>
+                    <Table.Cell>{formatI18nText(r.note ?? "", language)}</Table.Cell>
+                  </Table.Row>
+                );
+              })}
             </Table.Body>
           </Table.Content>
         </Table.ScrollContainer>

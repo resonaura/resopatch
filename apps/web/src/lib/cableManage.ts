@@ -7,13 +7,14 @@
  *  - Never collapse a clear detour into a body-crossing L/Z.
  */
 
+import { STUB_LANE_GAP } from './cableLabelClearance';
 import { enforceOrthogonal, type Point } from './nudgeParallel';
 import { pathHitsNodeBodies, type NodeBox } from './pathAvoidNodes';
 import type { Side } from './portHandles';
 
 export const BASE_STUB = 28;
 /** Extra depth per lane when several cables leave/enter the same face. */
-export const LANE_GAP = 14;
+export const LANE_GAP = STUB_LANE_GAP;
 
 export type EdgePortMeta = {
   edgeId: string;

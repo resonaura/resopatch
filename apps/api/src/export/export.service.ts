@@ -38,8 +38,10 @@ export class ExportService {
     lines.push(`${setup.name}`, '='.repeat(setup.name.length), '');
     lines.push('INPUT LIST', '-'.repeat(10));
     for (const row of inputList) {
+      const source = `${row.sourceDeviceName} — ${row.sourcePortName}`;
+      const routing = row.adapterName ? `Through ${row.adapterName}` : `Direct from ${row.sourceDeviceName}`;
       lines.push(
-        `CH ${String(row.channel).padStart(2, '0')} | ${row.sourceName} | ${row.connector} | ${row.routing} | Zone: ${row.zone} | Owner: ${row.owner}`,
+        `CH ${String(row.channel).padStart(2, '0')} | ${source} | ${row.connector} | ${routing} | Zone: ${row.zone} | Owner: ${row.owner}`,
       );
     }
     lines.push('', 'RIDER / PACKING LIST', '-'.repeat(20));

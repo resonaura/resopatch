@@ -1,11 +1,12 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Input, Label, ListBox, Modal, Select, TextField, toast } from '@heroui/react';
-import { Plus } from 'lucide-react';
 import { DeviceType, HostUsbType, InventoryStatus, PowerSourceType, type CreateDeviceDto } from '@resopatch/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
 import { api } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { deviceTypeKey, getDisplayName } from '../lib/deviceNaming';
+import { inventoryStatusLabel } from '../lib/enumLabels';
 import { useI18n } from '../lib/i18n';
 import ImagePicker from './ImagePicker';
 
@@ -76,7 +77,7 @@ export default function NewDeviceModal({
               <Select value={type} onChange={(v) => setType(v as DeviceType)}>
                 <Label>{t('newDeviceModal.type')}</Label>
                 <Select.Trigger>
-                  <Select.Value />
+                  <Select.Value>{t(deviceTypeKey(type))}</Select.Value>
                   <Select.Indicator />
                 </Select.Trigger>
                 <Select.Popover>
@@ -93,14 +94,14 @@ export default function NewDeviceModal({
               <Select value={inventoryStatus} onChange={(v) => setInventoryStatus(v as InventoryStatus)}>
                 <Label>{t('newDeviceModal.status')}</Label>
                 <Select.Trigger>
-                  <Select.Value />
+                  <Select.Value>{inventoryStatusLabel(inventoryStatus, t)}</Select.Value>
                   <Select.Indicator />
                 </Select.Trigger>
                 <Select.Popover>
                   <ListBox>
                     {Object.values(InventoryStatus).map((status) => (
-                      <ListBox.Item key={status} id={status} textValue={status}>
-                        {status}
+                      <ListBox.Item key={status} id={status} textValue={inventoryStatusLabel(status, t)}>
+                        {inventoryStatusLabel(status, t)}
                       </ListBox.Item>
                     ))}
                   </ListBox>

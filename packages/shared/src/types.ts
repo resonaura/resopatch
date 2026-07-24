@@ -1,15 +1,15 @@
 import {
-  CableType,
-  CurrentType,
-  DeviceType,
-  FurnitureKind,
-  HostUsbType,
-  InventoryStatus,
-  Polarity,
-  PortDirection,
-  PortType,
-  PowerSourceType,
-  SignalFormat,
+    CableType,
+    CurrentType,
+    DeviceType,
+    FurnitureKind,
+    HostUsbType,
+    InventoryStatus,
+    Polarity,
+    PortDirection,
+    PortType,
+    PowerSourceType,
+    SignalFormat,
 } from './enums.js';
 
 export interface Position {
@@ -126,13 +126,16 @@ export interface SetupDto {
   checklistState: Record<string, boolean> | null;
 }
 
-/** One row of the derived input list (Table 6 in the design doc). */
+/** One row of the derived input list (Table 6 in the design doc).
+ *  Names are left as stored (plain or bilingual JSON) — the client localizes via formatI18nText. */
 export interface InputListRow {
   channel: number;
-  sourceName: string;
+  sourceDeviceName: string;
+  sourcePortName: string;
   connector: PortType;
   direction: PortDirection;
-  routing: string;
+  /** Present when the hop goes through an adapter; client builds the routing label. */
+  adapterName: string | null;
   phantomPower: boolean;
   zone: string;
   owner: string;

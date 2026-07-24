@@ -99,7 +99,7 @@ describe('cableManage + nudgeParallel', () => {
     const boxes: NodeBox[] = [{ id: 'src', x: 4840, y: 1600, width: 240, height: 400 }];
     const managed = applyCableManagement(routes, meta, boxes);
     const own = new Map(meta.map((m) => [m.edgeId, new Set([m.sourceId, m.targetId])]));
-    const packed = nudgeParallelRuns(managed, 16, boxes, own);
+    const packed = nudgeParallelRuns(managed, undefined, boxes, own);
 
     // Unique stub columns after comb + pack.
     const stubXs = [...packed.values()].map((p) => p[1].x);

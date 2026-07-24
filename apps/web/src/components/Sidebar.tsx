@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
 import { Button, Disclosure, Input } from '@heroui/react';
-import { Cable as CableIcon, Plus } from 'lucide-react';
 import { CABLE_COLORS, InventoryStatus } from '@resopatch/shared';
+import { Cable as CableIcon, Plus } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type { GraphCable, GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { getDisplayName } from '../lib/deviceNaming';
@@ -65,10 +65,15 @@ export default function Sidebar({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return devices;
-    return devices.filter(
-      (d) => d.name.toLowerCase().includes(q) || d.type.toLowerCase().includes(q) || (d.ownerRole ?? '').toLowerCase().includes(q),
-    );
-  }, [devices, query]);
+    return devices.filter((d) => {
+      const name = getDisplayName(d, t, language).toLowerCase();
+      return (
+        name.includes(q) ||
+        d.type.toLowerCase().includes(q) ||
+        (d.ownerRole ?? '').toLowerCase().includes(q)
+      );
+    });
+  }, [devices, query, t, language]);
 
   const filteredCables = useMemo(() => {
     const q = query.trim().toLowerCase();

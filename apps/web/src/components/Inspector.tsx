@@ -1,42 +1,96 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Disclosure, Input, Label, ListBox, Select, TextArea, TextField, toast } from '@heroui/react';
-import { Cable as CableIcon, Layers, Package, Plus, StickyNote, Trash2, Zap, type LucideIcon } from 'lucide-react';
 import {
-  CableType,
-  CurrentType,
-  DeviceType,
-  HostUsbType,
-  InventoryStatus,
-  Polarity,
-  PortDirection,
-  PortType,
-  PowerSourceType,
-  type UpdateCableDto,
-  type UpdateDeviceDto,
+    CableType,
+    CurrentType,
+    DeviceType,
+    HostUsbType,
+    InventoryStatus,
+    Polarity,
+    PortDirection,
+    PortType,
+    PowerSourceType,
+    type UpdateCableDto,
+    type UpdateDeviceDto,
 } from '@resopatch/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Cable as CableIcon, Layers, Package, Plus, StickyNote, Trash2, Zap, type LucideIcon } from 'lucide-react';
+import { useState } from 'react';
 import { api, type GraphCable, type GraphDevice, type GraphResponse } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { getDisplayName } from '../lib/deviceNaming';
+import {
+    cableTypeLabel,
+    currentTypeLabel,
+    deviceTypeLabel,
+    hostUsbLabel,
+    inventoryStatusLabel,
+    polarityLabel,
+    portDirectionLabel,
+    portTypeLabel,
+    powerSourceLabel,
+} from '../lib/enumLabels';
 import { useI18n } from '../lib/i18n';
-import { formatI18nText } from '../lib/i18nText';
+import { formatI18nText, mergeI18nText } from '../lib/i18nText';
 import CheckboxField from './CheckboxField';
 import ImagePicker from './ImagePicker';
 import RiderSpecSheet from './RiderSpecSheet';
 
-function enumSelect<T extends string>(values: T[], value: T, onChange: (v: T) => void, label: string) {
+const POWER_SOURCE_DEVICE_TYPES = new Set<DeviceType>([
+  DeviceType.POWER_SUPPLY,
+  DeviceType.POWER_SPLITTER,
+  DeviceType.POWER_STRIP,
+]);
+
+const USB_HOST_DEVICE_TYPES = new Set<DeviceType>([DeviceType.LAPTOP, DeviceType.AUDIO_INTERFACE]);
+
+/** Devices that commonly draw power — show consumer fields even before "requires power" is checked if data exists. */
+const TYPICAL_POWER_CONSUMERS = new Set<DeviceType>([
+  DeviceType.PEDAL,
+  DeviceType.LAPTOP,
+  DeviceType.AUDIO_INTERFACE,
+  DeviceType.MIXER,
+  DeviceType.MONITOR_CONTROLLER,
+  DeviceType.VOCAL_PROCESSOR,
+  DeviceType.MIDI_DEVICE,
+  DeviceType.MONITOR,
+  DeviceType.AMPLIFIER,
+  DeviceType.LIGHT,
+  DeviceType.KEYBOARD,
+  DeviceType.STAGE_BOX,
+  DeviceType.POWER_SUPPLY,
+  DeviceType.POWER_SPLITTER,
+]);
+
+function hasPowerProfileData(power: GraphDevice['power']): boolean {
+  return (
+    power.voltageV != null ||
+    power.currentMA != null ||
+    power.currentType != null ||
+    power.polarity != null ||
+    power.maxOutputCurrentMA != null ||
+    power.maxOutputPowerW != null
+  );
+}
+
+function enumSelect<T extends string>(
+  values: T[],
+  value: T,
+  onChange: (v: T) => void,
+  label: string,
+  labelOf: (v: T) => string,
+) {
   return (
     <Select value={value} onChange={(v) => onChange(v as T)}>
       <Label>{label}</Label>
       <Select.Trigger>
-        <Select.Value />
+        <Select.Value>{labelOf(value)}</Select.Value>
         <Select.Indicator />
       </Select.Trigger>
       <Select.Popover>
         <ListBox>
-          {values.map((t) => (
-            <ListBox.Item key={t} id={t} textValue={t}>
-              {t}
+          {values.map((item) => (
+            <ListBox.Item key={item} id={item} textValue={labelOf(item)}>
+              {labelOf(item)}
             </ListBox.Item>
           ))}
         </ListBox>
@@ -45,12 +99,18 @@ function enumSelect<T extends string>(values: T[], value: T, onChange: (v: T) =>
   );
 }
 
-function optionalEnumSelect<T extends string>(values: T[], value: T | undefined, onChange: (v: T | undefined) => void, label: string) {
+function optionalEnumSelect<T extends string>(
+  values: T[],
+  value: T | undefined,
+  onChange: (v: T | undefined) => void,
+  label: string,
+  labelOf: (v: T) => string,
+) {
   return (
     <Select value={value ?? '__none__'} onChange={(v) => onChange(v === '__none__' ? undefined : (v as T))}>
       <Label>{label}</Label>
       <Select.Trigger>
-        <Select.Value />
+        <Select.Value>{value ? labelOf(value) : '—'}</Select.Value>
         <Select.Indicator />
       </Select.Trigger>
       <Select.Popover>
@@ -58,9 +118,9 @@ function optionalEnumSelect<T extends string>(values: T[], value: T | undefined,
           <ListBox.Item id="__none__" textValue="—">
             —
           </ListBox.Item>
-          {values.map((t) => (
-            <ListBox.Item key={t} id={t} textValue={t}>
-              {t}
+          {values.map((item) => (
+            <ListBox.Item key={item} id={item} textValue={labelOf(item)}>
+              {labelOf(item)}
             </ListBox.Item>
           ))}
         </ListBox>
@@ -103,6 +163,8 @@ function DeviceForm({
   const qc = useQueryClient();
   const { t, language } = useI18n();
   const [form, setForm] = useState(device);
+  const [nameEdit, setNameEdit] = useState(() => formatI18nText(device.name, language));
+  const [notesEdit, setNotesEdit] = useState(() => formatI18nText(device.notes, language));
   const [attrsText, setAttrsText] = useState(() => JSON.stringify(device.attrs, null, 2));
   const [attrsError, setAttrsError] = useState<string | null>(null);
 
@@ -116,7 +178,14 @@ function DeviceForm({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
   });
   const addPort = useMutation({
-    mutationFn: () => api.createPort({ deviceId: device.id, name: t('inspector.newPortDefault'), portType: PortType.TS_14, direction: PortDirection.BI, power: {} }),
+    mutationFn: () =>
+      api.createPort({
+        deviceId: device.id,
+        name: t('inspector.newPortDefault'),
+        portType: PortType.TS_14,
+        direction: PortDirection.BI,
+        power: {},
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
   });
   const deletePort = useMutation({
@@ -128,15 +197,48 @@ function DeviceForm({
     onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
   });
 
+  const isPowerSourceDevice = POWER_SOURCE_DEVICE_TYPES.has(form.type);
+  const showUsbHost = USB_HOST_DEVICE_TYPES.has(form.type);
+  const showPedal = form.type === DeviceType.PEDAL;
+  // Consumer electrical fields (V/mA/polarity) — not for pure accessories / passive gear unless already filled.
+  const showPowerConsumer =
+    form.powerRequired ||
+    form.powerSourceType !== PowerSourceType.NONE ||
+    TYPICAL_POWER_CONSUMERS.has(form.type) ||
+    hasPowerProfileData(form.power);
+  // Always expose at least "requires power" except accessories with no power data at all.
+  const showPowerSection =
+    isPowerSourceDevice ||
+    form.type !== DeviceType.ACCESSORY ||
+    form.powerRequired ||
+    hasPowerProfileData(form.power) ||
+    form.powerSourceType !== PowerSourceType.NONE;
+
   const powerBudget = useQuery({
     queryKey: ['power-budget', device.id],
     queryFn: () => api.getPowerBudget(device.id),
-    enabled: device.ports.some((p) => p.power.maxOutputPowerW != null || p.power.maxOutputCurrentMA != null) || device.power.maxOutputPowerW != null,
+    enabled:
+      isPowerSourceDevice &&
+      (device.ports.some((p) => p.power.maxOutputPowerW != null || p.power.maxOutputCurrentMA != null) ||
+        device.power.maxOutputPowerW != null),
   });
 
   const commitField = <K extends keyof UpdateDeviceDto>(key: K, value: UpdateDeviceDto[K]) => {
     setForm((f) => ({ ...f, [key]: value }) as GraphDevice);
     save.mutate({ [key]: value } as UpdateDeviceDto);
+  };
+
+  const commitName = () => {
+    const merged = mergeI18nText(device.name, language, nameEdit);
+    setForm((f) => ({ ...f, name: merged }));
+    save.mutate({ name: merged });
+  };
+
+  const commitNotes = () => {
+    const merged = mergeI18nText(device.notes, language, notesEdit);
+    const value = merged || undefined;
+    setForm((f) => ({ ...f, notes: value ?? null }));
+    save.mutate({ notes: value });
   };
 
   const commitAttrs = () => {
@@ -163,10 +265,22 @@ function DeviceForm({
     <div className="flex flex-col gap-3">
       <TextField>
         <Label>{t('inspector.name')}</Label>
-        <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} onBlur={() => commitField('name', form.name)} />
+        <Input value={nameEdit} onChange={(e) => setNameEdit(e.target.value)} onBlur={commitName} />
       </TextField>
-      {enumSelect(Object.values(DeviceType), form.type, (v) => commitField('type', v), t('inspector.type'))}
-      {enumSelect(Object.values(InventoryStatus), form.inventoryStatus, (v) => commitField('inventoryStatus', v), t('inspector.inventoryStatus'))}
+      {enumSelect(
+        Object.values(DeviceType),
+        form.type,
+        (v) => commitField('type', v),
+        t('inspector.type'),
+        (v) => deviceTypeLabel(v, t),
+      )}
+      {enumSelect(
+        Object.values(InventoryStatus),
+        form.inventoryStatus,
+        (v) => commitField('inventoryStatus', v),
+        t('inspector.inventoryStatus'),
+        (v) => inventoryStatusLabel(v, t),
+      )}
       <TextField>
         <Label>{t('inspector.ownerRole')}</Label>
         <Input
@@ -191,91 +305,203 @@ function DeviceForm({
         </div>
       </TextField>
 
-      <Section title={t('inspector.powerSection')} icon={Zap}>
-        <CheckboxField isSelected={form.powerRequired} onChange={(v) => commitField('powerRequired', v)}>
-          {t('inspector.requiresPower')}
-        </CheckboxField>
-        {enumSelect(Object.values(PowerSourceType), form.powerSourceType, (v) => commitField('powerSourceType', v), t('inspector.powerSource'))}
-        {enumSelect(Object.values(HostUsbType), form.hostUsbType, (v) => commitField('hostUsbType', v), t('inspector.usbHostType'))}
-        <div className="grid grid-cols-2 gap-2">
-          {optionalEnumSelect(
-            Object.values(CurrentType),
-            form.power.currentType,
-            (v) => commitField('power', { ...form.power, currentType: v }),
-            t('inspector.currentType'),
+      {showPowerSection && (
+        <Section title={t('inspector.powerSection')} icon={Zap}>
+          {!isPowerSourceDevice && (
+            <CheckboxField isSelected={form.powerRequired} onChange={(v) => commitField('powerRequired', v)}>
+              {t('inspector.requiresPower')}
+            </CheckboxField>
           )}
-          {optionalEnumSelect(Object.values(Polarity), form.power.polarity, (v) => commitField('power', { ...form.power, polarity: v }), t('inspector.polarity'))}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <TextField>
-            <Label>{t('inspector.voltage')}</Label>
-            <Input
-              type="number"
-              value={form.power.voltageV ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, power: { ...f.power, voltageV: e.target.value === '' ? undefined : Number(e.target.value) } }))}
-              onBlur={() => commitField('power', form.power)}
-            />
-          </TextField>
-          <TextField>
-            <Label>{t('inspector.current')}</Label>
-            <Input
-              type="number"
-              value={form.power.currentMA ?? ''}
-              onChange={(e) => setForm((f) => ({ ...f, power: { ...f.power, currentMA: e.target.value === '' ? undefined : Number(e.target.value) } }))}
-              onBlur={() => commitField('power', form.power)}
-            />
-          </TextField>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <TextField>
-            <Label>{t('inspector.maxDrawMa')}</Label>
-            <Input
-              type="number"
-              value={form.power.maxOutputCurrentMA ?? ''}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, power: { ...f.power, maxOutputCurrentMA: e.target.value === '' ? undefined : Number(e.target.value) } }))
-              }
-              onBlur={() => commitField('power', form.power)}
-            />
-          </TextField>
-          <TextField>
-            <Label>{t('inspector.maxDrawW')}</Label>
-            <Input
-              type="number"
-              value={form.power.maxOutputPowerW ?? ''}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, power: { ...f.power, maxOutputPowerW: e.target.value === '' ? undefined : Number(e.target.value) } }))
-              }
-              onBlur={() => commitField('power', form.power)}
-            />
-          </TextField>
-        </div>
-        {powerBudget.data && (
-          <div className={`rounded-lg border p-2.5 text-xs ${powerBudget.data.overBudget ? 'border-danger text-danger' : 'border-success'}`}>
-            <div>
-              {t('inspector.drawnPower')} {powerBudget.data.drawnPowerW.toFixed(1)}W
-              {powerBudget.data.maxOutputPowerW != null ? ` / ${powerBudget.data.maxOutputPowerW}W` : ''}
-              {powerBudget.data.overBudget ? ` — ${t('inspector.overBudget')}` : ''}
-            </div>
-            {powerBudget.data.unresolvedLoads.length > 0 && (
-              <div className="text-default-500">{t('inspector.unresolvedLoads')} {powerBudget.data.unresolvedLoads.map((l) => l.deviceName).join(', ')}</div>
-            )}
-          </div>
-        )}
-      </Section>
 
-      {form.type === DeviceType.PEDAL && (
+          {(showPowerConsumer || form.powerRequired) && !isPowerSourceDevice && (
+            <>
+              {enumSelect(
+                Object.values(PowerSourceType),
+                form.powerSourceType,
+                (v) => commitField('powerSourceType', v),
+                t('inspector.powerSource'),
+                (v) => powerSourceLabel(v, t),
+              )}
+              {showUsbHost &&
+                enumSelect(
+                  Object.values(HostUsbType),
+                  form.hostUsbType,
+                  (v) => commitField('hostUsbType', v),
+                  t('inspector.usbHostType'),
+                  (v) => hostUsbLabel(v, t),
+                )}
+              <div className="grid grid-cols-2 gap-2">
+                {optionalEnumSelect(
+                  Object.values(CurrentType),
+                  form.power.currentType,
+                  (v) => commitField('power', { ...form.power, currentType: v }),
+                  t('inspector.currentType'),
+                  (v) => currentTypeLabel(v, t),
+                )}
+                {optionalEnumSelect(
+                  Object.values(Polarity),
+                  form.power.polarity,
+                  (v) => commitField('power', { ...form.power, polarity: v }),
+                  t('inspector.polarity'),
+                  (v) => polarityLabel(v, t),
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <TextField>
+                  <Label>{t('inspector.voltage')}</Label>
+                  <Input
+                    type="number"
+                    value={form.power.voltageV ?? ''}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        power: { ...f.power, voltageV: e.target.value === '' ? undefined : Number(e.target.value) },
+                      }))
+                    }
+                    onBlur={() => commitField('power', form.power)}
+                  />
+                </TextField>
+                <TextField>
+                  <Label>{t('inspector.current')}</Label>
+                  <Input
+                    type="number"
+                    value={form.power.currentMA ?? ''}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        power: { ...f.power, currentMA: e.target.value === '' ? undefined : Number(e.target.value) },
+                      }))
+                    }
+                    onBlur={() => commitField('power', form.power)}
+                  />
+                </TextField>
+              </div>
+            </>
+          )}
+
+          {isPowerSourceDevice && (
+            <>
+              <p className="text-[11px] font-medium text-default-500">{t('inspector.powerSourceCapacitySection')}</p>
+              {enumSelect(
+                Object.values(PowerSourceType),
+                form.powerSourceType,
+                (v) => commitField('powerSourceType', v),
+                t('inspector.powerSource'),
+                (v) => powerSourceLabel(v, t),
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                {optionalEnumSelect(
+                  Object.values(CurrentType),
+                  form.power.currentType,
+                  (v) => commitField('power', { ...form.power, currentType: v }),
+                  t('inspector.currentType'),
+                  (v) => currentTypeLabel(v, t),
+                )}
+                {optionalEnumSelect(
+                  Object.values(Polarity),
+                  form.power.polarity,
+                  (v) => commitField('power', { ...form.power, polarity: v }),
+                  t('inspector.polarity'),
+                  (v) => polarityLabel(v, t),
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <TextField>
+                  <Label>{t('inspector.voltage')}</Label>
+                  <Input
+                    type="number"
+                    value={form.power.voltageV ?? ''}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        power: { ...f.power, voltageV: e.target.value === '' ? undefined : Number(e.target.value) },
+                      }))
+                    }
+                    onBlur={() => commitField('power', form.power)}
+                  />
+                </TextField>
+                <TextField>
+                  <Label>{t('inspector.maxDrawMa')}</Label>
+                  <Input
+                    type="number"
+                    value={form.power.maxOutputCurrentMA ?? ''}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        power: {
+                          ...f.power,
+                          maxOutputCurrentMA: e.target.value === '' ? undefined : Number(e.target.value),
+                        },
+                      }))
+                    }
+                    onBlur={() => commitField('power', form.power)}
+                  />
+                </TextField>
+              </div>
+              <TextField>
+                <Label>{t('inspector.maxDrawW')}</Label>
+                <Input
+                  type="number"
+                  value={form.power.maxOutputPowerW ?? ''}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      power: {
+                        ...f.power,
+                        maxOutputPowerW: e.target.value === '' ? undefined : Number(e.target.value),
+                      },
+                    }))
+                  }
+                  onBlur={() => commitField('power', form.power)}
+                />
+              </TextField>
+              {powerBudget.data && (
+                <div
+                  className={`rounded-lg border p-2.5 text-xs ${
+                    powerBudget.data.overBudget ? 'border-danger text-danger' : 'border-success'
+                  }`}
+                >
+                  <div>
+                    {t('inspector.drawnPower')} {powerBudget.data.drawnPowerW.toFixed(1)}W
+                    {powerBudget.data.maxOutputPowerW != null ? ` / ${powerBudget.data.maxOutputPowerW}W` : ''}
+                    {powerBudget.data.overBudget ? ` — ${t('inspector.overBudget')}` : ''}
+                  </div>
+                  {powerBudget.data.unresolvedLoads.length > 0 && (
+                    <div className="text-default-500">
+                      {t('inspector.unresolvedLoads')}{' '}
+                      {powerBudget.data.unresolvedLoads
+                        .map((l) => formatI18nText(l.deviceName, language))
+                        .join(', ')}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </Section>
+      )}
+
+      {showPedal && (
         <Section title={t('inspector.pedalSection')} icon={Layers}>
           <div className="grid grid-cols-2 gap-2">
-            <CheckboxField isSelected={form.pedal?.isStereoIn ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoIn: v })}>
+            <CheckboxField
+              isSelected={form.pedal?.isStereoIn ?? false}
+              onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoIn: v })}
+            >
               {t('inspector.stereoIn')}
             </CheckboxField>
-            <CheckboxField isSelected={form.pedal?.isStereoOut ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoOut: v })}>
+            <CheckboxField
+              isSelected={form.pedal?.isStereoOut ?? false}
+              onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoOut: v })}
+            >
               {t('inspector.stereoOut')}
             </CheckboxField>
           </div>
           <div className="grid grid-cols-2 gap-2 items-end">
-            <CheckboxField isSelected={form.pedal?.hasPresets ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasPresets: v })}>
+            <CheckboxField
+              isSelected={form.pedal?.hasPresets ?? false}
+              onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasPresets: v })}
+            >
               {t('inspector.hasPresets')}
             </CheckboxField>
             <TextField>
@@ -284,13 +510,22 @@ function DeviceForm({
                 type="number"
                 value={form.pedal?.presetCount ?? ''}
                 onChange={(e) =>
-                  setForm((f) => ({ ...f, pedal: { ...(f.pedal ?? {}), presetCount: e.target.value === '' ? undefined : Number(e.target.value) } }))
+                  setForm((f) => ({
+                    ...f,
+                    pedal: {
+                      ...(f.pedal ?? {}),
+                      presetCount: e.target.value === '' ? undefined : Number(e.target.value),
+                    },
+                  }))
                 }
                 onBlur={() => commitField('pedal', form.pedal ?? undefined)}
               />
             </TextField>
           </div>
-          <CheckboxField isSelected={form.pedal?.hasMidiControl ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasMidiControl: v })}>
+          <CheckboxField
+            isSelected={form.pedal?.hasMidiControl ?? false}
+            onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasMidiControl: v })}
+          >
             {t('inspector.midiControl')}
           </CheckboxField>
           <TextField>
@@ -300,7 +535,13 @@ function DeviceForm({
               onChange={(e) =>
                 setForm((f) => ({
                   ...f,
-                  pedal: { ...(f.pedal ?? {}), smartModes: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) },
+                  pedal: {
+                    ...(f.pedal ?? {}),
+                    smartModes: e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  },
                 }))
               }
               onBlur={() => commitField('pedal', form.pedal ?? undefined)}
@@ -312,26 +553,34 @@ function DeviceForm({
       <Section title={t('inspector.portsSection').replace('{count}', String(device.ports.length))} icon={CableIcon}>
         {device.ports.map((port) => (
           <div key={port.id} className="grid grid-cols-[1fr_1fr_70px_auto] items-center gap-1.5">
-            <Input defaultValue={port.name} onBlur={(e) => e.target.value !== port.name && updatePort.mutate({ id: port.id, dto: { name: e.target.value } })} />
+            <Input
+              defaultValue={formatI18nText(port.name, language)}
+              onBlur={(e) => {
+                const merged = mergeI18nText(port.name, language, e.target.value);
+                if (merged !== port.name) updatePort.mutate({ id: port.id, dto: { name: merged } });
+              }}
+            />
             <select
               defaultValue={port.portType}
               className="select__trigger h-9 rounded-lg border border-default-200 bg-surface-secondary px-2 text-xs"
               onChange={(e) => updatePort.mutate({ id: port.id, dto: { portType: e.target.value as PortType } })}
             >
-              {Object.values(PortType).map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {Object.values(PortType).map((pt) => (
+                <option key={pt} value={pt}>
+                  {portTypeLabel(pt, t)}
                 </option>
               ))}
             </select>
             <select
               defaultValue={port.direction}
               className="select__trigger h-9 rounded-lg border border-default-200 bg-surface-secondary px-2 text-xs"
-              onChange={(e) => updatePort.mutate({ id: port.id, dto: { direction: e.target.value as PortDirection } })}
+              onChange={(e) =>
+                updatePort.mutate({ id: port.id, dto: { direction: e.target.value as PortDirection } })
+              }
             >
-              {Object.values(PortDirection).map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {Object.values(PortDirection).map((d) => (
+                <option key={d} value={d}>
+                  {portDirectionLabel(d, t)}
                 </option>
               ))}
             </select>
@@ -361,20 +610,13 @@ function DeviceForm({
           <Plus className="h-3.5 w-3.5" />
           {t('inspector.addChild')}
         </Button>
-        <p className="text-[11px] text-default-500">
-          {t('inspector.kitNotice')}
-        </p>
+        <p className="text-[11px] text-default-500">{t('inspector.kitNotice')}</p>
       </Section>
 
       <Section title={t('inspector.notesSection')} icon={StickyNote}>
         <TextField>
           <Label>{t('inspector.notes')}</Label>
-          <TextArea
-            value={form.notes ?? ''}
-            onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-            onBlur={() => commitField('notes', form.notes || undefined)}
-            rows={3}
-          />
+          <TextArea value={notesEdit} onChange={(e) => setNotesEdit(e.target.value)} onBlur={commitNotes} rows={3} />
         </TextField>
         <ImagePicker
           value={form.imageUrl ?? undefined}
@@ -416,24 +658,36 @@ function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: stri
   const sourcePort = sourceDevice?.ports.find((p) => p.id === cable.sourcePortId);
   const targetPort = targetDevice?.ports.find((p) => p.id === cable.targetPortId);
 
+  const [productNameEdit, setProductNameEdit] = useState(() => formatI18nText(cable.productName, language));
+
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-lg border border-default-200 bg-surface-secondary p-2.5 text-xs">
         <div>
-          {sourceDevice ? getDisplayName(sourceDevice, t, language) : ''} — {sourcePort?.name}
+          {sourceDevice ? getDisplayName(sourceDevice, t, language) : ''} — {formatI18nText(sourcePort?.name, language)}
         </div>
         <div className="text-default-500">↓</div>
         <div>
-          {targetDevice ? getDisplayName(targetDevice, t, language) : ''} — {targetPort?.name}
+          {targetDevice ? getDisplayName(targetDevice, t, language) : ''} — {formatI18nText(targetPort?.name, language)}
         </div>
       </div>
-      {enumSelect(Object.values(CableType), cable.cableType, (v) => save.mutate({ cableType: v }), t('inspector.cableType'))}
+      {enumSelect(
+        Object.values(CableType),
+        cable.cableType,
+        (v) => save.mutate({ cableType: v }),
+        t('inspector.cableType'),
+        (v) => cableTypeLabel(v, t),
+      )}
       <TextField>
         <Label>{t('inspector.brandModel')}</Label>
         <Input
-          defaultValue={cable.productName ?? ''}
+          value={productNameEdit}
+          onChange={(e) => setProductNameEdit(e.target.value)}
           placeholder="e.g. Fender Professional Series Tweed Instrument Cable"
-          onBlur={(e) => save.mutate({ productName: e.target.value || null })}
+          onBlur={() => {
+            const merged = mergeI18nText(cable.productName, language, productNameEdit);
+            save.mutate({ productName: merged || null });
+          }}
         />
       </TextField>
       <TextField>
@@ -469,12 +723,16 @@ function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: stri
         />
       </Section>
       <CheckboxField isSelected={cable.isPatchCable} onChange={(v) => save.mutate({ isPatchCable: v })}>
-        Patch cable
+        {t('inspector.patchCable')}
       </CheckboxField>
       <CheckboxField isSelected={cable.isUserOwned} onChange={(v) => save.mutate({ isUserOwned: v })}>
-        Band-owned cable
+        {t('inspector.bandOwnedCable')}
       </CheckboxField>
-      {cable.adapterName && <p className="text-xs text-default-500">Adapter: {formatI18nText(cable.adapterName, language)}</p>}
+      {cable.adapterName && (
+        <p className="text-xs text-default-500">
+          {t('inspector.adapter').replace('{name}', formatI18nText(cable.adapterName, language))}
+        </p>
+      )}
       <Button variant="danger" fullWidth onPress={() => remove.mutate()} className="mt-2">
         <Trash2 className="h-3.5 w-3.5" />
         {t('inspector.deleteCable')}
@@ -503,12 +761,12 @@ export default function Inspector({
   if (!selection) {
     return (
       <div className="h-full min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-4 text-sm text-default-500">
-        Select a device or cable on the canvas.
+        {t('inspector.selectHint')}
         <br />
         <br />
-        Devices: {graph.devices.length}
+        {t('inspector.statsDevices').replace('{count}', String(graph.devices.length))}
         <br />
-        Cables: {graph.cables.length}
+        {t('inspector.statsCables').replace('{count}', String(graph.cables.length))}
       </div>
     );
   }
@@ -539,7 +797,7 @@ export default function Inspector({
   if (!cable) return null;
   return (
     <div className="h-full min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
-      <h3 className="mb-2.5 text-sm font-semibold">Cable</h3>
+      <h3 className="mb-2.5 text-sm font-semibold">{cableTypeLabel(cable.cableType, t)}</h3>
       <CableForm key={cable.id} cable={cable} setupId={setupId} graph={graph} />
     </div>
   );

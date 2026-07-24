@@ -46,7 +46,8 @@ export interface LibavoidRouteOptions {
 
 const DEFAULTS: Required<LibavoidRouteOptions> = {
   nodeSpacing: 8,
-  cableSpacing: 12,
+  // Modest parallel nudge — enough for labels, not so wide that dense fans fail.
+  cableSpacing: 20,
   bendPenalty: 50,
   // Crossing is expensive but not "try forever" — the TS port of libavoid can thrash with
   // extremely high crossing penalties + hateCrossings on dense boards.

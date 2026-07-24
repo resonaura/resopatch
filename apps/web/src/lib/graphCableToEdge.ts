@@ -16,6 +16,61 @@ import {
 import type { Edge } from '@xyflow/react';
 import type { GraphCable, GraphDevice } from '../api/client';
 
+/** Plug gender on the cable end (mates with the device jack). */
+export type CablePlugGender = 'male' | 'female';
+
+/**
+ * Gender of the *cable plug* that inserts into this device port.
+ * Device XLR-F jack → cable has male plug (папа); XLR-M → female plug (мама).
+ */
+export function cablePlugGenderForPort(portType: string | undefined | null): CablePlugGender | null {
+  if (!portType) return null;
+  switch (portType) {
+    case 'XLR_F':
+    case 'COMBO_XLR_TRS':
+      return 'male';
+    case 'XLR_M':
+      return 'female';
+    case 'TRS_14':
+    case 'TS_14':
+    case 'TRS_18':
+    case 'TRRS_18':
+    case 'MIDI_DIN':
+    case 'USB_A':
+    case 'USB_B':
+    case 'USB_C':
+    case 'DC_BARREL':
+    case 'POWER_SCHUKO':
+      return 'male';
+    case 'POWER_IEC':
+      // IEC mains lead: C13 female into device C14 inlet.
+      return 'female';
+    case 'WIRELESS':
+    default:
+      return null;
+  }
+}
+
+/** Meta carried on the edge for labels + canvas filters. */
+export type CableEdgeMeta = {
+  cableType: string;
+  length: number;
+  color: string | null;
+  productName: string | null;
+  isPatchCable: boolean;
+  isUserOwned: boolean;
+  adapterName: string | null;
+  /** Owner zone of the source device (for zone filters). */
+  zone: string | null;
+  /** Port types at each end (for label icon + gender). */
+  sourcePortType: string | null;
+  targetPortType: string | null;
+  /** Cable plug gender at source end (папа/мама). */
+  sourcePlugGender: CablePlugGender | null;
+  /** Cable plug gender at target end. */
+  targetPlugGender: CablePlugGender | null;
+};
+
 export function graphCableToEdge(
   cable: GraphCable,
   portById: Map<string, GraphDevice['ports'][number]>,
@@ -57,11 +112,8 @@ export function graphCableToEdge(
     tPort?.portType === 'POWER_SCHUKO' ||
     tPort?.portType === 'POWER_IEC' ||
     tDev?.type === 'POWER_STRIP';
-  // A dedicated PowerSupply device node already renders its own card with this info —
-  // annotating the cable too would just show the same "БП" fact twice. The badge is only
-  // useful for the older pattern where a wall charger is modeled inline as a plain Adapter
-  // (see MOTU/MX400/FEX800 in seed.ts) rather than as its own node.
-  const touchesPowerSupplyNode = sDev?.type === DeviceType.POWER_SUPPLY || tDev?.type === DeviceType.POWER_SUPPLY;
+  const touchesPowerSupplyNode =
+    sDev?.type === DeviceType.POWER_SUPPLY || tDev?.type === DeviceType.POWER_SUPPLY;
   const isPowerAdapter =
     cable.cableType === CableType.POWER_LINE &&
     !touchesPowerSupplyNode &&
@@ -72,18 +124,38 @@ export function graphCableToEdge(
     const targetVoltage =
       tPort?.power.voltageV ?? sPort?.power.voltageV ?? tDev?.power.voltageV ?? sDev?.power.voltageV ?? 9;
     const targetCurrent =
-      tPort?.power.currentType ?? sPort?.power.currentType ?? tDev?.power.currentType ?? sDev?.power.currentType ?? 'DC';
+      tPort?.power.currentType ??
+      sPort?.power.currentType ??
+      tDev?.power.currentType ??
+      sDev?.power.currentType ??
+      'DC';
     const styleInfo = getPowerCableStyle(targetVoltage, targetCurrent, null, null);
     powerConverter = {
       fromVoltage: '120V AC',
       toVoltage: `${targetVoltage}V ${targetCurrent}`,
-      adapterName: 'PSU',
+      adapterName: cable.adapterName ?? 'PSU',
       dcColor: styleInfo.stroke,
     };
     if (styleInfo.dash) dash = styleInfo.dash;
   }
 
   const isSelected = options.selected ?? false;
+  const sourcePortType = sPort?.portType ?? null;
+  const targetPortType = tPort?.portType ?? null;
+  const cableMeta: CableEdgeMeta = {
+    cableType: cable.cableType,
+    length: cable.length,
+    color: cable.color,
+    productName: cable.productName,
+    isPatchCable: cable.isPatchCable,
+    isUserOwned: cable.isUserOwned,
+    adapterName: cable.adapterName ?? null,
+    zone: sDev?.ownerRole?.trim() || tDev?.ownerRole?.trim() || null,
+    sourcePortType,
+    targetPortType,
+    sourcePlugGender: cablePlugGenderForPort(sourcePortType),
+    targetPlugGender: cablePlugGenderForPort(targetPortType),
+  };
 
   return {
     id: cable.id,
@@ -91,14 +163,18 @@ export function graphCableToEdge(
     sourceHandle: cable.sourcePortId,
     target: portToNodeId.get(cable.targetPortId) ?? '',
     targetHandle: cable.targetPortId,
-    label: cable.color ?? undefined,
     selected: isSelected,
     type: 'routed',
     data: {
       powerConverter,
+      cableMeta,
       texture:
         cable.textureStartUrl || cable.textureEndUrl || cable.textureMiddleUrl
-          ? { start: cable.textureStartUrl, end: cable.textureEndUrl, middle: cable.textureMiddleUrl }
+          ? {
+              start: cable.textureStartUrl,
+              end: cable.textureEndUrl,
+              middle: cable.textureMiddleUrl,
+            }
           : undefined,
     },
     style: {
@@ -107,8 +183,7 @@ export function graphCableToEdge(
       strokeDasharray: dash,
     },
     animated: cable.cableType === CableType.CONTROL_LINK,
-    // Default under cards (CSS .react-flow__edges < .react-flow__nodes).
-    // Only the selected cable rises above nodes so it remains easy to grab.
-    zIndex: isSelected ? 1001 : 0,
+    // Edges live under the nodes layer (see styles.css).
+    zIndex: isSelected ? 2 : 0,
   };
 }
