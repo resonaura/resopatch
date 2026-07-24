@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { segmentsIntersect, countCrossings, greedySwapMinimize, buildCenterMap } from '../../../api/src/setups/crossings';
+import { describe, expect, it } from 'vitest';
+import {
+    buildCenterMap,
+    countCrossings,
+    greedySwapMinimize,
+    resolveNodeOverlaps,
+    segmentsIntersect,
+} from './crossings';
 
 // ---------------------------------------------------------------------------
 // segmentsIntersect
@@ -132,5 +138,27 @@ describe('greedySwapMinimize', () => {
     greedySwapMinimize(['X', 'Y'], [], positions, sizes);
     expect(positions.get('X')).toEqual({ x: 0, y: 0 });
     expect(positions.get('Y')).toEqual({ x: 100, y: 0 });
+  });
+});
+
+describe('resolveNodeOverlaps', () => {
+  it('separates two identical-position cards', () => {
+    const sizes = new Map([
+      ['A', { width: 200, height: 100 }],
+      ['B', { width: 200, height: 100 }],
+    ]);
+    const positions = new Map([
+      ['A', { x: 0, y: 0 }],
+      ['B', { x: 0, y: 0 }],
+    ]);
+    resolveNodeOverlaps(['A', 'B'], positions, sizes, 40);
+    const a = positions.get('A')!;
+    const b = positions.get('B')!;
+    const gap = 40;
+    const overlapX =
+      Math.min(a.x + 200 + gap, b.x + 200 + gap) - Math.max(a.x, b.x);
+    const overlapY =
+      Math.min(a.y + 100 + gap, b.y + 100 + gap) - Math.max(a.y, b.y);
+    expect(overlapX <= 0 || overlapY <= 0).toBe(true);
   });
 });

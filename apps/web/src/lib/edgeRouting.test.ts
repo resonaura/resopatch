@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  computeRoutes,
-  findPath,
-  resolveOverlaps,
-  roundedPathFromPoints,
-  sampleAlongPath,
-  segmentCrossesRect,
-  simplifyColinear,
-  type EdgeRouteSpec,
-  type Point,
-  type RectObstacle,
+    computeRoutes,
+    findPath,
+    resolveOverlaps,
+    roundedPathFromPoints,
+    sampleAlongPath,
+    segmentCrossesRect,
+    simplifyColinear,
+    type EdgeRouteSpec,
+    type Point,
+    type RectObstacle,
 } from './edgeRouting';
 
 /** True if any segment of `points` passes through the interior of `rect` (shrunk slightly so
@@ -362,12 +362,22 @@ describe('roundedPathFromPoints', () => {
 });
 
 describe('findPath — direct-line fast path', () => {
-  it('draws a direct vertical line with zero jitter when nothing is in the way', () => {
+  it('leaves the port horizontally before going vertical (never turns on the nipple)', () => {
     const source = rect('a', 0, 0, 200, 100);
     const target = rect('b', 0, 500, 200, 100);
-    const s = spec('e1', 'a', 'b', { x: 100, y: 100 }, { x: 100, y: 500 });
+    // Default dirs: source exits right, target enters from left.
+    const s = spec('e1', 'a', 'b', { x: 200, y: 50 }, { x: 0, y: 550 });
+    s.sourceDir = 'right';
+    s.targetDir = 'left';
     const path = findPath(s, [source, target]);
-    expect(path).toEqual([s.start, s.end]);
+    expect(isOrthogonal(path)).toBe(true);
+    // First leg must stay on the port row (horizontal exit stub).
+    expect(path[0]).toEqual(s.start);
+    expect(path[1].y).toBe(s.start.y);
+    expect(path[1].x).toBeGreaterThan(s.start.x);
+    // Must not cut through either card body.
+    expect(routeCrossesRect(path, source)).toBe(false);
+    expect(routeCrossesRect(path, target)).toBe(false);
   });
 
   it('does not take the direct-line shortcut when another device sits on the straight line', () => {
@@ -381,13 +391,18 @@ describe('findPath — direct-line fast path', () => {
   });
 
   it('still takes the shortcut when the only thing "in between" is its own source or target device', () => {
-    // A wide source card and a narrow target directly to its right, both on the same row — the
-    // straight shot only ever touches its own two devices, never a third one.
+    // Source card then a small gap then target — same row, nothing foreign in the way.
     const source = rect('a', 0, 0, 400, 200);
-    const target = rect('b', 400, 80, 100, 40);
-    const s = spec('e1', 'a', 'b', { x: 400, y: 100 }, { x: 400, y: 100 });
+    const target = rect('b', 480, 80, 100, 40);
+    const s = spec('e1', 'a', 'b', { x: 400, y: 100 }, { x: 480, y: 100 });
+    s.sourceDir = 'right';
+    s.targetDir = 'left';
     const path = findPath(s, [source, target]);
-    expect(path).toEqual([s.start, s.end]);
+    expect(isOrthogonal(path)).toBe(true);
+    expect(routeCrossesRect(path, source)).toBe(false);
+    expect(routeCrossesRect(path, target)).toBe(false);
+    // Same row → stays on the port row.
+    expect(path.every((p) => Math.abs(p.y - 100) < 0.5)).toBe(true);
   });
 });
 
@@ -491,18 +506,19 @@ describe('computeRoutes — cosmetic curve never cuts through a device', () => {
   });
 
   it('does not let the vertical jog cut through its own tall multi-row source card (real-world regression)', () => {
-    // A tall 4-row source card (e.g. a mixer) stacked directly above a target card at the exact
-    // same x — the connecting port sits on the card's *left edge*, partway down (not at the card's
-    // own top/bottom corner). Jogging further left moves into open canvas (safe); jogging right
-    // moves back into the card's own remaining rows. `addCosmeticCurve` used to exclude the whole
-    // *own* device from its clearance check, so a hash that preferred the wrong direction would
-    // ship a cable that visibly cut across its own source card — exactly what was seen live.
+    // Tall source above target; ports on the *right* edge so the cable exits right first
+    // (stub), then goes down — never tunnels down through the source card's own rows.
     const source = rect('mx400', 0, 0, 220, 300);
     const target = rect('palmer', 0, 500, 220, 300);
-    const specs = [spec('e1', 'mx400', 'palmer', { x: 0, y: 180 }, { x: 0, y: 520 })];
-    const routes = computeRoutes([source, target], specs);
+    const s = spec('e1', 'mx400', 'palmer', { x: 220, y: 180 }, { x: 220, y: 520 });
+    s.sourceDir = 'right';
+    s.targetDir = 'right';
+    const routes = computeRoutes([source, target], [s]);
     const path = routes.get('e1')!;
     expect(isOrthogonal(path)).toBe(true);
+    // First leg is horizontal off the nipple.
+    expect(Math.abs(path[1].y - 180) < 0.5).toBe(true);
+    expect(path[1].x).toBeGreaterThan(220);
     expect(routeCrossesRect(path, source)).toBe(false);
     expect(routeCrossesRect(path, target)).toBe(false);
   });

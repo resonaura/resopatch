@@ -5,15 +5,15 @@
  * perfectly in sync between the two canvas scopes without copy-paste.
  */
 
-import type { Edge } from '@xyflow/react';
 import {
-  CABLE_COLORS,
-  CABLE_DASH,
-  CABLE_WIDTH_SCALE,
-  CableType,
-  DeviceType,
-  getPowerCableStyle,
+    CABLE_COLORS,
+    CABLE_DASH,
+    CABLE_WIDTH_SCALE,
+    CableType,
+    DeviceType,
+    getPowerCableStyle,
 } from '@resopatch/shared';
+import type { Edge } from '@xyflow/react';
 import type { GraphCable, GraphDevice } from '../api/client';
 
 export function graphCableToEdge(
@@ -107,6 +107,8 @@ export function graphCableToEdge(
       strokeDasharray: dash,
     },
     animated: cable.cableType === CableType.CONTROL_LINK,
-    zIndex: isSelected ? 1 : 0,
+    // Keep cables above device cards so routes never visually "disappear under" a node.
+    // Selected edges still win so the active cable is easy to grab.
+    zIndex: isSelected ? 1002 : 1000,
   };
 }

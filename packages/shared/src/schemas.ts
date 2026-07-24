@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import {
-  CableType,
-  CurrentType,
-  DeviceType,
-  FurnitureKind,
-  HostUsbType,
-  InventoryStatus,
-  Polarity,
-  PortDirection,
-  PortType,
-  PowerSourceType,
-  SignalFormat,
+    CableType,
+    CurrentType,
+    DeviceType,
+    FurnitureKind,
+    HostUsbType,
+    InventoryStatus,
+    Polarity,
+    PortDirection,
+    PortType,
+    PowerSourceType,
+    SignalFormat,
 } from './enums.js';
 
 // Preserves the literal union (e.g. DeviceType) through z.enum(), instead of widening to `string` —
@@ -132,9 +132,9 @@ export const changePasswordSchema = z.object({
 });
 export type ChangePasswordDto = z.infer<typeof changePasswordSchema>;
 
-/** Real rendered pixel size of each device's canvas node, as measured by the browser — the
- *  auto-layout algorithm packs devices using these instead of guessing dimensions server-side. */
+/** Persist positions computed by the browser auto-layout (or a manual arrange).
+ *  The API does not recompute layout — it only writes these coordinates. */
 export const autoLayoutSchema = z.object({
-  sizes: z.record(z.string(), z.object({ width: z.number().positive(), height: z.number().positive() })).default({}),
+  positions: z.record(z.string(), positionSchema),
 });
 export type AutoLayoutDto = z.infer<typeof autoLayoutSchema>;

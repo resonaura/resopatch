@@ -37,19 +37,21 @@ export type Point = { x: number; y: number };
 // Keep-out margin around every device box. Wide enough that a cable passing "near" a cluster of
 // unrelated nodes reads as routed around them, not hugging their edges — the difference between
 // looking deliberate and looking like it's cutting through the pile.
-const OBSTACLE_PADDING = 16;
-// How far a cable travels straight out from its own port before the router allows the first turn.
-// Long enough that when a cable's target sits behind its fixed exit side (forcing a reversal —
-// e.g. two devices stacked directly on top of each other, connected port-to-port) the loop that
-// buys the U-turn reads as a deliberate wide arc clearing both cards, not a knot cinched tight
-// against the corner — and, in the common case, long enough that the first bend clears the
-// connector and its own device card before it happens, instead of turning right on top of them.
-const STUB = 64;
-const TURN_PENALTY = 8;
+const OBSTACLE_PADDING = 20;
+// How far a cable travels straight out from its port ("сосочек") before the first bend is allowed.
+// Must clear the handle/dot and a bit of the card edge so the cable never turns straight up/down
+// on top of the nipple.
+const STUB = 48;
+/** Minimum horizontal run off a port before the first bend (still readable as "leaving the nipple"). */
+const MIN_STUB = 20;
+// High turn cost so A* strongly prefers long straight runs over staircases when both work.
+const TURN_PENALTY = 22;
 const MAX_EXPANSIONS = 40000;
-// Gap between adjacent lanes when parallel runs get separated. Wide enough that two cables are
-// still visibly two cables (not one fused line) after zooming out to fit a whole stage on screen.
-const LANE_GAP = 11;
+// Gap between adjacent lanes when parallel runs (e.g. MOTU → stagebox fan-in) are separated.
+// Wide enough to read as distinct cables after zooming out to the whole stage.
+const LANE_GAP = 24;
+// Group near-coincident parallel runs (grid rounding / float noise), not only exact equals.
+const LANE_GROUP_TOLERANCE = 12;
 
 /** Grid resolution scales with how far apart a cable's ends are: a fine 16px grid keeps routing
  *  precise in crowded local clusters, but the same resolution applied to a cable spanning most of
@@ -192,6 +194,290 @@ export function simplifyColinear(points: Point[]): Point[] {
   return result;
 }
 
+/** Drop near-zero-length jogs left by grid rounding (e.g. 1–2 px "stairs"). */
+function dropMicroSegments(points: Point[], minLen = 4): Point[] {
+  if (points.length < 2) return points;
+  const out: Point[] = [{ ...points[0] }];
+  for (let i = 1; i < points.length; i++) {
+    const prev = out[out.length - 1];
+    const curr = points[i];
+    if (Math.hypot(curr.x - prev.x, curr.y - prev.y) < minLen) {
+      // Keep the final endpoint even if it lands on top of the previous sample —
+      // just overwrite so we never emit a trailing duplicate.
+      if (i === points.length - 1) out[out.length - 1] = { ...curr };
+      continue;
+    }
+    out.push({ ...curr });
+  }
+  return simplifyColinear(out);
+}
+
+/**
+ * Remove unnecessary corners: if two non-adjacent points can be joined by a clear
+ * orthogonal 1- or 2-segment path, drop everything between them. Collapses A*
+ * staircases into L / Z elbows whenever space allows.
+ */
+export function reduceBends(
+  points: Point[],
+  segmentClear: (a: Point, b: Point) => boolean,
+): Point[] {
+  let pts = dropMicroSegments(simplifyColinear(points));
+  if (pts.length < 3) return pts;
+
+  const pathClear = (a: Point, b: Point): Point[] | null => {
+    if (a.x === b.x || a.y === b.y) {
+      return segmentClear(a, b) ? [a, b] : null;
+    }
+    // Prefer horizontal-first, then vertical-first L elbows.
+    const viaH: Point = { x: b.x, y: a.y };
+    if (segmentClear(a, viaH) && segmentClear(viaH, b)) return [a, viaH, b];
+    const viaV: Point = { x: a.x, y: b.y };
+    if (segmentClear(a, viaV) && segmentClear(viaV, b)) return [a, viaV, b];
+    return null;
+  };
+
+  let changed = true;
+  while (changed && pts.length > 2) {
+    changed = false;
+    // Greedy: from each vertex try to jump as far as possible.
+    outer: for (let i = 0; i < pts.length - 1; i++) {
+      for (let j = pts.length - 1; j > i + 1; j--) {
+        const bridge = pathClear(pts[i], pts[j]);
+        if (!bridge) continue;
+        // Only accept if the bridge has strictly fewer interior corners than the span.
+        const spanCorners = j - i - 1;
+        const bridgeCorners = bridge.length - 2;
+        if (bridgeCorners >= spanCorners) continue;
+        // bridge already includes pts[i] and pts[j] — don't also keep pts[j] from the tail.
+        pts = [...pts.slice(0, i), ...bridge, ...pts.slice(j + 1)];
+        pts = dropMicroSegments(simplifyColinear(pts));
+        changed = true;
+        break outer;
+      }
+    }
+  }
+  return dropMicroSegments(pts);
+}
+
+/**
+ * How far we can leave a port horizontally before hitting a neighbour's keep-out.
+ * Real stages pack cards tightly (MOTU then CME 55px away) — a fixed 48px stub would
+ * immediately clip the neighbour. Shrink the stub into the free pocket, never below MIN_STUB.
+ */
+export function exitStubLen(
+  start: Point,
+  sSign: number,
+  obstacles: RectObstacle[],
+  ownIds: Set<string>,
+  preferred = STUB,
+): number {
+  let free = preferred;
+  for (const o of obstacles) {
+    if (ownIds.has(o.id)) continue;
+    const top = o.y - OBSTACLE_PADDING;
+    const bot = o.y + o.height + OBSTACLE_PADDING;
+    if (start.y < top || start.y > bot) continue;
+    if (sSign > 0) {
+      const face = o.x - OBSTACLE_PADDING;
+      if (face > start.x) free = Math.min(free, face - start.x - 4);
+    } else {
+      const face = o.x + o.width + OBSTACLE_PADDING;
+      if (face < start.x) free = Math.min(free, start.x - face - 4);
+    }
+  }
+  // free can go negative when a neighbour's keep-out already covers the port exit —
+  // still force a readable MIN_STUB so we never turn on the nipple itself.
+  if (!Number.isFinite(free) || free < MIN_STUB) free = MIN_STUB;
+  return Math.max(MIN_STUB, Math.min(preferred, free));
+}
+
+/**
+ * Force the canonical exit/entry: horizontal stub out of the source nipple, then routing,
+ * then horizontal stub into the target nipple. Never turn up/down on top of the port.
+ *
+ * Pure same-row horizontals that already leave both ports along their facing axis are left alone.
+ */
+export function enforceExitStubs(
+  path: Point[],
+  start: Point,
+  end: Point,
+  sSign: number,
+  tSign: number,
+  stubLen: number,
+): Point[] {
+  if (path.length < 2) return [start, end];
+
+  // Same-row direct shot: the whole cable *is* the exit run — no vertical needed.
+  if (path.length === 2 && Math.abs(start.y - end.y) < 0.5 && Math.abs(path[0].y - path[1].y) < 0.5) {
+    return [start, end];
+  }
+
+  const stubS: Point = { x: start.x + sSign * stubLen, y: start.y };
+  const stubT: Point = { x: end.x + tSign * stubLen, y: end.y };
+
+  // Keep interior corners, drop anything still sitting on the port exit/entry segments.
+  const mid: Point[] = [];
+  for (let i = 1; i < path.length - 1; i++) {
+    const p = path[i];
+    const onSourceStub =
+      Math.abs(p.y - start.y) < 0.5 &&
+      ((sSign > 0 && p.x >= start.x - 0.5 && p.x <= stubS.x + 0.5) ||
+        (sSign < 0 && p.x <= start.x + 0.5 && p.x >= stubS.x - 0.5));
+    const onTargetStub =
+      Math.abs(p.y - end.y) < 0.5 &&
+      ((tSign > 0 && p.x >= end.x - 0.5 && p.x <= stubT.x + 0.5) ||
+        (tSign < 0 && p.x <= end.x + 0.5 && p.x >= stubT.x - 0.5));
+    if (onSourceStub || onTargetStub) continue;
+    mid.push(p);
+  }
+
+  return dropMicroSegments(simplifyColinear([start, stubS, ...mid, stubT, end]));
+}
+
+/** Canonical stubbed Z path on a chosen vertical corridor X. */
+function buildCorridorPath(
+  start: Point,
+  end: Point,
+  sSign: number,
+  tSign: number,
+  corridorX: number,
+  stubLen: number,
+  segmentClear: (a: Point, b: Point) => boolean,
+): Point[] | null {
+  const stubS: Point = { x: start.x + sSign * stubLen, y: start.y };
+  const stubT: Point = { x: end.x + tSign * stubLen, y: end.y };
+  const path = simplifyColinear([
+    start,
+    stubS,
+    { x: corridorX, y: stubS.y },
+    { x: corridorX, y: stubT.y },
+    stubT,
+    end,
+  ]);
+  if (!pathIsClear(path, segmentClear)) return null;
+  if (Math.abs(path[1].y - start.y) > 0.5) return null;
+  if (Math.sign(path[1].x - start.x || sSign) !== sSign) return null;
+  return path;
+}
+
+/**
+ * Stub-first detour on a horizontal "highway" below or above the obstacle cluster.
+ * After the port stub we walk further out until a clear vertical drop to the highway exists
+ * (critical when the neighbour card sits right next to the source — e.g. CME beside MOTU).
+ */
+function buildHighwayPath(
+  start: Point,
+  end: Point,
+  sSign: number,
+  tSign: number,
+  highwayY: number,
+  sourceStubLen: number,
+  targetStubLen: number,
+  segmentClear: (a: Point, b: Point) => boolean,
+): Point[] | null {
+  const stubS: Point = { x: start.x + sSign * sourceStubLen, y: start.y };
+  const stubT: Point = { x: end.x + tSign * targetStubLen, y: end.y };
+  if (!segmentClear(start, stubS) || !segmentClear(stubT, end)) return null;
+
+  // Walk outward from the source stub until the vertical run down/up to the highway is clear.
+  let runX = stubS.x;
+  let foundRun = false;
+  for (let step = 0; step < 50; step++) {
+    const x = stubS.x + sSign * step * 12;
+    const toHwy: Point = { x, y: highwayY };
+    const along: Point = { x: stubT.x, y: highwayY };
+    if (
+      (step === 0 || segmentClear(stubS, { x, y: stubS.y })) &&
+      segmentClear({ x, y: stubS.y }, toHwy) &&
+      segmentClear(toHwy, along) &&
+      segmentClear(along, stubT)
+    ) {
+      runX = x;
+      foundRun = true;
+      break;
+    }
+  }
+  if (!foundRun) return null;
+
+  const path = simplifyColinear([
+    start,
+    stubS,
+    { x: runX, y: stubS.y },
+    { x: runX, y: highwayY },
+    { x: stubT.x, y: highwayY },
+    stubT,
+    end,
+  ]).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+  if (!pathIsClear(path, segmentClear)) return null;
+  if (Math.abs(path[1].y - start.y) > 0.5) return null;
+  if (Math.sign(path[1].x - start.x || sSign) !== sSign) return null;
+  if (Math.abs(path[1].x - start.x) < MIN_STUB - 0.5) return null;
+  return path;
+}
+
+/**
+ * Prefer simple orthogonal elbows that always leave the port horizontally before any vertical.
+ * Returns null when no short candidate clears obstacles.
+ */
+function trySimpleRoute(
+  start: Point,
+  end: Point,
+  sSign: number,
+  tSign: number,
+  stubLen: number,
+  segmentClear: (a: Point, b: Point) => boolean,
+): Point[] | null {
+  const stubS: Point = { x: start.x + sSign * stubLen, y: start.y };
+  const stubT: Point = { x: end.x + tSign * stubLen, y: end.y };
+
+  if (!segmentClear(start, stubS) || !segmentClear(stubT, end)) return null;
+
+  // After stubs, a horizontal bridge on the same row.
+  if (stubS.y === stubT.y && segmentClear(stubS, stubT)) {
+    return simplifyColinear([start, stubS, stubT, end]);
+  }
+
+  const candidates: Point[][] = [];
+
+  // Out horizontally → vertical on target-stub column → into target (never vertical on the port).
+  candidates.push([start, stubS, { x: stubT.x, y: stubS.y }, stubT, end]);
+  // Out horizontally → vertical on source-stub column → across → into target.
+  candidates.push([start, stubS, { x: stubS.x, y: stubT.y }, stubT, end]);
+
+  // Mid corridor between the two stubs (good default when devices face each other).
+  const midX = (stubS.x + stubT.x) / 2;
+  if (Math.abs(midX - stubS.x) > 8 && Math.abs(midX - stubT.x) > 8) {
+    candidates.push([start, stubS, { x: midX, y: stubS.y }, { x: midX, y: stubT.y }, stubT, end]);
+  }
+
+  // Forced U-turn when both ports face the same way.
+  if (sSign === tSign) {
+    const loopX = sSign > 0 ? Math.max(stubS.x, stubT.x) + stubLen : Math.min(stubS.x, stubT.x) - stubLen;
+    candidates.push([start, stubS, { x: loopX, y: stubS.y }, { x: loopX, y: stubT.y }, stubT, end]);
+  }
+
+  let best: Point[] | null = null;
+  let bestScore = Infinity;
+  for (const raw of candidates) {
+    const path = simplifyColinear(raw);
+    if (!pathIsClear(path, segmentClear)) continue;
+    // Reject anything that turns vertically at the port (first segment must be horizontal out).
+    if (Math.abs(path[1].y - start.y) > 0.5) continue;
+    if (Math.sign(path[1].x - start.x || sSign) !== sSign) continue;
+
+    let len = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      len += Math.hypot(path[i + 1].x - path[i].x, path[i + 1].y - path[i].y);
+    }
+    const score = (path.length - 2) * 10000 + len;
+    if (score < bestScore) {
+      bestScore = score;
+      best = path;
+    }
+  }
+  return best;
+}
+
 /** Both segments here are always axis-aligned (this router never produces a diagonal run) — an
  *  H/H or V/V pair "crosses" when their fixed coordinates match and their ranges overlap; an H/V
  *  pair crosses when the vertical one's x sits inside the horizontal one's x-range and vice versa
@@ -242,76 +528,217 @@ export function segmentCrossesRect(p1: Point, p2: Point, rect: RectObstacle, pad
   return true; // a diagonal segment isn't a shape this router should ever produce — treat as unsafe
 }
 
+/** Own-card body inset so the port edge itself stays walkable but the interior is blocked. */
+function ownBodyRect(rect: RectObstacle): RectObstacle {
+  const inset = 3;
+  return {
+    id: rect.id,
+    x: rect.x + inset,
+    y: rect.y + inset,
+    width: Math.max(0, rect.width - inset * 2),
+    height: Math.max(0, rect.height - inset * 2),
+  };
+}
+
+/** True if non-adjacent segments of an orthogonal path cross or run back over each other. */
+export function pathSelfIntersects(points: Point[]): boolean {
+  if (points.length < 4) return false;
+  for (let i = 0; i < points.length - 1; i++) {
+    for (let j = i + 2; j < points.length - 1; j++) {
+      // Allow segments that share a vertex (j === i+1 is already skipped).
+      if (j === i + 1) continue;
+      // Skip consecutive-around-join cases already excluded; also skip if they only meet at an endpoint.
+      const a1 = points[i];
+      const a2 = points[i + 1];
+      const b1 = points[j];
+      const b2 = points[j + 1];
+      if (a2.x === b1.x && a2.y === b1.y) continue;
+      if (a1.x === b2.x && a1.y === b2.y) continue;
+      if (segmentsCross(a1, a2, b1, b2)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Segment is clear of every device: foreign boxes use full keep-out padding; own cards only
+ * block their *inset body* so the cable may leave/enter at the port edge without tunneling
+ * through the middle of a multi-port strip.
+ */
+export function makeSegmentClear(spec: EdgeRouteSpec, obstacles: RectObstacle[]) {
+  const otherObstacles = obstacles.filter((o) => o.id !== spec.sourceNodeId && o.id !== spec.targetNodeId);
+  const ownObstacles = obstacles
+    .filter((o) => o.id === spec.sourceNodeId || o.id === spec.targetNodeId)
+    .map(ownBodyRect);
+
+  return (p1: Point, p2: Point) =>
+    otherObstacles.every((o) => !segmentCrossesRect(p1, p2, o, OBSTACLE_PADDING)) &&
+    ownObstacles.every((o) => o.width <= 0 || o.height <= 0 || !segmentCrossesRect(p1, p2, o, 0));
+}
+
+export function pathIsClear(points: Point[], segmentClear: (a: Point, b: Point) => boolean): boolean {
+  if (points.length < 2) return false;
+  for (let i = 0; i < points.length - 1; i++) {
+    if (!segmentClear(points[i], points[i + 1])) return false;
+  }
+  return !pathSelfIntersects(points);
+}
+
+/** Lower is better. Infinite-ish when invalid. */
+export function scorePath(points: Point[], segmentClear: (a: Point, b: Point) => boolean): number {
+  if (!pathIsClear(points, segmentClear)) return 1e12;
+  let len = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    len += Math.hypot(points[i + 1].x - points[i].x, points[i + 1].y - points[i].y);
+  }
+  const turns = Math.max(0, points.length - 2);
+  // Penalize tiny back-and-forth jogs (self-curl signature).
+  let reversePenalty = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const v1x = points[i].x - points[i - 1].x;
+    const v1y = points[i].y - points[i - 1].y;
+    const v2x = points[i + 1].x - points[i].x;
+    const v2y = points[i + 1].y - points[i].y;
+    if (v1x * v2x + v1y * v2y < 0) reversePenalty += 800;
+  }
+  return len + turns * 400 + reversePenalty;
+}
+
+function hasHorizontalExit(path: Point[], start: Point, sSign: number): boolean {
+  if (path.length < 2) return false;
+  if (Math.abs(path[0].x - start.x) > 0.5 || Math.abs(path[0].y - start.y) > 0.5) return false;
+  const dx = path[1].x - path[0].x;
+  const dy = path[1].y - path[0].y;
+  return Math.abs(dy) < 0.5 && Math.sign(dx || sSign) === sSign && Math.abs(dx) >= STUB * 0.5;
+}
+
 /** Stage 1: one cable's obstacle-avoiding path, entirely independent of every other cable. */
 export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[] {
   const { start, end } = spec;
 
+  // Degenerate: both ends on the same pixel.
+  if (Math.abs(start.x - end.x) < 0.5 && Math.abs(start.y - end.y) < 0.5) {
+    return [{ ...start }];
+  }
+
   const sSign = spec.sourceDir === 'left' ? -1 : 1;
   const tSign = spec.targetDir === 'right' ? 1 : -1;
+  const ownIds = new Set([spec.sourceNodeId, spec.targetNodeId]);
+  const sStub = exitStubLen(start, sSign, obstacles, ownIds);
+  const tStub = exitStubLen(end, tSign, obstacles, ownIds);
+  const segmentClear = makeSegmentClear(spec, obstacles);
 
-  const otherObstacles = obstacles.filter((o) => o.id !== spec.sourceNodeId && o.id !== spec.targetNodeId);
-  // clearOfAll checks every obstacle (including the cable's own source/target nodes at zero padding
-  // so their ports can still exit through the edge, but the body is blocked) — this prevents a
-  // direct-line fast-path from being returned when it visually passes through a third node.
-  const ownObstacles = obstacles.filter((o) => o.id === spec.sourceNodeId || o.id === spec.targetNodeId);
-  const clearOfAll = (p1: Point, p2: Point) =>
-    otherObstacles.every((o) => !segmentCrossesRect(p1, p2, o, OBSTACLE_PADDING)) &&
-    ownObstacles.every((o) => !segmentCrossesRect(p1, p2, o, 0));
+  const accept = (pts: Point[]): Point[] | null => {
+    const stubbed = enforceExitStubs(pts, start, end, sSign, tSign, sStub);
+    const cleanStubbed = dropMicroSegments(simplifyColinear(stubbed));
+    if (pathIsClear(cleanStubbed, segmentClear) && hasHorizontalExit(cleanStubbed, start, sSign)) {
+      return cleanStubbed;
+    }
+    // Don't force stubs if that newly clips a device — keep a clear path that already exits horizontally.
+    const clean = dropMicroSegments(simplifyColinear(pts));
+    if (pathIsClear(clean, segmentClear) && hasHorizontalExit(clean, start, sSign)) return clean;
+    // Same-row pure horizontal is allowed without an explicit stub point (the whole run *is* the exit).
+    if (
+      clean.length === 2 &&
+      Math.abs(clean[0].y - clean[1].y) < 0.5 &&
+      pathIsClear(clean, segmentClear)
+    ) {
+      return clean;
+    }
+    return null;
+  };
 
-  // Same-ROW fast path: a horizontal direct line is fine and addCosmeticCurve will add a visual
-  // dip later if needed. NOTE: same-COLUMN (start.x === end.x) is intentionally excluded —
-  // segmentCrossesRect with padding=0 treats a segment on the node's exact boundary as "clear"
-  // (p1.x <= rx0 when x===rx0 → returns false), so clearOfAll would incorrectly pass and return
-  // a raw 2-point vertical line that addCosmeticCurve can't always fix (both jog directions may
-  // be blocked by the very nodes that share that column). Always running A* for same-column
-  // cables guarantees a proper U-shaped path with horizontal stubs on both sides.
-  if (start.y === end.y) {
-    if (clearOfAll(start, end)) return [start, end];
-    // Not clear — fall through to A* so the router can find a path around whatever is in the way.
+  // Same-row horizontal only when fully clear of every card.
+  if (Math.abs(start.y - end.y) < 0.5) {
+    const direct = accept([start, end]);
+    if (direct) return direct;
+  }
+
+  const effectiveStub = sStub;
+  const simple = trySimpleRoute(start, end, sSign, tSign, effectiveStub, segmentClear);
+  if (simple) {
+    const ok = accept(simple);
+    if (ok) return ok;
+  }
+
+  // Wide detours above/below every obstacle — covers walls sitting on the direct row.
+  {
+    let minY = Math.min(start.y, end.y);
+    let maxY = Math.max(start.y, end.y);
+    for (const o of obstacles) {
+      if (o.id === spec.sourceNodeId || o.id === spec.targetNodeId) continue;
+      minY = Math.min(minY, o.y - OBSTACLE_PADDING - STUB);
+      maxY = Math.max(maxY, o.y + o.height + OBSTACLE_PADDING + STUB);
+    }
+    const stubS = { x: start.x + sSign * effectiveStub, y: start.y };
+    const stubT = { x: end.x + tSign * effectiveStub, y: end.y };
+    for (const bypassY of [minY, maxY]) {
+      const detour = [
+        start,
+        stubS,
+        { x: stubS.x, y: bypassY },
+        { x: stubT.x, y: bypassY },
+        stubT,
+        end,
+      ];
+      const ok = accept(detour);
+      if (ok) return ok;
+    }
   }
 
   const cell = pickCellSize(Math.abs(end.x - start.x), Math.abs(end.y - start.y));
   const cellOf = (v: number) => Math.round(v / cell);
 
+  // Block foreign devices with keep-out; block own bodies (inset) so we never tunnel mid-card.
   const globalObstacles = new Set<string>();
   for (const rect of obstacles) {
-    const x0 = cellOf(rect.x - OBSTACLE_PADDING);
-    const x1 = cellOf(rect.x + rect.width + OBSTACLE_PADDING);
-    const y0 = cellOf(rect.y - OBSTACLE_PADDING);
-    const y1 = cellOf(rect.y + rect.height + OBSTACLE_PADDING);
+    const isOwn = rect.id === spec.sourceNodeId || rect.id === spec.targetNodeId;
+    const r = isOwn ? ownBodyRect(rect) : rect;
+    const pad = isOwn ? 0 : OBSTACLE_PADDING;
+    if (r.width <= 0 || r.height <= 0) continue;
+    const x0 = cellOf(r.x - pad);
+    const x1 = cellOf(r.x + r.width + pad);
+    const y0 = cellOf(r.y - pad);
+    const y1 = cellOf(r.y + r.height + pad);
     for (let cx = x0; cx <= x1; cx++) {
       for (let cy = y0; cy <= y1; cy++) globalObstacles.add(cellKey(cx, cy));
     }
   }
 
-  // When source and target are close on the X axis the two stubs can end up in the same grid
-  // column, causing A* to route straight up/down immediately instead of departing horizontally
-  // first. Widen the stub so the two departure columns are always clearly separated.
-  const xDiff = Math.abs(end.x - start.x);
-  const effectiveStub = xDiff < STUB * 2 ? Math.max(STUB, xDiff / 2 + 80) : STUB;
-  let startCellX = cellOf(start.x + sSign * effectiveStub);
+  // Walk exit direction until the stub cell is free of foreign blocks (don't start inside a wall).
+  const walkFreeX = (fromX: number, y: number, sign: number): number => {
+    let x = fromX + sign * effectiveStub;
+    for (let i = 0; i < 24; i++) {
+      const cx = cellOf(x);
+      const cy = cellOf(y);
+      if (!globalObstacles.has(cellKey(cx, cy))) return x;
+      x += sign * cell;
+    }
+    return fromX + sign * effectiveStub;
+  };
+
+  const startStubX = walkFreeX(start.x, start.y, sSign);
+  const endStubX = walkFreeX(end.x, end.y, tSign);
+  let startCellX = cellOf(startStubX);
   const startCellY = cellOf(start.y);
-  const endCellX = cellOf(end.x + tSign * effectiveStub);
+  let endCellX = cellOf(endStubX);
   const endCellY = cellOf(end.y);
 
-  // Final safety: if both stubs still resolve to the same grid column (e.g. ports on the same
-  // side at the same x, so both stubs go right and land at the same spot), bump the start stub
-  // one more STUB-worth further out. A* needs distinct columns to have any horizontal corridor.
   if (startCellX === endCellX) {
     startCellX += sSign * Math.max(1, Math.ceil(STUB / cell));
   }
 
-  const stubStart = { x: startCellX * cell, y: startCellY * cell };
-  const stubEnd = { x: endCellX * cell, y: endCellY * cell };
-
+  // Unblock only the port cells themselves — never punch a free corridor through foreign cards.
   const corridor = new Set<string>();
-  const carveHorizontal = (cxa: number, cxb: number, cy: number) => {
-    const cx0 = Math.min(cxa, cxb);
-    const cx1 = Math.max(cxa, cxb);
-    for (let cx = cx0; cx <= cx1; cx++) corridor.add(cellKey(cx, cy));
-  };
-  carveHorizontal(cellOf(start.x), startCellX, startCellY);
-  carveHorizontal(endCellX, cellOf(end.x), endCellY);
+  corridor.add(cellKey(cellOf(start.x), cellOf(start.y)));
+  corridor.add(cellKey(cellOf(end.x), cellOf(end.y)));
+  // Also free the walk-out stub endpoints if they're clear of foreign obstacles.
+  if (!globalObstacles.has(cellKey(startCellX, startCellY))) {
+    corridor.add(cellKey(startCellX, startCellY));
+  }
+  if (!globalObstacles.has(cellKey(endCellX, endCellY))) {
+    corridor.add(cellKey(endCellX, endCellY));
+  }
 
   const isBlocked = (cx: number, cy: number) => {
     const k = cellKey(cx, cy);
@@ -319,9 +746,18 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
     return globalObstacles.has(k);
   };
 
+  // If start/end A* seeds are still blocked, nudge further out.
+  const ensureFree = (cx: number, cy: number, sign: number): number => {
+    let x = cx;
+    for (let i = 0; i < 24 && isBlocked(x, cy); i++) x += sign;
+    return x;
+  };
+  startCellX = ensureFree(startCellX, startCellY, sSign);
+  endCellX = ensureFree(endCellX, endCellY, tSign);
+
   let found: [number, number][] | null = null;
-  let margin = Math.max(260, cell * 8);
-  for (let attempt = 0; attempt < 4 && !found; attempt++, margin *= 2.5) {
+  let margin = Math.max(400, cell * 12);
+  for (let attempt = 0; attempt < 5 && !found; attempt++, margin *= 2.2) {
     const minX = Math.min(start.x, end.x) - margin;
     const maxX = Math.max(start.x, end.x) + margin;
     const minY = Math.min(start.y, end.y) - margin;
@@ -340,31 +776,241 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
     const firstCorner = simplifiedCorners[0];
     const lastCorner = simplifiedCorners[simplifiedCorners.length - 1];
 
-    const minStub = 24;
-    const sourceStubX = sSign === 1 ? Math.max(start.x + minStub, firstCorner.x) : Math.min(start.x - minStub, firstCorner.x);
+    const sourceStubX = sSign === 1 ? Math.max(start.x + sStub, firstCorner.x) : Math.min(start.x - sStub, firstCorner.x);
     const sourcePoints: Point[] = [start, { x: sourceStubX, y: start.y }, { x: sourceStubX, y: firstCorner.y }];
 
-    const targetStubX = tSign === 1 ? Math.max(end.x + minStub, lastCorner.x) : Math.min(end.x - minStub, lastCorner.x);
+    const targetStubX = tSign === 1 ? Math.max(end.x + tStub, lastCorner.x) : Math.min(end.x - tStub, lastCorner.x);
     const targetPoints: Point[] = [{ x: targetStubX, y: lastCorner.y }, { x: targetStubX, y: end.y }, end];
 
-    const rawPath: Point[] = [
-      ...sourcePoints,
-      ...simplifiedCorners,
-      ...targetPoints,
-    ];
-
-    return simplifyColinear(rawPath);
+    const rawPath: Point[] = [...sourcePoints, ...simplifiedCorners, ...targetPoints];
+    const simplified = simplifyColinear(rawPath);
+    const reduced = reduceBends(simplified, segmentClear);
+    const reducedOk = accept(reduced);
+    if (reducedOk) return reducedOk;
+    const simpleOk = accept(simplified);
+    if (simpleOk) return simpleOk;
   }
 
-  // Genuinely no path found even at the coarsest, widest-margin attempt (pathologically boxed
-  // in) — fall back to a plain elbow rather than drawing nothing, picking whichever of the two
-  // possible elbow shapes clears every *other* obstacle if one of them does.
-  const midX = (start.x + end.x) / 2;
-  const midY = (start.y + end.y) / 2;
-  const viaMidX = [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
-  const viaMidY = [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
-  const clear = (pts: Point[]) => pts.slice(0, -1).every((p, i) => clearOfAll(p, pts[i + 1]));
-  return simplifyColinear(clear(viaMidX) ? viaMidX : clear(viaMidY) ? viaMidY : viaMidX);
+  // Fallback elbows — always stub-first, only if fully clear.
+  for (const candidate of [
+    [start, { x: start.x + sSign * sStub, y: start.y }, { x: start.x + sSign * sStub, y: end.y }, { x: end.x + tSign * tStub, y: end.y }, end],
+    [start, { x: start.x + sSign * sStub, y: start.y }, { x: end.x + tSign * tStub, y: start.y }, { x: end.x + tSign * tStub, y: end.y }, end],
+  ] as Point[][]) {
+    const ok = accept(candidate);
+    if (ok) return ok;
+  }
+
+  // Absolute last resort: stub-first highway far below/above both ports.
+  for (const hy of [Math.max(start.y, end.y) + 200, Math.min(start.y, end.y) - 200, Math.max(start.y, end.y) + 400, Math.min(start.y, end.y) - 400]) {
+    const hw = buildHighwayPath(start, end, sSign, tSign, hy, sStub, tStub, segmentClear);
+    if (hw) return hw;
+  }
+
+  // Only return an unvalidated elbow if absolutely nothing clear was found — still stub-first.
+  const fallback = enforceExitStubs(
+    [
+      start,
+      { x: start.x + sSign * sStub, y: start.y },
+      { x: start.x + sSign * sStub, y: end.y },
+      { x: end.x + tSign * tStub, y: end.y },
+      end,
+    ],
+    start,
+    end,
+    sSign,
+    tSign,
+    sStub,
+  );
+  if (pathIsClear(fallback, segmentClear)) return fallback;
+  // Prefer any earlier candidate that at least doesn't hit *foreign* devices.
+  return fallback;
+}
+
+/**
+ * Rebuild multi-cable fans as stub-first routes with visible lane spacing.
+ *
+ * Strategy:
+ *  1. Try a vertical corridor in the open gap (works when the gap is empty).
+ *  2. Otherwise route each cable onto its own horizontal "highway" below or above the
+ *     obstacle cluster (FEX800/CME/etc. between MOTU and stagebox) — highways spaced by LANE_GAP.
+ */
+function bundleFanInRoutes(
+  routes: Map<string, Point[]>,
+  edges: EdgeRouteSpec[],
+  obstacles: RectObstacle[],
+): void {
+  const processed = new Set<string>();
+
+  const applyGroup = (group: EdgeRouteSpec[]) => {
+    const unique = [...new Map(group.map((g) => [g.id, g])).values()].filter((g) => !processed.has(g.id));
+    if (unique.length < 2) return;
+
+    const sorted = [...unique].sort(
+      (a, b) => a.start.y - b.start.y || a.end.y - b.end.y || a.id.localeCompare(b.id),
+    );
+    const n = sorted.length;
+
+    // Span of the fan in X (after exit stubs / before entry stubs).
+    let spanLo = Infinity;
+    let spanHi = -Infinity;
+    let yLo = Infinity;
+    let yHi = -Infinity;
+    for (const s of sorted) {
+      const sSign = s.sourceDir === 'left' ? -1 : 1;
+      const tSign = s.targetDir === 'right' ? 1 : -1;
+      const outX = s.start.x + sSign * STUB;
+      const inX = s.end.x + tSign * STUB;
+      spanLo = Math.min(spanLo, outX, inX);
+      spanHi = Math.max(spanHi, outX, inX);
+      yLo = Math.min(yLo, s.start.y, s.end.y);
+      yHi = Math.max(yHi, s.start.y, s.end.y);
+    }
+
+    // Obstacles sitting in the span (the reason direct Z-routes clip cards).
+    const blockers = obstacles.filter((o) => {
+      if (sorted.some((s) => s.sourceNodeId === o.id || s.targetNodeId === o.id)) return false;
+      return o.x < spanHi && o.x + o.width > spanLo;
+    });
+
+    let clusterBottom = yHi;
+    let clusterTop = yLo;
+    for (const o of blockers) {
+      clusterBottom = Math.max(clusterBottom, o.y + o.height + OBSTACLE_PADDING);
+      clusterTop = Math.min(clusterTop, o.y - OBSTACLE_PADDING);
+    }
+
+    // Preferred vertical corridors across the gap (empty-gap case).
+    const gapLo = spanLo + 16;
+    const gapHi = spanHi - 16;
+    const packWidth = (n - 1) * LANE_GAP;
+    const firstCorridorX =
+      gapHi > gapLo
+        ? gapLo + Math.max(0, gapHi - gapLo - packWidth) / 2
+        : (spanLo + spanHi) / 2;
+
+    // Highway Y bases: below the cluster and above it.
+    const highwayBelow0 = clusterBottom + 36;
+    const highwayAbove0 = clusterTop - 36;
+
+    for (let i = 0; i < n; i++) {
+      const spec = sorted[i];
+      const sSign = spec.sourceDir === 'left' ? -1 : 1;
+      const tSign = spec.targetDir === 'right' ? 1 : -1;
+      const own = new Set([spec.sourceNodeId, spec.targetNodeId]);
+      const sStub = exitStubLen(spec.start, sSign, obstacles, own);
+      const tStub = exitStubLen(spec.end, tSign, obstacles, own);
+      const clear = makeSegmentClear(spec, obstacles);
+      let placed: Point[] | null = null;
+
+      // 1) Vertical corridor in the gap (each cable its own X).
+      if (gapHi - gapLo >= LANE_GAP * 0.5) {
+        const corridorX = firstCorridorX + i * LANE_GAP;
+        placed = buildCorridorPath(spec.start, spec.end, sSign, tSign, corridorX, sStub, clear);
+        if (!placed) {
+          for (const nOff of [12, -12, 24, -24, 40, -40, 60, -60]) {
+            const x = Math.min(gapHi, Math.max(gapLo, corridorX + nOff));
+            placed = buildCorridorPath(spec.start, spec.end, sSign, tSign, x, sStub, clear);
+            if (placed) break;
+          }
+        }
+      }
+
+      // 2) Parallel highways below / above the obstacle cluster (each cable its own Y).
+      if (!placed) {
+        const hyBelow = highwayBelow0 + i * LANE_GAP;
+        const hyAbove = highwayAbove0 - i * LANE_GAP;
+        const midY = (spec.start.y + spec.end.y) / 2;
+        const order = Math.abs(hyBelow - midY) <= Math.abs(hyAbove - midY) ? [hyBelow, hyAbove] : [hyAbove, hyBelow];
+        for (const hy of order) {
+          placed = buildHighwayPath(spec.start, spec.end, sSign, tSign, hy, sStub, tStub, clear);
+          if (placed) break;
+        }
+        if (!placed) {
+          for (const extra of [40, 80, 120, 180, 240, 320]) {
+            placed = buildHighwayPath(
+              spec.start,
+              spec.end,
+              sSign,
+              tSign,
+              highwayBelow0 + i * LANE_GAP + extra,
+              sStub,
+              tStub,
+              clear,
+            );
+            if (placed) break;
+            placed = buildHighwayPath(
+              spec.start,
+              spec.end,
+              sSign,
+              tSign,
+              highwayAbove0 - i * LANE_GAP - extra,
+              sStub,
+              tStub,
+              clear,
+            );
+            if (placed) break;
+          }
+        }
+      }
+
+      if (placed) {
+        routes.set(spec.id, placed);
+        processed.add(spec.id);
+      }
+    }
+  };
+
+  // 1) Same device-pair fans (MOTU → stagebox).
+  const byPair = new Map<string, EdgeRouteSpec[]>();
+  for (const e of edges) {
+    const key = `${e.sourceNodeId}->${e.targetNodeId}`;
+    const list = byPair.get(key) ?? [];
+    list.push(e);
+    byPair.set(key, list);
+  }
+  for (const group of byPair.values()) applyGroup(group);
+
+  // 2) Remaining cables that share only a target.
+  const byTarget = new Map<string, EdgeRouteSpec[]>();
+  for (const e of edges) {
+    if (processed.has(e.id)) continue;
+    const list = byTarget.get(e.targetNodeId) ?? [];
+    list.push(e);
+    byTarget.set(e.targetNodeId, list);
+  }
+  for (const group of byTarget.values()) applyGroup(group);
+}
+
+/**
+ * Pick the best route among several handle-side candidates (each input/output has a left and
+ * right "nipple"). Prefer facing ports, short clear paths, no node hits, no self-curls.
+ */
+export function findBestPath(candidates: EdgeRouteSpec[], obstacles: RectObstacle[]): { path: Point[]; spec: EdgeRouteSpec } {
+  if (candidates.length === 0) {
+    return { path: [], spec: { id: '', sourceNodeId: '', targetNodeId: '', start: { x: 0, y: 0 }, end: { x: 0, y: 0 } } };
+  }
+  let best = candidates[0];
+  let bestPath = findPath(best, obstacles);
+  let bestScore = scorePath(bestPath, makeSegmentClear(best, obstacles));
+
+  for (let i = 1; i < candidates.length; i++) {
+    const spec = candidates[i];
+    const path = findPath(spec, obstacles);
+    const clear = makeSegmentClear(spec, obstacles);
+    let score = scorePath(path, clear);
+    // Prefer exits that face each other (right→left when source is left of target, etc.).
+    const sDir = spec.sourceDir ?? 'right';
+    const tDir = spec.targetDir ?? 'left';
+    const dx = spec.end.x - spec.start.x;
+    if (dx > 40 && sDir === 'right' && tDir === 'left') score -= 600;
+    if (dx < -40 && sDir === 'left' && tDir === 'right') score -= 600;
+    if (score < bestScore) {
+      bestScore = score;
+      bestPath = path;
+      best = spec;
+    }
+  }
+  return { path: bestPath, spec: best };
 }
 
 interface SegmentRef {
@@ -381,11 +1027,88 @@ interface SegmentRef {
   anchor: number;
 }
 
-/** Stage 2: nudge coincident parallel runs apart into separate lanes. */
-export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObstacle[], edges: EdgeRouteSpec[]): Map<string, Point[]> {
-  const working = new Map(Array.from(routes, ([id, pts]) => [id, pts.map((p) => ({ ...p }))] as const));
-  const specById = new Map(edges.map((e) => [e.id, e] as const));
+function pathHitsObstacle(
+  pts: Point[],
+  spec: EdgeRouteSpec | undefined,
+  obstacles: RectObstacle[],
+  /** Padding for *other* devices. Lane nudges use a tighter pad so parallel cables can
+   *  actually separate; full keep-out is enforced during pathfinding itself. */
+  otherPadding = 6,
+): boolean {
+  return pts.slice(0, -1).some((p, i) =>
+    obstacles.some((o) => {
+      const isOwnDevice = spec != null && (o.id === spec.sourceNodeId || o.id === spec.targetNodeId);
+      // Own device at padding 0: approach legs legitimately graze the card edge.
+      return segmentCrossesRect(p, pts[i + 1], o, isOwnDevice ? 0 : otherPadding);
+    }),
+  );
+}
 
+/**
+ * Which way to expand parallel lanes so we never push toward a device the cables are hugging.
+ * For a vertical approach just left of a stagebox, this returns -1 (further left into open space).
+ */
+function freeSideSign(
+  orientation: 'h' | 'v',
+  fixed: number,
+  group: SegmentRef[],
+  specById: Map<string, EdgeRouteSpec>,
+): number {
+  let vote = 0;
+  for (const seg of group) {
+    const spec = specById.get(seg.edgeId);
+    if (!spec) continue;
+    if (orientation === 'v') {
+      // Distance to each port's x — push away from the nearer port (usually the target face).
+      const dStart = Math.abs(fixed - spec.start.x);
+      const dEnd = Math.abs(fixed - spec.end.x);
+      if (dEnd <= dStart) vote += Math.sign(fixed - spec.end.x) || -1;
+      else vote += Math.sign(fixed - spec.start.x) || 1;
+    } else {
+      const dStart = Math.abs(fixed - spec.start.y);
+      const dEnd = Math.abs(fixed - spec.end.y);
+      if (dEnd <= dStart) vote += Math.sign(fixed - spec.end.y) || -1;
+      else vote += Math.sign(fixed - spec.start.y) || 1;
+    }
+  }
+  if (vote === 0) return -1;
+  return vote > 0 ? 1 : -1;
+}
+
+/** True only for the short port stub, not a long shared run that happens to sit on the port row. */
+function isPortStubSegment(
+  orientation: 'h' | 'v',
+  fixed: number,
+  lo: number,
+  hi: number,
+  i: number,
+  ptsLen: number,
+  spec: EdgeRouteSpec | undefined,
+): boolean {
+  if (!spec) return false;
+  const len = hi - lo;
+  // Long interior runs at the port's y/x must still be lane-separated.
+  if (len > STUB * 1.5) return false;
+  if (orientation === 'h') {
+    if (i === 0 && Math.abs(fixed - spec.start.y) < 0.5) return true;
+    if (i === ptsLen - 2 && Math.abs(fixed - spec.end.y) < 0.5) return true;
+  } else {
+    if (i === 0 && Math.abs(fixed - spec.start.x) < 0.5) return true;
+    if (i === ptsLen - 2 && Math.abs(fixed - spec.end.x) < 0.5) return true;
+  }
+  return false;
+}
+
+/**
+ * One pass of collinear-segment lane separation. Offsetting a horizontal run moves the
+ * endpoints of its adjoining verticals, which can *create* new vertical overlaps — so
+ * `resolveOverlaps` runs this several times until stable.
+ */
+function resolveOverlapsPass(
+  working: Map<string, Point[]>,
+  obstacles: RectObstacle[],
+  specById: Map<string, EdgeRouteSpec>,
+): boolean {
   const segments: SegmentRef[] = [];
   for (const [edgeId, pts] of working) {
     if (pts.length < 3) continue;
@@ -402,21 +1125,19 @@ export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObs
         fixed = a.y;
         lo = Math.min(a.x, b.x);
         hi = Math.max(a.x, b.x);
-        // Do not offset horizontal segment if attached to start port Y or end port Y
-        if (i === 0 && Math.abs(fixed - (spec?.start.y ?? fixed)) < 0.1) continue;
-        if (i === pts.length - 2 && Math.abs(fixed - (spec?.end.y ?? fixed)) < 0.1) continue;
       } else if (a.x === b.x) {
         orientation = 'v';
         fixed = a.x;
         lo = Math.min(a.y, b.y);
         hi = Math.max(a.y, b.y);
-        // Do not offset vertical segment if attached to start port X or end port X
-        if (i === 0 && Math.abs(fixed - (spec?.start.x ?? fixed)) < 0.1) continue;
-        if (i === pts.length - 2 && Math.abs(fixed - (spec?.end.x ?? fixed)) < 0.1) continue;
       } else {
         continue;
       }
       if (hi - lo < 1) continue;
+      // Never touch the exit/entry stubs (first two + last two segments on a normal route).
+      // Offsetting those collapses "leave the nipple horizontally first" and fuses fan-ins.
+      if (i <= 1 || i >= pts.length - 3) continue;
+      if (isPortStubSegment(orientation, fixed, lo, hi, i, pts.length, spec)) continue;
 
       let anchor = fixed;
       if (spec) {
@@ -427,77 +1148,135 @@ export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObs
     }
   }
 
-  const groups = new Map<string, SegmentRef[]>();
-  for (const seg of segments) {
-    // Rounding the grouping key coarsely catches "practically the same line" even when two
-    // cables' paths were computed at different grid resolutions (see pickCellSize).
-    const key = `${seg.orientation}:${Math.round(seg.fixed / 4) * 4}`;
-    const list = groups.get(key);
-    if (list) list.push(seg);
-    else groups.set(key, [seg]);
+  // Cluster near-coincident parallel segments, then connected components by range overlap.
+  const parent = segments.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const unite = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[ra] = rb;
+  };
+  for (let i = 0; i < segments.length; i++) {
+    for (let j = i + 1; j < segments.length; j++) {
+      const a = segments[i];
+      const b = segments[j];
+      if (a.orientation !== b.orientation) continue;
+      if (Math.abs(a.fixed - b.fixed) > LANE_GROUP_TOLERANCE) continue;
+      if (Math.min(a.hi, b.hi) - Math.max(a.lo, b.lo) <= 0) continue;
+      unite(i, j);
+    }
   }
+  const groupMap = new Map<number, SegmentRef[]>();
+  for (let i = 0; i < segments.length; i++) {
+    const root = find(i);
+    const list = groupMap.get(root);
+    if (list) list.push(segments[i]);
+    else groupMap.set(root, [segments[i]]);
+  }
+  const groups = [...groupMap.values()].filter((g) => g.length >= 2);
 
-  const touchedEdges = new Set<string>();
-  for (const group of groups.values()) {
-    if (group.length < 2) continue;
-    // Ordering by each segment's real anchor (rather than its grid-rounded `lo`) keeps lane order
-    // consistent with where each route actually needs to end up, so routes whose approach rows
-    // happened to round to the same grid line don't get offset in a way that makes their final
-    // port-facing stubs cross one another.
+  let moved = false;
+  for (const group of groups) {
+    // Always give every segment in the group its own lane index by port order.
+    // Interval packing used to let "non-overlapping" ranges share a lane — fine for short
+    // stubs, bad for long fan-ins that almost fully overlap and must stay visibly parallel.
     const sorted = [...group].sort((a, b) => a.anchor - b.anchor || a.lo - b.lo || a.edgeId.localeCompare(b.edgeId));
-    const laneEnds: number[] = [];
-    const laneOf = new Map<SegmentRef, number>();
+    // One lane per unique edge (multiple segments of the same edge share a lane).
+    const edgeOrder: string[] = [];
     for (const seg of sorted) {
-      let lane = laneEnds.findIndex((end) => end <= seg.lo);
-      if (lane === -1) {
-        lane = laneEnds.length;
-        laneEnds.push(seg.hi);
-      } else {
-        laneEnds[lane] = seg.hi;
-      }
-      laneOf.set(seg, lane);
+      if (!edgeOrder.includes(seg.edgeId)) edgeOrder.push(seg.edgeId);
     }
-    const laneCount = laneEnds.length;
+    const laneOfEdge = new Map(edgeOrder.map((id, i) => [id, i] as const));
+    const laneCount = edgeOrder.length;
+    if (laneCount < 2) continue;
+
     const isPowerAdapterGroup = group.some((s) => specById.get(s.edgeId)?.isPowerAdapter);
-    const groupLaneGap = isPowerAdapterGroup ? 28 : LANE_GAP;
+    const groupLaneGap = isPowerAdapterGroup ? 32 : LANE_GAP;
+    const orientation = group[0].orientation;
+    const fixedAvg = group.reduce((s, g) => s + g.fixed, 0) / group.length;
+
+    // Spread symmetrically around the group's base line so the bundle stays near the original corridor.
     for (const seg of group) {
-      const lane = laneOf.get(seg)!;
-      const offset = (lane - (laneCount - 1) / 2) * groupLaneGap;
-      if (offset === 0) continue;
+      const lane = laneOfEdge.get(seg.edgeId)!;
+      // Signed lane index: half the bundle each side of the shared base line.
+      const centered = (lane - (laneCount - 1) / 2) * groupLaneGap;
+      const targetFixed = fixedAvg + centered;
+
       const pts = working.get(seg.edgeId)!;
-      if (seg.orientation === 'h') {
-        pts[seg.i].y += offset;
-        pts[seg.i + 1].y += offset;
-      } else {
-        pts[seg.i].x += offset;
-        pts[seg.i + 1].x += offset;
+      const spec = specById.get(seg.edgeId);
+      const prevA = { x: pts[seg.i].x, y: pts[seg.i].y };
+      const prevB = { x: pts[seg.i + 1].x, y: pts[seg.i + 1].y };
+      const currentFixed = orientation === 'h' ? prevA.y : prevA.x;
+      if (Math.abs(currentFixed - targetFixed) < 0.5) continue;
+
+      const applyFixed = (fixed: number) => {
+        if (seg.orientation === 'h') {
+          pts[seg.i].y = fixed;
+          pts[seg.i + 1].y = fixed;
+        } else {
+          pts[seg.i].x = fixed;
+          pts[seg.i + 1].x = fixed;
+        }
+      };
+
+      let placed = false;
+      for (const scale of [1, 1.25, 1.5, 0.75, 0.5]) {
+        applyFixed(fixedAvg + centered * scale);
+        if (!pathHitsObstacle(pts, spec, obstacles)) {
+          placed = true;
+          moved = true;
+          break;
+        }
       }
-      touchedEdges.add(seg.edgeId);
+      if (!placed) {
+        pts[seg.i].x = prevA.x;
+        pts[seg.i].y = prevA.y;
+        pts[seg.i + 1].x = prevB.x;
+        pts[seg.i + 1].y = prevB.y;
+      }
     }
   }
+  return moved;
+}
 
-  // Safety net: an offset is only ever cosmetic, never load-bearing for correctness — if nudging
-  // a route into a lane happened to clip an obstacle it previously cleared, that one route reverts
-  // to its pre-offset path rather than shipping a cable that cuts through a device.
-  //
-  // A cable's own source/target device is checked at true-box precision (padding 0) instead of
-  // the usual padded margin: the last leg of every route legitimately sits inside its own device's
-  // *padding* zone (that's how it reaches its own port at all), so padding it here would flag that
-  // normal approach as a violation on every single offset and silently revert lane separation back
-  // to fully-overlapping cables — which is exactly the bug this fixes. Padding 0 still catches an
-  // offset that actually cuts across the device's body (e.g. a different port row on the same
-  // multi-port card), just not one that merely grazes the buffer around it.
-  for (const edgeId of touchedEdges) {
-    const pts = working.get(edgeId)!;
-    const original = routes.get(edgeId)!;
+/** Stage 2: nudge coincident parallel runs apart into separate lanes. */
+export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObstacle[], edges: EdgeRouteSpec[]): Map<string, Point[]> {
+  const working = new Map(Array.from(routes, ([id, pts]) => [id, pts.map((p) => ({ ...p }))] as const));
+  const originals = new Map(Array.from(routes, ([id, pts]) => [id, pts.map((p) => ({ ...p }))] as const));
+  const specById = new Map(edges.map((e) => [e.id, e] as const));
+
+  // Multiple passes: moving a horizontal lane changes adjoining vertical ranges and can create
+  // new collinear vertical overlaps that need a second (or third) separation pass.
+  for (let pass = 0; pass < 4; pass++) {
+    if (!resolveOverlapsPass(working, obstacles, specById)) break;
+  }
+
+  // Final safety: if combined multi-group offsets still clip, blend back toward the original.
+  for (const [edgeId, pts] of working) {
+    const original = originals.get(edgeId)!;
     const spec = specById.get(edgeId);
-    const hitsAnything = pts.slice(0, -1).some((p, i) =>
-      obstacles.some((o) => {
-        const isOwnDevice = spec != null && (o.id === spec.sourceNodeId || o.id === spec.targetNodeId);
-        return segmentCrossesRect(p, pts[i + 1], o, isOwnDevice ? 0 : 2);
-      }),
-    );
-    if (hitsAnything) working.set(edgeId, original.map((p) => ({ ...p })));
+    if (!pathHitsObstacle(pts, spec, obstacles)) continue;
+    if (pts.length !== original.length) {
+      working.set(edgeId, original.map((p) => ({ ...p })));
+      continue;
+    }
+    let lo = 0;
+    let hi = 1;
+    let best = original.map((p) => ({ ...p }));
+    for (let iter = 0; iter < 8; iter++) {
+      const mid = (lo + hi) / 2;
+      const blended = original.map((p, i) => ({
+        x: p.x + (pts[i].x - p.x) * mid,
+        y: p.y + (pts[i].y - p.y) * mid,
+      }));
+      if (!pathHitsObstacle(blended, spec, obstacles)) {
+        best = blended;
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    working.set(edgeId, best);
   }
 
   return working;
@@ -583,18 +1362,19 @@ function addCosmeticCurve(
   return points;
 }
 
-/** Runs both stages for a full graph: pathfind every cable independently, then separate any
- *  coincident parallel runs into lanes. Automatically registers micro-node card obstacles for
- *  power adapter cables so other cables route cleanly around them. */
+/** Runs stages for a full graph: pathfind, fan-in bundling (spaced corridors), lane separation,
+ *  adapter keep-outs, cosmetic dips. Every path is stub-first off the port nipples. */
 export function computeRoutes(obstacles: RectObstacle[], edges: EdgeRouteSpec[]): Map<string, Point[]> {
   const routes = new Map<string, Point[]>();
   const ordered = [...edges].sort((a, b) => a.id.localeCompare(b.id));
   const specById = new Map(ordered.map((s) => [s.id, s] as const));
 
-  // Pass 1: Initial pathfinding for all edges
+  // Pass 1: independent pathfinding (always exits the nipple horizontally first).
   for (const spec of ordered) {
-    routes.set(spec.id, findPath(spec, obstacles));
+    routes.set(spec.id, dropMicroSegments(simplifyColinear(findPath(spec, obstacles))));
   }
+  // Pass 1b: rebuild multi-cable fans onto evenly spaced corridors (MOTU→stagebox etc.).
+  bundleFanInRoutes(routes, ordered, obstacles);
   const pass1Routes = resolveOverlaps(routes, obstacles, ordered);
 
   // Pass 2: Identify adapter micro-node card obstacles
@@ -643,8 +1423,22 @@ export function computeRoutes(obstacles: RectObstacle[], edges: EdgeRouteSpec[])
         pass2Routes.set(spec.id, findPath(spec, combinedObstacles));
       }
     }
+    bundleFanInRoutes(pass2Routes, ordered, combinedObstacles);
     finalRoutes = resolveOverlaps(pass2Routes, combinedObstacles, ordered);
     finalObstacles = combinedObstacles;
+  }
+
+  // Re-assert stubs after lane nudges (offsets can collapse a stub into a vertical-on-port).
+  for (const spec of ordered) {
+    const pts = finalRoutes.get(spec.id);
+    if (!pts) continue;
+    const sSign = spec.sourceDir === 'left' ? -1 : 1;
+    const tSign = spec.targetDir === 'right' ? 1 : -1;
+    const own = new Set([spec.sourceNodeId, spec.targetNodeId]);
+    const sStub = exitStubLen(spec.start, sSign, finalObstacles, own);
+    const stubbed = enforceExitStubs(pts, spec.start, spec.end, sSign, tSign, sStub);
+    const clear = makeSegmentClear(spec, finalObstacles);
+    finalRoutes.set(spec.id, pathIsClear(stubbed, clear) ? stubbed : pts);
   }
 
   // Flattened per-edge segment lists, computed once so each cable's cosmetic dip can be checked

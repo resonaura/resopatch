@@ -14,42 +14,40 @@
  *  - The playback laptop's own AC charger isn't listed under either Anker in §5, so it's left
  *    unconnected here too rather than inventing a socket for it.
  */
-import 'dotenv/config';
-import 'reflect-metadata';
-import { fileURLToPath } from 'node:url';
-import bcrypt from 'bcryptjs';
 import {
-  CableType,
-  CreateAdapterDto,
-  CreateCableDto,
-  CreateDeviceDto,
-  CreateFurnitureDto,
-  CreatePortDto,
-  CurrentType,
-  DeviceType,
-  FurnitureKind,
-  HostUsbType,
-  InventoryStatus,
-  Polarity,
-  PortDirection,
-  PortType,
-  PowerSourceType,
+    CableType,
+    CreateAdapterDto,
+    CreateCableDto,
+    CreateDeviceDto,
+    CreateFurnitureDto,
+    CreatePortDto,
+    CurrentType,
+    DeviceType,
+    FurnitureKind,
+    HostUsbType,
+    InventoryStatus,
+    Polarity,
+    PortDirection,
+    PortType,
+    PowerSourceType,
 } from '@resopatch/shared';
+import bcrypt from 'bcryptjs';
+import 'dotenv/config';
+import { fileURLToPath } from 'node:url';
+import 'reflect-metadata';
 import { Device } from './entities/device.entity.js';
 import { Port } from './entities/port.entity.js';
-import { applyAdapterDto, applyCableDto, applyDeviceDto, applyFurnitureDto, applyPortDto } from './mappers.js';
 import {
-  adaptersRepo,
-  authRepo as authRepoStore,
-  cablesRepo,
-  devicesRepo,
-  furnitureRepo as furnitureRepoStore,
-  portsRepo,
-  resetDatabase,
-  setupsRepo,
-  In,
+    adaptersRepo,
+    authRepo as authRepoStore,
+    cablesRepo,
+    devicesRepo,
+    furnitureRepo as furnitureRepoStore,
+    portsRepo,
+    resetDatabase,
+    setupsRepo,
 } from './json-db.js';
-import { computeAutoLayout } from '../setups/layout.js';
+import { applyAdapterDto, applyCableDto, applyDeviceDto, applyFurnitureDto, applyPortDto } from './mappers.js';
 
 async function main() {
   // Wipes the JSON store back to empty — the one genuinely destructive step, and only ever run
@@ -1453,37 +1451,8 @@ async function main() {
     attrs: { manufacturer: 'M-Audio', model: 'SP-2 Sustain Pedal', isKeysOnly: true },
   });
 
-  // Lay everything out instead of leaving the arbitrary hand-picked x/y above as the persisted
-  // state — auto layout algorithm
-  // from each device's port count (mirroring DeviceNode.tsx's actual box model) since there's no
-  // browser here to measure real ones. The button remains available to re-run with exact sizes
-  // any time — this just means the app isn't a pile of overlapping boxes on first load.
-  const allDevices = await deviceRepo.find({ where: { setupId: setup.id } });
-  const allPorts = allDevices.length ? await portRepo.find({ where: { deviceId: In(allDevices.map((d) => d.id)) } }) : [];
-  const allCables = allPorts.length ? await cableRepo.find({ where: { sourcePortId: In(allPorts.map((p) => p.id)) } }) : [];
-
-  const portCountByDevice = new Map<string, number>();
-  for (const p of allPorts) portCountByDevice.set(p.deviceId, (portCountByDevice.get(p.deviceId) ?? 0) + 1);
-
-  const estimatedSizes = new Map<string, { width: number; height: number }>();
-  for (const d of allDevices) {
-    const portCount = portCountByDevice.get(d.id) ?? 0;
-    const hasImage = d.type !== DeviceType.PEDALBOARD && (d.imageUrl || (d.imageUrls && d.imageUrls.length > 0));
-    const bannerH = hasImage ? 140 : 0;
-    const ownerRow = d.ownerRole ? 20 : 0;
-    const portsBlock = portCount > 0 ? 1 + portCount * 23 : 0;
-    estimatedSizes.set(d.id, { width: 250, height: bannerH + 28 + 30 + ownerRow + portsBlock + 40 });
-  }
-
-  const { positions } = computeAutoLayout(allDevices, allPorts, allCables, estimatedSizes);
-  for (const d of allDevices) {
-    const pos = positions.get(d.id);
-    if (pos) {
-      d.positionX = pos.x;
-      d.positionY = pos.y;
-    }
-  }
-  await deviceRepo.save(allDevices);
+  // Positions above are hand-picked seed coordinates. Real layout always runs in the browser
+  // (Arrange button / topology change) with measured node sizes — the API only persists results.
 
   console.log(`Seeded setup ${setup.id} ("${setup.name}")`);
 }

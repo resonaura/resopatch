@@ -1,41 +1,42 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import type { Connection, Edge, Node } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Spinner, Table, Tabs } from "@heroui/react";
 import {
-  Cable as CableIcon,
-  CheckSquare,
-  ChevronLeft,
-  ChevronRight,
-  ClipboardList,
-  LayoutGrid,
-  ListMusic,
-  LogOut,
-  Settings,
-  Wand2,
-} from "lucide-react";
-import {
-  type InputListRow,
-  type PortDto,
-  type RiderRow,
+    type InputListRow,
+    type PortDto,
+    type RiderRow,
 } from "@resopatch/shared";
-import { graphCableToEdge } from "../lib/graphCableToEdge";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Connection, Edge, Node } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import {
+    Cable as CableIcon,
+    CheckSquare,
+    ChevronLeft,
+    ChevronRight,
+    ClipboardList,
+    LayoutGrid,
+    ListMusic,
+    LogOut,
+    Settings,
+    Wand2,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type GraphDevice } from "../api/client";
+import CableListView from "../components/CableListView";
+import ContainerInsideModal from "../components/ContainerInsideModal";
 import type { DeviceNodeData } from "../components/DeviceNode";
-import PatchCanvas from "../components/PatchCanvas";
-import Sidebar from "../components/Sidebar";
 import Inspector, { type Selection } from "../components/Inspector";
-import NewDeviceModal from "../components/NewDeviceModal";
 import NewCableModal from "../components/NewCableModal";
+import NewDeviceModal from "../components/NewDeviceModal";
+import PatchCanvas from "../components/PatchCanvas";
+import SettingsModal from "../components/SettingsModal";
+import Sidebar from "../components/Sidebar";
+import StaffChecklist from "../components/StaffChecklist";
+import { computeAutoLayout, graphTopologyKey, positionsToRecord } from "../lib/autoLayout";
+import { splitMainCanvasGraph } from "../lib/containerGraph";
+import { graphCableToEdge } from "../lib/graphCableToEdge";
+import { useI18n } from "../lib/i18n";
 import { formatI18nText } from "../lib/i18nText";
 import { formatOwnerRole } from "../lib/ownerRole";
-import SettingsModal from "../components/SettingsModal";
-import ContainerInsideModal from "../components/ContainerInsideModal";
-import StaffChecklist from "../components/StaffChecklist";
-import CableListView from "../components/CableListView";
-import { splitMainCanvasGraph } from "../lib/containerGraph";
-import { useI18n } from "../lib/i18n";
 
 export default function Constructor({
   setupId,
@@ -239,22 +240,69 @@ export default function Constructor({
     onSuccess: () => qc.invalidateQueries({ queryKey: ["graph", setupId] }),
   });
 
-  const autoLayout = useMutation({
-    mutationFn: (sizes: Record<string, { width: number; height: number }>) =>
-      api.autoLayout(setupId, sizes),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["graph", setupId] }),
-  });
-
   const getMeasuredSizesRef = useRef<
     (() => Record<string, { width: number; height: number }>) | null
   >(null);
 
+  /** Layout is computed entirely in the browser; the API only stores the result. */
+  const autoLayout = useMutation({
+    mutationFn: async () => {
+      if (!graph) return { updated: 0 };
+      const sizes = getMeasuredSizesRef.current ? getMeasuredSizesRef.current() : {};
+      const { positions } = computeAutoLayout(graph.devices, graph.cables, sizes);
+      const record = positionsToRecord(positions);
+      const result = await api.autoLayout(setupId, record);
+      try {
+        localStorage.setItem(
+          `resopatch_layout_topo_${setupId}`,
+          graphTopologyKey(graph.devices, graph.cables),
+        );
+      } catch {
+        // ignore storage failures
+      }
+      return result;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["graph", setupId] }),
+  });
+
   const runAutoLayout = useCallback(() => {
-    const sizes = getMeasuredSizesRef.current
-      ? getMeasuredSizesRef.current()
-      : {};
-    autoLayout.mutate(sizes);
+    autoLayout.mutate();
   }, [autoLayout]);
+
+  // When graph topology changes (devices / cables / ownership), saved positions are stale —
+  // re-run layout on the client and overwrite the backend save. First visit with no stored
+  // fingerprint just records the current topology and keeps DB positions.
+  const layoutTopoRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!graph) return;
+    const key = graphTopologyKey(graph.devices, graph.cables);
+    if (layoutTopoRef.current === key) return;
+    layoutTopoRef.current = key;
+
+    let stored: string | null;
+    try {
+      stored = localStorage.getItem(`resopatch_layout_topo_${setupId}`);
+    } catch {
+      stored = null;
+    }
+
+    if (stored == null) {
+      try {
+        localStorage.setItem(`resopatch_layout_topo_${setupId}`, key);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    if (stored === key) return;
+
+    // Topology changed since last layout → recompute after nodes can measure.
+    const t = window.setTimeout(() => {
+      if (!autoLayout.isPending) autoLayout.mutate();
+    }, 80);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to topology, not mutation identity
+  }, [graph, setupId]);
 
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.sourceHandle || !connection.targetHandle) return;

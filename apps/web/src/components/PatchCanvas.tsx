@@ -1,23 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Background,
-  ConnectionLineType,
-  Controls,
-  MiniMap,
-  ReactFlow,
-  ReactFlowProvider,
-  useEdgesState,
-  useNodesInitialized,
-  useNodesState,
-  useStoreApi,
-  type Connection,
-  type Edge,
-  type EdgeMouseHandler,
-  type Node,
-  type NodeMouseHandler,
+    Background,
+    ConnectionLineType,
+    Controls,
+    MiniMap,
+    ReactFlow,
+    ReactFlowProvider,
+    useEdgesState,
+    useNodesInitialized,
+    useNodesState,
+    useStoreApi,
+    type Connection,
+    type Edge,
+    type EdgeMouseHandler,
+    type Node,
+    type NodeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { computeRoutes, type EdgeRouteSpec, type Point, type RectObstacle } from '../lib/edgeRouting';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { computeRoutes, findBestPath, type EdgeRouteSpec, type Point, type RectObstacle } from '../lib/edgeRouting';
+
+type RfHandle = { id: string | null; x: number; y: number; width: number; height: number; position: 'left' | 'right' | 'top' | 'bottom' };
 
 import { patchCanvasEdgeTypes, patchCanvasNodeTypes } from './patchCanvasTypes';
 
@@ -49,79 +51,64 @@ function CableRouter({
       obstacles.push({ id, x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y, width, height });
     }
 
-    const findClosestHandle = (node: Node, handleId: string, type: 'source' | 'target', otherCenter: { x: number; y: number }) => {
+    /**
+     * Every port has dual nipples (left + right) for both source and target. Collect all of them
+     * so the router can try each side combination instead of greedily picking the closest handle
+     * (which often exits the *wrong* side and then curls through neighbouring cards).
+     */
+    const collectPortHandles = (node: Node, handleId: string, type: 'source' | 'target'): RfHandle[] => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const internalNode = node as any;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const handles: any[] = internalNode.internals?.handleBounds?.[type] ?? [];
+      const handles: RfHandle[] = (internalNode.internals?.handleBounds?.[type] ?? []) as RfHandle[];
       const baseId = handleId.replace(/-(src|tgt)-(left|right)$/, '');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const matches = handles.filter((h: any) => h.id === baseId || (h.id && h.id.includes(baseId)));
-      if (matches.length === 0) return null;
-
-      let best = matches[0];
-      let minDistance = Infinity;
-      for (const h of matches) {
-        const hX = internalNode.internals.positionAbsolute.x + h.x + h.width / 2;
-        const hY = internalNode.internals.positionAbsolute.y + h.y + h.height / 2;
-        const dist = Math.hypot(hX - otherCenter.x, hY - otherCenter.y);
-        if (dist < minDistance) {
-          minDistance = dist;
-          best = h;
-        }
-      }
-      return best;
+      return handles.filter(
+        (h) => h.id === baseId || h.id === handleId || (h.id != null && h.id.includes(baseId)),
+      );
     };
 
-    const specs: EdgeRouteSpec[] = [];
+    const handleCenter = (node: Node, h: RfHandle) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const abs = (node as any).internals.positionAbsolute as { x: number; y: number };
+      return { x: abs.x + h.x + h.width / 2, y: abs.y + h.y + h.height / 2 };
+    };
+
+    const bestSpecs: EdgeRouteSpec[] = [];
     for (const e of edges) {
       const sourceNode = nodeLookup.get(e.source);
       const targetNode = nodeLookup.get(e.target);
       if (!sourceNode || !targetNode || !e.sourceHandle || !e.targetHandle) continue;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const srcInternal = sourceNode as any;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tgtInternal = targetNode as any;
+      const srcHandles = collectPortHandles(sourceNode, e.sourceHandle, 'source');
+      const tgtHandles = collectPortHandles(targetNode, e.targetHandle, 'target');
+      if (srcHandles.length === 0 || tgtHandles.length === 0) continue;
 
-      const targetCenter = {
-        x: tgtInternal.internals.positionAbsolute.x + (targetNode.measured?.width ?? targetNode.width ?? 240) / 2,
-        y: tgtInternal.internals.positionAbsolute.y + (targetNode.measured?.height ?? targetNode.height ?? 100) / 2,
-      };
-      const sourceCenter = {
-        x: srcInternal.internals.positionAbsolute.x + (sourceNode.measured?.width ?? sourceNode.width ?? 240) / 2,
-        y: srcInternal.internals.positionAbsolute.y + (sourceNode.measured?.height ?? sourceNode.height ?? 100) / 2,
-      };
+      const isPowerAdapter = (e.data as Record<string, unknown>)?.powerConverter != null;
+      const candidates: EdgeRouteSpec[] = [];
+      for (const sH of srcHandles) {
+        const start = handleCenter(sourceNode, sH);
+        const sDir = sH.position === 'left' || sH.position === 'right' ? sH.position : 'right';
+        for (const tH of tgtHandles) {
+          const end = handleCenter(targetNode, tH);
+          const tDir = tH.position === 'left' || tH.position === 'right' ? tH.position : 'left';
+          candidates.push({
+            id: e.id,
+            sourceNodeId: e.source,
+            targetNodeId: e.target,
+            start,
+            end,
+            sourceDir: sDir,
+            targetDir: tDir,
+            isPowerAdapter,
+          });
+        }
+      }
 
-      const sHandle = findClosestHandle(sourceNode, e.sourceHandle, 'source', targetCenter);
-      const tHandle = findClosestHandle(targetNode, e.targetHandle, 'target', sourceCenter);
-      if (!sHandle || !tHandle) continue;
-
-      const start = {
-        // Use the handle's true center — same formula findClosestHandle uses for distance
-        // comparison above, and the same point React Flow exposes as `sourceX`/`sourceY` in
-        // the EdgeProps. Previously this used the handle's edge (width or 0) which put
-        // `points[0]` 4 px off the handle dot, creating a visible gap on short cables.
-        x: srcInternal.internals.positionAbsolute.x + sHandle.x + sHandle.width / 2,
-        y: srcInternal.internals.positionAbsolute.y + sHandle.y + sHandle.height / 2,
-      };
-      const end = {
-        x: tgtInternal.internals.positionAbsolute.x + tHandle.x + tHandle.width / 2,
-        y: tgtInternal.internals.positionAbsolute.y + tHandle.y + tHandle.height / 2,
-      };
-      specs.push({
-        id: e.id,
-        sourceNodeId: e.source,
-        targetNodeId: e.target,
-        start,
-        end,
-        sourceDir: sHandle.position as 'left' | 'right',
-        targetDir: tHandle.position as 'left' | 'right',
-        isPowerAdapter: (e.data as Record<string, unknown>)?.powerConverter != null,
-      });
+      // Try every left/right × left/right pair; keep the clear, non-curling, shortest route.
+      const { spec } = findBestPath(candidates, obstacles);
+      bestSpecs.push(spec);
     }
 
-    const routes = computeRoutes(obstacles, specs);
+    const routes = computeRoutes(obstacles, bestSpecs);
     onRoutes(routes);
     // Intentionally not depending on `edges`/`onRoutes` identity — recompute is gated by
     // `version` (bumped explicitly on drag / drag-stop / graph reload), not by every render.

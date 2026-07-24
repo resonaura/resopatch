@@ -1,8 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { AutoLayoutDto, CreateSetupDto, DeviceType, InventoryStatus, InputListRow, RiderRow, SetupDto, UpdateSetupDto } from '@resopatch/shared';
+import { AutoLayoutDto, CreateSetupDto, DeviceType, InputListRow, InventoryStatus, RiderRow, SetupDto, UpdateSetupDto } from '@resopatch/shared';
+import { adaptersRepo, cablesRepo, devicesRepo, furnitureRepo, In, portsRepo, setupsRepo } from '../database/json-db.js';
 import { toAdapterDto, toCableDto, toDeviceDto, toFurnitureDto, toPortDto, toSetupDto } from '../database/mappers.js';
-import { adaptersRepo, cablesRepo, devicesRepo, furnitureRepo, portsRepo, setupsRepo, In } from '../database/json-db.js';
-import { computeAutoLayout } from './layout.js';
 
 @Injectable()
 export class SetupsService {
@@ -65,29 +64,20 @@ export class SetupsService {
     };
   }
 
-  /** Recomputes every device's canvas position: one global left-to-right pass by signal flow
-   *  (so cross-owner cables stay meaningful), then shelf-packed into band-member lanes stacked
-   *  top-to-bottom, accessories pinned under their parent. Uses the browser's real measured node
-   *  sizes (`dto.sizes`) rather than guessing dimensions from the data model. */
+  /** Persists canvas positions computed on the client. Layout / cable routing never runs here —
+   *  the browser owns all geometry; this endpoint is only the durable save of those positions. */
   async autoLayout(setupId: string, dto: AutoLayoutDto): Promise<{ updated: number }> {
     const devices = await devicesRepo.find({ where: { setupId } });
-    const deviceIds = devices.map((d) => d.id);
-    const ports = deviceIds.length ? await portsRepo.find({ where: { deviceId: In(deviceIds) } }) : [];
-    const portIds = ports.map((p) => p.id);
-    const cables = portIds.length ? await cablesRepo.find({ where: { sourcePortId: In(portIds) } }) : [];
-
-    const sizes = new Map(Object.entries(dto.sizes));
-    const { positions } = computeAutoLayout(devices, ports, cables, sizes);
-
+    let updated = 0;
     for (const device of devices) {
-      const pos = positions.get(device.id);
+      const pos = dto.positions[device.id];
       if (!pos) continue;
       device.positionX = pos.x;
       device.positionY = pos.y;
+      updated += 1;
     }
-    await devicesRepo.save(devices);
-
-    return { updated: positions.size };
+    if (updated > 0) await devicesRepo.save(devices);
+    return { updated };
   }
 
   /** Derived input list (Table 6): one row per cable feeding a STAGE_BOX device.

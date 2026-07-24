@@ -10,7 +10,6 @@
     "seed": "tsx src/database/seed.ts"
   },
   "dependencies": {
-    "@dagrejs/dagre": "^3.0.0",
     "@fastify/cookie": "^11.1.2",
     "@nestjs/common": "^11.1.28",
     "@nestjs/config": "^4.0.2",
