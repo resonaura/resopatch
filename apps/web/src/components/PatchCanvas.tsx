@@ -96,11 +96,15 @@ function CableRouter({
       if (!sHandle || !tHandle) continue;
 
       const start = {
-        x: srcInternal.internals.positionAbsolute.x + sHandle.x + (sHandle.position === 'right' ? sHandle.width : 0),
+        // Use the handle's true center — same formula findClosestHandle uses for distance
+        // comparison above, and the same point React Flow exposes as `sourceX`/`sourceY` in
+        // the EdgeProps. Previously this used the handle's edge (width or 0) which put
+        // `points[0]` 4 px off the handle dot, creating a visible gap on short cables.
+        x: srcInternal.internals.positionAbsolute.x + sHandle.x + sHandle.width / 2,
         y: srcInternal.internals.positionAbsolute.y + sHandle.y + sHandle.height / 2,
       };
       const end = {
-        x: tgtInternal.internals.positionAbsolute.x + tHandle.x + (tHandle.position === 'right' ? tHandle.width : 0),
+        x: tgtInternal.internals.positionAbsolute.x + tHandle.x + tHandle.width / 2,
         y: tgtInternal.internals.positionAbsolute.y + tHandle.y + tHandle.height / 2,
       };
       specs.push({

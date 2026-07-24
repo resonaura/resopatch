@@ -311,19 +311,22 @@ export function computeAutoLayout(
     if (!anker) continue;
     const ankerPos = positions.get(anker.id);
     if (!ankerPos) continue;
+    const ankerSize = sizedOf(anker.id);
+
+    // Stack the outlet and PSU directly below the Anker (same x, increasing y) rather than
+    // to its left — placing them left relied on Math.max(0,...) which clamps to 0 when the
+    // Anker itself is at x=0, making the outlet overlap the Anker exactly.
+    let stackY = ankerPos.y + ankerSize.height + 60;
 
     const outlet = mainDevices.find((d) => d.name.includes('Розетка площадки') && !d.name.includes('комбик') && d.ownerRole === role);
-    let stackY = ankerPos.y;
     if (outlet) {
-      const outletSize = sizedOf(outlet.id);
-      positions.set(outlet.id, { x: Math.max(0, ankerPos.x - outletSize.width - 60), y: stackY });
-      stackY += outletSize.height + 60;
+      positions.set(outlet.id, { x: ankerPos.x, y: stackY });
+      stackY += sizedOf(outlet.id).height + 60;
     }
 
     const psu = mainDevices.find((d) => d.name.startsWith('БП ') && d.type === DeviceType.POWER_SUPPLY && d.ownerRole === role);
     if (psu) {
-      const psuSize = sizedOf(psu.id);
-      positions.set(psu.id, { x: Math.max(0, ankerPos.x - psuSize.width - 60), y: stackY });
+      positions.set(psu.id, { x: ankerPos.x, y: stackY });
     }
   }
 

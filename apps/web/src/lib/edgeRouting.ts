@@ -192,6 +192,36 @@ export function simplifyColinear(points: Point[]): Point[] {
   return result;
 }
 
+/** Both segments here are always axis-aligned (this router never produces a diagonal run) — an
+ *  H/H or V/V pair "crosses" when their fixed coordinates match and their ranges overlap; an H/V
+ *  pair crosses when the vertical one's x sits inside the horizontal one's x-range and vice versa
+ *  for y. Used to keep one cable's cosmetic dip (see `addCosmeticCurve`) from swinging through a
+ *  completely different cable's path — `segmentCrossesRect` only ever checked device boxes, so
+ *  two independent straight cables could otherwise end up visually overlapping. */
+function segmentsCross(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
+  const aH = a1.y === a2.y;
+  const bH = b1.y === b2.y;
+  if (aH && bH) {
+    if (a1.y !== b1.y) return false;
+    const aLo = Math.min(a1.x, a2.x);
+    const aHi = Math.max(a1.x, a2.x);
+    const bLo = Math.min(b1.x, b2.x);
+    const bHi = Math.max(b1.x, b2.x);
+    return aHi > bLo && bHi > aLo;
+  }
+  if (!aH && !bH) {
+    if (a1.x !== b1.x) return false;
+    const aLo = Math.min(a1.y, a2.y);
+    const aHi = Math.max(a1.y, a2.y);
+    const bLo = Math.min(b1.y, b2.y);
+    const bHi = Math.max(b1.y, b2.y);
+    return aHi > bLo && bHi > aLo;
+  }
+  const h = aH ? { y: a1.y, xLo: Math.min(a1.x, a2.x), xHi: Math.max(a1.x, a2.x) } : { y: b1.y, xLo: Math.min(b1.x, b2.x), xHi: Math.max(b1.x, b2.x) };
+  const v = aH ? { x: b1.x, yLo: Math.min(b1.y, b2.y), yHi: Math.max(b1.y, b2.y) } : { x: a1.x, yLo: Math.min(a1.y, a2.y), yHi: Math.max(a1.y, a2.y) };
+  return v.x > h.xLo && v.x < h.xHi && h.y > v.yLo && h.y < v.yHi;
+}
+
 export function segmentCrossesRect(p1: Point, p2: Point, rect: RectObstacle, padding: number): boolean {
   const rx0 = rect.x - padding;
   const ry0 = rect.y - padding;
@@ -220,9 +250,24 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
   const tSign = spec.targetDir === 'right' ? 1 : -1;
 
   const otherObstacles = obstacles.filter((o) => o.id !== spec.sourceNodeId && o.id !== spec.targetNodeId);
-  const clearOfOthers = (p1: Point, p2: Point) => otherObstacles.every((o) => !segmentCrossesRect(p1, p2, o, OBSTACLE_PADDING));
-  if (start.y === end.y || start.x === end.x) {
-    if (clearOfOthers(start, end)) return [start, end];
+  // clearOfAll checks every obstacle (including the cable's own source/target nodes at zero padding
+  // so their ports can still exit through the edge, but the body is blocked) — this prevents a
+  // direct-line fast-path from being returned when it visually passes through a third node.
+  const ownObstacles = obstacles.filter((o) => o.id === spec.sourceNodeId || o.id === spec.targetNodeId);
+  const clearOfAll = (p1: Point, p2: Point) =>
+    otherObstacles.every((o) => !segmentCrossesRect(p1, p2, o, OBSTACLE_PADDING)) &&
+    ownObstacles.every((o) => !segmentCrossesRect(p1, p2, o, 0));
+
+  // Same-ROW fast path: a horizontal direct line is fine and addCosmeticCurve will add a visual
+  // dip later if needed. NOTE: same-COLUMN (start.x === end.x) is intentionally excluded —
+  // segmentCrossesRect with padding=0 treats a segment on the node's exact boundary as "clear"
+  // (p1.x <= rx0 when x===rx0 → returns false), so clearOfAll would incorrectly pass and return
+  // a raw 2-point vertical line that addCosmeticCurve can't always fix (both jog directions may
+  // be blocked by the very nodes that share that column). Always running A* for same-column
+  // cables guarantees a proper U-shaped path with horizontal stubs on both sides.
+  if (start.y === end.y) {
+    if (clearOfAll(start, end)) return [start, end];
+    // Not clear — fall through to A* so the router can find a path around whatever is in the way.
   }
 
   const cell = pickCellSize(Math.abs(end.x - start.x), Math.abs(end.y - start.y));
@@ -239,10 +284,23 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
     }
   }
 
-  const startCellX = cellOf(start.x + sSign * STUB);
+  // When source and target are close on the X axis the two stubs can end up in the same grid
+  // column, causing A* to route straight up/down immediately instead of departing horizontally
+  // first. Widen the stub so the two departure columns are always clearly separated.
+  const xDiff = Math.abs(end.x - start.x);
+  const effectiveStub = xDiff < STUB * 2 ? Math.max(STUB, xDiff / 2 + 80) : STUB;
+  let startCellX = cellOf(start.x + sSign * effectiveStub);
   const startCellY = cellOf(start.y);
-  const endCellX = cellOf(end.x + tSign * STUB);
+  const endCellX = cellOf(end.x + tSign * effectiveStub);
   const endCellY = cellOf(end.y);
+
+  // Final safety: if both stubs still resolve to the same grid column (e.g. ports on the same
+  // side at the same x, so both stubs go right and land at the same spot), bump the start stub
+  // one more STUB-worth further out. A* needs distinct columns to have any horizontal corridor.
+  if (startCellX === endCellX) {
+    startCellX += sSign * Math.max(1, Math.ceil(STUB / cell));
+  }
+
   const stubStart = { x: startCellX * cell, y: startCellY * cell };
   const stubEnd = { x: endCellX * cell, y: endCellY * cell };
 
@@ -296,7 +354,7 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
   const midY = (start.y + end.y) / 2;
   const viaMidX = [start, { x: midX, y: start.y }, { x: midX, y: end.y }, end];
   const viaMidY = [start, { x: start.x, y: midY }, { x: end.x, y: midY }, end];
-  const clear = (pts: Point[]) => pts.slice(0, -1).every((p, i) => clearOfOthers(p, pts[i + 1]));
+  const clear = (pts: Point[]) => pts.slice(0, -1).every((p, i) => clearOfAll(p, pts[i + 1]));
   return simplifyColinear(clear(viaMidX) ? viaMidX : clear(viaMidY) ? viaMidY : viaMidX);
 }
 
@@ -453,16 +511,27 @@ export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObs
  *  can just as easily land back inside its own card, slicing across a different port row. So this
  *  checks the bent candidate against every device including its own, at padding 0 (a bend may
  *  still graze/touch its own edge to leave the port — only a genuine cut through the interior
- *  disqualifies it), the same own-device-at-zero-padding rule `resolveOverlaps`'s safety net uses. */
-function addCosmeticCurve(edgeId: string, points: Point[], spec: EdgeRouteSpec | undefined, obstacles: RectObstacle[]): Point[] {
+ *  disqualifies it), the same own-device-at-zero-padding rule `resolveOverlaps`'s safety net uses.
+ *
+ *  `otherSegments` is every *other* edge's already-finalized route (pre-cosmetic-curve), flattened
+ *  into consecutive point pairs — checked in addition to device boxes, so a dip never swings
+ *  through a completely unrelated cable's straight line (see `segmentsCross`). */
+function addCosmeticCurve(
+  edgeId: string,
+  points: Point[],
+  spec: EdgeRouteSpec | undefined,
+  obstacles: RectObstacle[],
+  otherSegments: [Point, Point][],
+): Point[] {
   if (points.length !== 2) return points;
   const [p1, p2] = points;
   const clear = (pts: Point[]) =>
-    pts.slice(0, -1).every((p, i) =>
-      obstacles.every((o) => {
-        const isOwnDevice = spec != null && (o.id === spec.sourceNodeId || o.id === spec.targetNodeId);
-        return !segmentCrossesRect(p, pts[i + 1], o, isOwnDevice ? 0 : OBSTACLE_PADDING);
-      }),
+    pts.slice(0, -1).every(
+      (p, i) =>
+        obstacles.every((o) => {
+          const isOwnDevice = spec != null && (o.id === spec.sourceNodeId || o.id === spec.targetNodeId);
+          return !segmentCrossesRect(p, pts[i + 1], o, isOwnDevice ? 0 : OBSTACLE_PADDING);
+        }) && otherSegments.every(([b1, b2]) => !segmentsCross(p, pts[i + 1], b1, b2)),
     );
 
   const hash = edgeId.split('').reduce((acc, c) => (acc * 31 + c.charCodeAt(0)) | 0, 0);
@@ -470,24 +539,36 @@ function addCosmeticCurve(edgeId: string, points: Point[], spec: EdgeRouteSpec |
 
   if (Math.abs(p1.y - p2.y) < 1 && Math.abs(p1.x - p2.x) > 20) {
     // Same-row cable — try dipping below the row first, then above, before giving up.
+    // Scale dip depth with cable length so long cables clear any nodes sitting between the ports.
+    const cableLen = Math.abs(p2.x - p1.x);
     const stub = 24 + (absHash % 10);
     const sx = p1.x < p2.x ? p1.x + stub : p1.x - stub;
     const tx = p1.x < p2.x ? p2.x - stub : p2.x + stub;
-    for (const sign of [1, -1]) {
-      const dipY = p1.y + sign * (28 + (absHash % 16));
-      const bent = [p1, { x: sx, y: p1.y }, { x: sx, y: dipY }, { x: tx, y: dipY }, { x: tx, y: p2.y }, p2];
-      if (clear(bent)) return bent;
+    const baseDip = 28 + (absHash % 16);
+    // Grow the dip by ~4% of the cable's length, capped at 80px so short cables stay tidy.
+    const scaledDip = Math.min(baseDip + cableLen * 0.04, 80);
+    for (const dip of [scaledDip, scaledDip * 1.6]) {
+      for (const sign of [1, -1]) {
+        const dipY = p1.y + sign * dip;
+        const bent = [p1, { x: sx, y: p1.y }, { x: sx, y: dipY }, { x: tx, y: dipY }, { x: tx, y: p2.y }, p2];
+        if (clear(bent)) return bent;
+      }
     }
     return points;
   }
   if (Math.abs(p1.x - p2.x) < 1 && Math.abs(p1.y - p2.y) > 20) {
     // Same-column cable — try the hash-preferred side first, then the opposite side.
-    const jog = 28 + (absHash % 20);
+    // Scale the jog with cable length for the same reason as the dip above.
+    const cableLen = Math.abs(p2.y - p1.y);
+    const baseJog = 28 + (absHash % 20);
+    const scaledJog = Math.min(baseJog + cableLen * 0.04, 80);
     const preferredDir = hash % 2 === 0 ? 1 : -1;
-    for (const dir of [preferredDir, -preferredDir]) {
-      const sideX = p1.x + dir * jog;
-      const bent = [p1, { x: sideX, y: p1.y }, { x: sideX, y: p2.y }, p2];
-      if (clear(bent)) return bent;
+    for (const jog of [scaledJog, scaledJog * 1.6]) {
+      for (const dir of [preferredDir, -preferredDir]) {
+        const sideX = p1.x + dir * jog;
+        const bent = [p1, { x: sideX, y: p1.y }, { x: sideX, y: p2.y }, p2];
+        if (clear(bent)) return bent;
+      }
     }
     return points;
   }
@@ -558,9 +639,19 @@ export function computeRoutes(obstacles: RectObstacle[], edges: EdgeRouteSpec[])
     finalObstacles = combinedObstacles;
   }
 
+  // Flattened per-edge segment lists, computed once so each cable's cosmetic dip can be checked
+  // against every *other* cable's actual path, not just device boxes (see addCosmeticCurve).
+  const segmentsByEdge = new Map<string, [Point, Point][]>();
+  for (const [id, pts] of finalRoutes) {
+    const segs: [Point, Point][] = [];
+    for (let i = 0; i < pts.length - 1; i++) segs.push([pts[i], pts[i + 1]]);
+    segmentsByEdge.set(id, segs);
+  }
+
   const curvedRoutes = new Map<string, Point[]>();
   for (const [id, pts] of finalRoutes) {
-    curvedRoutes.set(id, addCosmeticCurve(id, pts, specById.get(id), finalObstacles));
+    const otherSegments = Array.from(segmentsByEdge, ([otherId, segs]) => (otherId === id ? [] : segs)).flat();
+    curvedRoutes.set(id, addCosmeticCurve(id, pts, specById.get(id), finalObstacles, otherSegments));
   }
   return curvedRoutes;
 }
