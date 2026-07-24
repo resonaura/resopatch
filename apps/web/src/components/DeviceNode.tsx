@@ -138,6 +138,8 @@ export interface BoundaryPort {
 }
 
 export interface DeviceNodeData {
+  /** When true, never collapse unused ports (pedalboard modal — stable handle Y). */
+  forceExpandPorts?: boolean;
   device: GraphDevice;
   /** Devices with parentDeviceId === this node's device. Ones with no ports of their own
    *  (accessories: straps, tuner, velcro, cases) render as a plain nested list. Ones *with* ports
@@ -177,7 +179,8 @@ function PortRow({
         isDimmed ? 'opacity-40 hover:opacity-90' : 'opacity-100 font-medium'
       }`}
     >
-      <Handle type="target" position={Position.Left} id={port.id} />
+      {/* Unique ids per face — never reuse bare port.id for both source and target. */}
+      <Handle type="target" position={Position.Left} id={`${port.id}-tgt-left`} />
       <Handle type="source" position={Position.Left} id={`${port.id}-src-left`} />
       {channelColor && <span className="h-1.5 w-1.5 shrink-0 rounded-full ring-1 ring-black/40" style={{ backgroundColor: channelColor }} />}
       <PortTypeIcon portType={port.portType} />
@@ -191,7 +194,7 @@ function PortRow({
         )}
       </span>
       {isConnected && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent/80" />}
-      <Handle type="source" position={Position.Right} id={port.id} />
+      <Handle type="source" position={Position.Right} id={`${port.id}-src-right`} />
       <Handle type="target" position={Position.Right} id={`${port.id}-tgt-right`} />
     </div>
   );
@@ -200,23 +203,26 @@ function PortRow({
 function PortsSection({
   ports,
   connectedPortIds,
+  forceExpand = false,
 }: {
   ports: GraphDevice['ports'];
   connectedPortIds: Set<string>;
+  /** Pedalboard modal: keep full port list so handle Y never jumps. */
+  forceExpand?: boolean;
 }) {
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(forceExpand);
 
   const unusedCount = useMemo(() => ports.filter((p) => !connectedPortIds.has(p.id)).length, [ports, connectedPortIds]);
-  const shouldCollapse = ports.length > 4 && unusedCount > 0;
+  const shouldCollapse = !forceExpand && ports.length > 4 && unusedCount > 0;
 
   // When collapsing, only show connected ports (or top 2 if none connected).
   // When expanded, render ALL ports in their exact array index order so their position is preserved!
   const visiblePorts = useMemo(() => {
-    if (!shouldCollapse || expanded) return ports;
+    if (forceExpand || !shouldCollapse || expanded) return ports;
     const connected = ports.filter((p) => connectedPortIds.has(p.id));
     return connected.length > 0 ? connected : ports.slice(0, 2);
-  }, [ports, connectedPortIds, shouldCollapse, expanded]);
+  }, [ports, connectedPortIds, shouldCollapse, expanded, forceExpand]);
 
   const hiddenCount = ports.length - visiblePorts.length;
 
@@ -292,7 +298,8 @@ function DeviceThumb({
 
 function DeviceNodeImpl({ data, selected }: NodeProps) {
   const { t, language } = useI18n();
-  const { device, children, boundaryPorts, onSelectChild, onOpenInside } = data as unknown as DeviceNodeData;
+  const { device, children, boundaryPorts, onSelectChild, onOpenInside, forceExpandPorts } =
+    data as unknown as DeviceNodeData;
   const ports = device.ports;
   const isVirtual = device.id.startsWith('virtual-ext-');
   const inactive = device.inventoryStatus !== InventoryStatus.OWNED_ACTIVE && device.inventoryStatus !== InventoryStatus.VENUE_PROVIDED;
@@ -329,7 +336,13 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
         </Chip>
       </div>
       {device.ownerRole && <div className="px-2.5 pb-1.5 text-[10px] text-default-500">{formatOwnerRole(device.ownerRole, t)}</div>}
-      {ports.length > 0 && <PortsSection ports={ports} connectedPortIds={(data.connectedPortIds as Set<string> | undefined) ?? new Set()} />}
+      {ports.length > 0 && (
+        <PortsSection
+          ports={ports}
+          connectedPortIds={(data.connectedPortIds as Set<string> | undefined) ?? new Set()}
+          forceExpand={Boolean(forceExpandPorts)}
+        />
+      )}
       {isContainer && (
         <>
           {/* Always show external boundary ports — foldable hid Handles so cables

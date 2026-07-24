@@ -24,6 +24,7 @@ import { findLabelPoint, type Point } from '../lib/edgeRouting';
 import {
     isPsuObstacleId,
     pickBestNipplePath,
+    resnapRouteToMeasuredHandles,
     toRoutingEdges,
     toRoutingNodesWithNippleWalls,
 } from '../lib/nippleRouting';
@@ -178,6 +179,8 @@ function PatchCanvasInner({
   const handleFixRef = useRef(false);
   /** Coalesce drag re-routes to one rAF — same full pipeline as drag-stop. */
   const dragRouteRafRef = useRef(0);
+  /** Bumps when RF handleBounds settle (port-row Y) after box measure. */
+  const [handleEpoch, setHandleEpoch] = useState(0);
 
   // Re-score nipples when cards finish measuring (critical inside pedalboard modal —
   // fixed grid positions arrive before port-row heights are known).
@@ -209,6 +212,8 @@ function PatchCanvasInner({
     const next = new Map<string, Point[]>();
     const meta: EdgePortMeta[] = [];
     const handleFixes: { id: string; sourceHandle: string; targetHandle: string }[] = [];
+    /** Chosen handle ids per edge — used to re-snap after pack. */
+    const chosenHandles = new Map<string, { sourceHandle: string; targetHandle: string }>();
 
     for (const e of edges) {
       const route = avoidRoutes[e.id];
@@ -244,6 +249,10 @@ function PatchCanvasInner({
           sourceSide: best.sourceSide,
           targetSide: best.targetSide,
         });
+        chosenHandles.set(e.id, {
+          sourceHandle: best.sourceHandle,
+          targetHandle: best.targetHandle,
+        });
         if (best.sourceHandle !== e.sourceHandle || best.targetHandle !== e.targetHandle) {
           handleFixes.push({
             id: e.id,
@@ -253,6 +262,10 @@ function PatchCanvasInner({
         }
       } else {
         next.set(e.id, wasmPts);
+        chosenHandles.set(e.id, {
+          sourceHandle: e.sourceHandle,
+          targetHandle: e.targetHandle,
+        });
       }
     }
 
@@ -270,7 +283,25 @@ function PatchCanvasInner({
     const packed = nudgeParallelRuns(managed, PARALLEL_CABLE_GAP, boxes, ownByEdge);
     let finalRoutes = new Map<string, Point[]>();
     for (const [id, pts] of packed) {
-      finalRoutes.set(id, enforceOrthogonal(pts));
+      const handles = chosenHandles.get(id);
+      const e = edges.find((edge) => edge.id === id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sNode = e ? (nodeLookup.get(e.source) as any) : null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tNode = e ? (nodeLookup.get(e.target) as any) : null;
+      // Re-attach to measured nipples after pack (pack can drift stubs; modal measure is late).
+      const snapped =
+        handles && sNode && tNode
+          ? resnapRouteToMeasuredHandles(
+              pts,
+              sNode,
+              tNode,
+              handles.sourceHandle,
+              handles.targetHandle,
+              boxes,
+            )
+          : pts;
+      finalRoutes.set(id, enforceOrthogonal(snapped));
     }
 
     // --- Inline PSU cards as real nodes (above copper, avoid other nets) ---
@@ -520,7 +551,7 @@ function PatchCanvasInner({
         handleFixRef.current = false;
       });
     }
-  }, [avoidRoutes, edges, storeApi, setEdges, measureKey]);
+  }, [avoidRoutes, edges, storeApi, setEdges, measureKey, handleEpoch]);
 
   const layoutKey = useMemo(() => {
     const nodePart = initialNodes
@@ -542,12 +573,11 @@ function PatchCanvasInner({
     return () => window.clearTimeout(t);
   }, [layoutKey, refreshRouting]);
 
-  // After first measure (modal open / expand ports), force WASM + nipple re-pick.
+  // After measure / handleBounds settle, re-pick L/R + refresh WASM.
+  // Node box size alone is not enough — RF often reports width/height before handleBounds.
   const lastMeasureKeyRef = useRef('');
   useEffect(() => {
     if (!measureKey || measureKey === lastMeasureKeyRef.current) return;
-    // Skip empty-all-zero measure (pre-layout).
-    if (!measureKey.includes('x') || measureKey.replace(/[0|x:]/g, '') === '') return;
     const hasReal = nodes.some(
       (n) => (n.measured?.height ?? n.height ?? 0) > 40 && (n.measured?.width ?? n.width ?? 0) > 40,
     );
@@ -559,6 +589,46 @@ function PatchCanvasInner({
     }, 80);
     return () => window.clearTimeout(t);
   }, [measureKey, nodes, refreshRouting, setEdges]);
+
+  // Poll handleBounds for a short window after layout — pedals finish port rows after box measure.
+  useEffect(() => {
+    let alive = true;
+    let frames = 0;
+    let lastFp = '';
+    const tick = () => {
+      if (!alive) return;
+      frames += 1;
+      const { nodeLookup } = storeApi.getState();
+      const parts: string[] = [];
+      for (const e of edges) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const s = nodeLookup.get(e.source) as any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const t = nodeLookup.get(e.target) as any;
+        for (const node of [s, t]) {
+          if (!node) continue;
+          for (const kind of ['source', 'target'] as const) {
+            const bounds = node.internals?.handleBounds?.[kind] ?? [];
+            for (const h of bounds) {
+              if (!h?.id) continue;
+              parts.push(`${h.id}:${Math.round(h.x)}:${Math.round(h.y)}`);
+            }
+          }
+        }
+      }
+      const fp = parts.sort().join('|');
+      if (fp && fp !== lastFp) {
+        lastFp = fp;
+        setHandleEpoch((n) => n + 1);
+      }
+      if (frames < 90) requestAnimationFrame(tick);
+    };
+    const id = requestAnimationFrame(tick);
+    return () => {
+      alive = false;
+      cancelAnimationFrame(id);
+    };
+  }, [edges, nodes, measureKey, storeApi]);
 
   const renderEdges = useMemo(
     () =>

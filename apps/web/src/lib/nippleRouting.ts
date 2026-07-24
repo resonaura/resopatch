@@ -417,3 +417,53 @@ export function pickBestNipplePath(
   if (!bestWasm) return null;
   return toResult(bestWasm);
 }
+
+/**
+ * After cable-manage / parallel pack, re-attach path ends to the *measured* handle
+ * pixels for the chosen L/R ids. Keeps mid-corridor geometry; only rebuilds exterior
+ * stubs via snapPathToNipples (strictly ortho, no render-time pin hacks).
+ */
+export function resnapRouteToMeasuredHandles(
+  path: Point[],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sourceNode: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  targetNode: any,
+  sourceHandleId: string,
+  targetHandleId: string,
+  boxes: NodeBox[],
+  stubLen = 28,
+): Point[] {
+  if (!path || path.length < 2 || !sourceHandleId || !targetHandleId) return path;
+
+  const sourceSide = sideFromHandleId(sourceHandleId, 'source');
+  const targetSide = sideFromHandleId(targetHandleId, 'target');
+  const sourceBox = boxes.find((b) => b.id === sourceNode?.id) ?? null;
+  const targetBox = boxes.find((b) => b.id === targetNode?.id) ?? null;
+
+  const sHit =
+    listHandles(sourceNode, 'source').find((h) => h.id === sourceHandleId) ??
+    listHandles(sourceNode, 'source').find((h) => h.side === sourceSide);
+  const tHit =
+    listHandles(targetNode, 'target').find((h) => h.id === targetHandleId) ??
+    listHandles(targetNode, 'target').find((h) => h.side === targetSide);
+
+  const start =
+    sHit?.point ??
+    (sourceBox
+      ? {
+          x: sourceSide === 'right' ? sourceBox.x + sourceBox.width : sourceBox.x,
+          y: sourceBox.y + sourceBox.height / 2,
+        }
+      : path[0]);
+  const end =
+    tHit?.point ??
+    (targetBox
+      ? {
+          x: targetSide === 'right' ? targetBox.x + targetBox.width : targetBox.x,
+          y: targetBox.y + targetBox.height / 2,
+        }
+      : path[path.length - 1]);
+
+  return snapPathToNipples(path, start, end, sourceSide, targetSide, sourceBox, targetBox, stubLen);
+}

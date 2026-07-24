@@ -1,7 +1,10 @@
 /**
- * Dual left/right nipples on DeviceNode:
- *  - source: right = `portId`, left = `${portId}-src-left`
- *  - target: left  = `portId`, right = `${portId}-tgt-right`
+ * Dual left/right nipples on DeviceNode — **unique handle ids per face**:
+ *  - source: right = `${portId}-src-right`, left = `${portId}-src-left`
+ *  - target: left  = `${portId}-tgt-left`,  right = `${portId}-tgt-right`
+ *
+ * Legacy edges may still use bare `portId` (old right-source / left-target). basePortId()
+ * strips suffixes; source/target options always emit the unique ids above.
  *
  * Critical: never draw a horizontal on the port's Y that spans across the card
  * (that was "reaches L then tunnels to R").
@@ -25,7 +28,7 @@ export function basePortId(handleId: string | null | undefined): string {
 export function sourceHandleOptions(portId: string): { id: string; side: Side }[] {
   const base = basePortId(portId);
   return [
-    { id: base, side: 'right' },
+    { id: `${base}-src-right`, side: 'right' },
     { id: `${base}-src-left`, side: 'left' },
   ];
 }
@@ -33,9 +36,41 @@ export function sourceHandleOptions(portId: string): { id: string; side: Side }[
 export function targetHandleOptions(portId: string): { id: string; side: Side }[] {
   const base = basePortId(portId);
   return [
-    { id: base, side: 'left' },
+    { id: `${base}-tgt-left`, side: 'left' },
     { id: `${base}-tgt-right`, side: 'right' },
   ];
+}
+
+/** Default L→R wiring: source on right face, target on left face. */
+export function defaultSourceHandle(portId: string): string {
+  return `${basePortId(portId)}-src-right`;
+}
+export function defaultTargetHandle(portId: string): string {
+  return `${basePortId(portId)}-tgt-left`;
+}
+
+export function sourceSideFromHandleId(handleId: string | null | undefined, fallbackPath?: Point[]): Side {
+  if (handleId?.endsWith('-src-left')) return 'left';
+  if (handleId?.endsWith('-src-right')) return 'right';
+  // Legacy bare port id was the right-face source.
+  if (handleId && !handleId.includes('-src-') && !handleId.includes('-tgt-')) return 'right';
+  if (fallbackPath && fallbackPath.length >= 2) {
+    return fallbackPath[1].x + 1 < fallbackPath[0].x ? 'left' : 'right';
+  }
+  return 'right';
+}
+
+export function targetSideFromHandleId(handleId: string | null | undefined, fallbackPath?: Point[]): Side {
+  if (handleId?.endsWith('-tgt-right')) return 'right';
+  if (handleId?.endsWith('-tgt-left')) return 'left';
+  // Legacy bare port id was the left-face target.
+  if (handleId && !handleId.includes('-src-') && !handleId.includes('-tgt-')) return 'left';
+  if (fallbackPath && fallbackPath.length >= 2) {
+    const a = fallbackPath[fallbackPath.length - 2];
+    const b = fallbackPath[fallbackPath.length - 1];
+    return a.x > b.x + 1 ? 'right' : 'left';
+  }
+  return 'left';
 }
 
 /**

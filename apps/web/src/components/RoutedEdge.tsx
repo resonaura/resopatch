@@ -1,4 +1,5 @@
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react';
+import { useMemo } from 'react';
 import {
     buildAdaptiveCableLabel,
     cableLabelIconPorts,
@@ -12,6 +13,11 @@ import { findLabelPoint, roundedPathFromPoints, sampleAlongPath, type Point } fr
 import type { CableEdgeMeta } from '../lib/graphCableToEdge';
 import { useI18n } from '../lib/i18n';
 import { formatI18nText } from '../lib/i18nText';
+import {
+    snapPathToNipples,
+    sourceSideFromHandleId,
+    targetSideFromHandleId,
+} from '../lib/portHandles';
 import { PortTypeIcon } from '../lib/portIcons';
 
 // Re-export label helpers so existing imports from this module keep working.
@@ -207,42 +213,70 @@ function findBestMidpoint(points?: Point[], sourceX?: number, sourceY?: number, 
 }
 
 /**
- * Force path endpoints onto the live handle pixels RF reports (sourceX/Y, targetX/Y).
- * Routed mid-path can lag behind measure/nipple picks — especially inside the pedalboard
- * modal — so without this the stroke misses the nipples.
+ * Re-seat a routed mid-path onto the live RF handle pixels (sourceX/Y, targetX/Y).
+ * Uses snapPathToNipples so we only rebuild exterior stubs — mid corridor stays, always 90°.
+ * Fixes pedalboard modal where paths lag behind measured port-row Y without inventing
+ * random verticals through other nets.
  */
-function pinPathToHandles(
-  points: Point[] | undefined,
+function attachPathToLiveHandles(
+  routed: Point[] | undefined,
   sourceX: number,
   sourceY: number,
   targetX: number,
   targetY: number,
+  sourceHandleId: string | null | undefined,
+  targetHandleId: string | null | undefined,
 ): Point[] | undefined {
-  if (!points || points.length < 2) return points;
-  if (![sourceX, sourceY, targetX, targetY].every((n) => Number.isFinite(n))) return points;
+  if (!routed || routed.length < 2) return routed;
+  if (![sourceX, sourceY, targetX, targetY].every((n) => Number.isFinite(n))) return routed;
 
-  const pts = points.map((p) => ({ x: p.x, y: p.y }));
-  pts[0] = { x: sourceX, y: sourceY };
-  pts[pts.length - 1] = { x: targetX, y: targetY };
+  const start = { x: sourceX, y: sourceY };
+  const end = { x: targetX, y: targetY };
+  // Already on the nipples (within 2px) — keep the router path as-is.
+  const s0 = routed[0];
+  const s1 = routed[routed.length - 1];
+  if (Math.hypot(s0.x - start.x, s0.y - start.y) < 2 && Math.hypot(s1.x - end.x, s1.y - end.y) < 2) {
+    return routed;
+  }
 
-  // Keep the first/last stubs horizontal at the true nipple Y.
-  if (pts.length >= 2) {
-    pts[1] = { x: pts[1].x, y: sourceY };
-  }
-  if (pts.length >= 3) {
-    pts[pts.length - 2] = { x: pts[pts.length - 2].x, y: targetY };
-  }
-  return pts;
+  const sourceSide = sourceSideFromHandleId(sourceHandleId, routed);
+  const targetSide = targetSideFromHandleId(targetHandleId, routed);
+  // stubLen from path geometry when possible (distance of first hop).
+  const stubLen = Math.max(
+    20,
+    Math.min(48, Math.round(Math.abs(routed[1].x - routed[0].x) || 28)),
+  );
+  return snapPathToNipples(routed, start, end, sourceSide, targetSide, null, null, stubLen);
 }
 
-/** Renders whatever path `CableRouter` (in Constructor.tsx) computed for this edge and cached
- *  onto `data.points`. Falls back to a straight line between the handles for the one render
- *  before routing has run — e.g. a cable just created this session. */
-export default function RoutedEdge({ id, data, style, markerEnd, sourceX, sourceY, targetX, targetY }: EdgeProps) {
+/** Renders routed `data.points`, re-seated onto live handles when measure lags. */
+export default function RoutedEdge({
+  id,
+  data,
+  style,
+  markerEnd,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourceHandleId,
+  targetHandleId,
+}: EdgeProps) {
   const { t, language } = useI18n();
   const edgeData = data as RoutedEdgeData | undefined;
-  const rawPoints = edgeData?.points;
-  const points = pinPathToHandles(rawPoints, sourceX, sourceY, targetX, targetY);
+  const points = useMemo(
+    () =>
+      attachPathToLiveHandles(
+        edgeData?.points,
+        sourceX,
+        sourceY,
+        targetX,
+        targetY,
+        sourceHandleId,
+        targetHandleId,
+      ),
+    [edgeData?.points, sourceX, sourceY, targetX, targetY, sourceHandleId, targetHandleId],
+  );
   // PSU badge (edge label or real node) owns the mid-cable slot — no text caption then.
   const hasPsuInfo = !!(edgeData?.powerConverter || edgeData?.psuAsNode);
   const powerConverter =

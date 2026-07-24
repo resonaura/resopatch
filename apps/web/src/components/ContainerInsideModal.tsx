@@ -266,6 +266,8 @@ export default function ContainerInsideModal({
             connectedPortIds,
             onSelectChild,
             onOpenInside: () => {},
+            // Full port list → stable handle Y (collapse shifts connected rows and misses nipples).
+            forceExpandPorts: true,
           } satisfies DeviceNodeData,
         };
       }),

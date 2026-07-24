@@ -15,6 +15,7 @@ import {
 } from '@resopatch/shared';
 import type { Edge } from '@xyflow/react';
 import type { GraphCable, GraphDevice } from '../api/client';
+import { defaultSourceHandle, defaultTargetHandle } from './portHandles';
 
 /** Plug gender on the cable end (mates with the device jack). */
 export type CablePlugGender = 'male' | 'female';
@@ -160,9 +161,10 @@ export function graphCableToEdge(
   return {
     id: cable.id,
     source: portToNodeId.get(cable.sourcePortId) ?? '',
-    sourceHandle: cable.sourcePortId,
+    // Unique dual-nipple ids (see DeviceNode PortRow + portHandles.ts).
+    sourceHandle: defaultSourceHandle(cable.sourcePortId),
     target: portToNodeId.get(cable.targetPortId) ?? '',
-    targetHandle: cable.targetPortId,
+    targetHandle: defaultTargetHandle(cable.targetPortId),
     selected: isSelected,
     type: 'routed',
     data: {
