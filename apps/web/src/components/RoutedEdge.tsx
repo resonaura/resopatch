@@ -1,5 +1,6 @@
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react';
 import { roundedPathFromPoints, sampleAlongPath, type Point } from '../lib/edgeRouting';
+import { useI18n } from '../lib/i18n';
 
 export interface RoutedEdgeData {
   points?: Point[];
@@ -142,6 +143,7 @@ function findBestMidpoint(points?: Point[], sourceX?: number, sourceY?: number, 
  *  onto `data.points`. Falls back to a straight line between the handles for the one render
  *  before routing has run — e.g. a cable just created this session. */
 export default function RoutedEdge({ id, data, style, markerEnd, label, sourceX, sourceY, targetX, targetY }: EdgeProps) {
+  const { t } = useI18n();
   const edgeData = data as RoutedEdgeData | undefined;
   const points = edgeData?.points;
   const powerConverter = edgeData?.powerConverter;
@@ -209,7 +211,7 @@ export default function RoutedEdge({ id, data, style, markerEnd, label, sourceX,
             </div>
             <div className="flex flex-col">
               <span className="text-[9px] uppercase tracking-wider text-neutral-400 font-semibold leading-none">
-                {powerConverter.adapterName || 'Блок Питания'}
+                {powerConverter.adapterName || t('powerSupply')}
               </span>
               <div className="flex items-center gap-1 text-[10px] font-bold leading-tight mt-0.5">
                 <span className="text-red-400">120V AC</span>

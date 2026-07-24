@@ -26,6 +26,7 @@ const LUCIDE_PORT_ICON: Partial<Record<string, LucideIcon>> = {
 /** The actual mains sockets (wall/strip outlets), as opposed to DC barrel or USB power — these
  *  are what the user means by "розетки" and get a lit-up amber badge instead of the plain grey
  *  icon every other port type gets. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function isOutletPortType(portType: string): boolean {
   return portType === PortType.POWER_SCHUKO || portType === PortType.POWER_IEC;
 }

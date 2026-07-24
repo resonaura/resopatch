@@ -15,22 +15,22 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
   const change = useMutation({
     mutationFn: () => api.changePassword({ currentPassword, newPassword }),
     onSuccess: () => {
-      toast('Пароль обновлён.', { variant: 'success' });
+      toast(t('settings.success'), { variant: 'success' });
       onClose();
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? err.message : 'Не удалось сменить пароль');
+      setError(err instanceof ApiError ? err.message : t('settings.errFailed'));
     },
   });
 
   const submit = () => {
     setError(null);
     if (newPassword.length < 4) {
-      setError('Новый пароль должен быть не короче 4 символов.');
+      setError(t('settings.errShort'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('Пароли не совпадают.');
+      setError(t('settings.errMismatch'));
       return;
     }
     change.mutate();
@@ -64,26 +64,26 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
                 </Select.Popover>
               </Select>
               <TextField isRequired>
-                <Label>Текущий пароль</Label>
+                <Label>{t('settings.currentPassword')}</Label>
                 <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} autoFocus />
               </TextField>
               <TextField isRequired>
-                <Label>Новый пароль</Label>
+                <Label>{t('settings.newPassword')}</Label>
                 <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
               </TextField>
               <TextField isRequired>
-                <Label>Повтори новый пароль</Label>
+                <Label>{t('settings.repeatPassword')}</Label>
                 <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
               </TextField>
               {error && <p className="text-sm text-danger">{error}</p>}
             </Modal.Body>
             <Modal.Footer>
               <Button variant="secondary" onPress={onClose}>
-                Отмена
+                {t('settings.cancel')}
               </Button>
               <Button onPress={submit} isDisabled={!currentPassword || !newPassword} isPending={change.isPending}>
                 <KeyRound className="h-3.5 w-3.5" />
-                Сохранить
+                {t('settings.save')}
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

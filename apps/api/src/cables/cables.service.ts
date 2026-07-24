@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { CableDto, CreateCableDto, UpdateCableDto, validateConnection } from '@resopatch/shared';
+import { CableDto, CableType, CreateCableDto, PortDirection, PortType, UpdateCableDto, validateConnection } from '@resopatch/shared';
 import { applyCableDto, toCableDto } from '../database/mappers.js';
 import { adaptersRepo, cablesRepo, devicesRepo, portsRepo, In } from '../database/json-db.js';
 
@@ -23,13 +23,13 @@ export class CablesService {
     if (adapterId && !adapter) throw new NotFoundException('Adapter not found.');
 
     const result = validateConnection({
-      sourcePortType: sourcePort.portType as any,
-      sourceDirection: sourcePort.direction as any,
-      targetPortType: targetPort.portType as any,
-      targetDirection: targetPort.direction as any,
-      cableType: cableType as any,
+      sourcePortType: sourcePort.portType as PortType,
+      sourceDirection: sourcePort.direction as PortDirection,
+      targetPortType: targetPort.portType as PortType,
+      targetDirection: targetPort.direction as PortDirection,
+      cableType: cableType as CableType,
       adapter: adapter
-        ? { inputType: adapter.inputType as any, outputType: adapter.outputType as any, invertsPolarity: adapter.invertsPolarity }
+        ? { inputType: adapter.inputType as PortType, outputType: adapter.outputType as PortType, invertsPolarity: adapter.invertsPolarity }
         : undefined,
       sourcePower: {
         currentType: sourcePort.powerCurrentType ?? undefined,

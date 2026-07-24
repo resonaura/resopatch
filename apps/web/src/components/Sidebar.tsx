@@ -46,7 +46,7 @@ export default function Sidebar({
   onSelectCable: (id: string) => void;
   onNewDevice: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     [InventoryStatus.OWNED_ACTIVE]: true,
@@ -120,7 +120,7 @@ export default function Sidebar({
                       }`}
                     >
                       <DeviceThumb device={d} className="h-7 w-7" />
-                      <span className="truncate">{getDisplayName(d, t)}</span>
+                      <span className="truncate">{getDisplayName(d, t, language)}</span>
                     </button>
                   ))}
                 </div>
@@ -159,7 +159,7 @@ export default function Sidebar({
                       />
                       <CableIcon className="h-3.5 w-3.5 shrink-0 text-default-500" />
                       <span className="truncate">
-                        {c.productName ?? c.cableType} — {c.length}м
+                        {c.productName ?? c.cableType} — {c.length}{t('meter')}
                         {owner ? ` · ${owner}` : ''}
                       </span>
                     </button>

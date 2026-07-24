@@ -77,7 +77,7 @@ export function graphCableToEdge(
     powerConverter = {
       fromVoltage: '120V AC',
       toVoltage: `${targetVoltage}V ${targetCurrent}`,
-      adapterName: 'БП',
+      adapterName: 'PSU',
       dcColor: styleInfo.stroke,
     };
     if (styleInfo.dash) dash = styleInfo.dash;

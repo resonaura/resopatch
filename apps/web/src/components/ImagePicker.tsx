@@ -3,16 +3,19 @@ import { Button, Input, Label } from '@heroui/react';
 import { ImageOff, Trash2, Upload } from 'lucide-react';
 import { fileToCompressedDataUrl } from '../lib/imageUpload';
 import { api } from '../api/client';
+import { useI18n } from '../lib/i18n';
 
 export default function ImagePicker({
   value,
   onChange,
-  label = 'Фото устройства',
+  label,
 }: {
   value: string | undefined;
   onChange: (url: string | undefined) => void;
   label?: string;
 }) {
+  const { t } = useI18n();
+  const displayLabel = label ?? t('imagePicker.label');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -35,7 +38,7 @@ export default function ImagePicker({
       }
       onChange(dataUrl);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось загрузить изображение');
+      setError(e instanceof Error ? e.message : t('imagePicker.uploadError'));
     } finally {
       setBusy(false);
     }
@@ -46,7 +49,7 @@ export default function ImagePicker({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Label>{label}</Label>
+      <Label>{displayLabel}</Label>
       <div className="flex items-start gap-2.5">
         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-default-200 bg-surface-secondary">
           {previewSrc ? (
@@ -59,10 +62,10 @@ export default function ImagePicker({
           <div className="flex gap-1.5">
             <Button size="sm" variant="secondary" onPress={() => inputRef.current?.click()} isPending={busy}>
               <Upload className="h-3.5 w-3.5" />
-              Загрузить фото
+              {t('imagePicker.uploadBtn')}
             </Button>
             {value && (
-              <Button size="sm" variant="ghost" isIconOnly onPress={() => onChange(undefined)} aria-label="Убрать изображение">
+              <Button size="sm" variant="ghost" isIconOnly onPress={() => onChange(undefined)} aria-label={t('imagePicker.removeBtn')}>
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             )}
@@ -70,7 +73,7 @@ export default function ImagePicker({
           <Input
             key={value?.startsWith('data:') ? 'data' : value}
             defaultValue={urlValue}
-            placeholder="или вставьте URL изображения"
+            placeholder={t('imagePicker.urlPlaceholder')}
             onBlur={(e) => {
               const v = e.target.value.trim();
               if (v !== urlValue) onChange(v || undefined);

@@ -35,6 +35,7 @@ export function ImgManifestProvider({ children }: { children: ReactNode }) {
   return <ImgManifestContext.Provider value={{ manifest, isLoaded }}>{children}</ImgManifestContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useImgManifest() {
   return useContext(ImgManifestContext);
 }

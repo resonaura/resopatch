@@ -8,6 +8,7 @@ import { cableTypeLabel } from '../lib/cableTypeLabel';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { getDisplayName } from '../lib/deviceNaming';
 import { useI18n } from '../lib/i18n';
+import { formatOwnerRole } from '../lib/ownerRole';
 import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
 import CheckboxField from './CheckboxField';
 
@@ -48,7 +49,7 @@ function ItemThumb({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'type'> 
 }
 
 export default function StaffChecklist({ devices, cables, setupId }: { devices: GraphDevice[]; cables: GraphCable[]; setupId: string }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const unowned = t('checklist.unowned');
   const qc = useQueryClient();
   const storageKey = `resopatch_checklist_${setupId}`;
@@ -275,7 +276,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
             <div key={owner} className="rounded-xl border border-default-200 bg-surface shadow-sm overflow-hidden">
               <div className="flex items-center justify-between border-b border-default-200 bg-surface-secondary/50 px-4 py-2.5">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-sm text-foreground">{owner}</span>
+                  <span className="font-semibold text-sm text-foreground">{owner === unowned ? unowned : formatOwnerRole(owner, t)}</span>
                   <Chip size="sm" variant="soft">
                     {groupChecked}/{groupTotal}
                   </Chip>
@@ -306,7 +307,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                              {getDisplayName(parent, t)}
+                              {getDisplayName(parent, t, language)}
                             </span>
                             <Chip size="sm" variant="soft" className="text-[10px]">
                               {parent.type}
@@ -345,7 +346,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                                     </div>
                                     <ItemThumb device={acc} />
                                     <span className={`text-xs ${accChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                                      {getDisplayName(acc, t)}
+                                      {getDisplayName(acc, t, language)}
                                     </span>
                                   </div>
                                 );
@@ -385,7 +386,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                           </Chip>
                           <div className="min-w-0 flex-1">
                             <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                              {group.productName ?? cableTypeLabel(group.cableType, t)} — {group.length}м
+                              {group.productName ?? cableTypeLabel(group.cableType, t)} — {group.length}{t('meter')}
                               {group.color ? ` (${group.color})` : ''}
                             </span>
                           </div>

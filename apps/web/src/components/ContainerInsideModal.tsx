@@ -9,6 +9,7 @@ import PatchCanvas from './PatchCanvas';
 import Inspector, { type Selection } from './Inspector';
 import { DeviceType, InventoryStatus } from '@resopatch/shared';
 import { graphCableToEdge } from '../lib/graphCableToEdge';
+import { getDisplayName } from '../lib/deviceNaming';
 import type { Node, Edge } from '@xyflow/react';
 import type { DeviceNodeData } from './DeviceNode';
 
@@ -101,7 +102,7 @@ export default function ContainerInsideModal({
   onRunAutoLayout,
   isAutoLayoutPending,
 }: ContainerInsideModalProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [modalSelection, setModalSelection] = useState<Selection>(null);
   const { nodes: childDevices, cables: internalCables } = useMemo(
     () => containerInternalGraph(allDevices, allCables, containerDevice.id),
@@ -202,9 +203,9 @@ export default function ContainerInsideModal({
           const newVirtualDev = {
             id: `virtual-ext-${extDev.id}`,
             setupId: containerDevice.setupId,
-            name: `Внешний: ${extDev.name}`,
+            name: `${t('containerModal.externalPrefix')} ${getDisplayName(extDev, t, language)}`,
             type: extDev.type,
-            notes: `Внешнее устройство: ${extDev.name}`,
+            notes: `${t('containerModal.externalDeviceNote')} ${getDisplayName(extDev, t, language)}`,
             inventoryStatus: InventoryStatus.OWNED_ACTIVE,
             ownerRole: extDev.ownerRole,
             parentDeviceId: null,
@@ -227,7 +228,7 @@ export default function ContainerInsideModal({
       }
     }
     return { boundaryNodes: bNodes, boundaryCables: bCables };
-  }, [allCables, allPortToDevice, allPortById, childIds, containerDevice.setupId]);
+  }, [allCables, allPortToDevice, allPortById, childIds, containerDevice.setupId, t, language]);
 
   const displayedDevices = useMemo(() => [...positionedChildDevices, ...boundaryNodes], [positionedChildDevices, boundaryNodes]);
   const displayedCables = useMemo(() => [...internalCables, ...boundaryCables], [internalCables, boundaryCables]);
@@ -290,16 +291,16 @@ export default function ContainerInsideModal({
                   <Layers className="h-5 w-5 shrink-0 aspect-square" />
                 </div>
                 <div>
-                  <h2 className="text-base font-semibold text-foreground">{containerDevice.name} — Внутренняя схема</h2>
+                  <h2 className="text-base font-semibold text-foreground">{getDisplayName(containerDevice, t, language)} — {t('containerModal.title')}</h2>
                   <p className="text-xs text-default-500">
-                    Компоненты борда ({childDevices.length} устройств), внешние подключения ({boundaryNodes.length} разьёмов) и внутреннее питание
+                    {t('containerModal.subtitle').replace('{devices}', String(childDevices.length)).replace('{ports}', String(boundaryNodes.length))}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" onPress={() => onAddChild(containerDevice.id)}>
                   <Plus className="h-4 w-4" />
-                  Добавить педаль
+                  {t('containerModal.addPedal')}
                 </Button>
                 <Button size="sm" variant="secondary" onPress={onClose}>
                   <X className="h-4 w-4" />
@@ -310,10 +311,10 @@ export default function ContainerInsideModal({
               <div className="relative min-h-0 flex-1 p-0 overflow-hidden">
                 {childDevices.length === 0 ? (
                   <div className="flex h-full flex-col items-center justify-center gap-3 text-default-500">
-                    <p>В этом педалборде пока нет устройств.</p>
+                    <p>{t('containerModal.empty')}</p>
                     <Button size="sm" onPress={() => onAddChild(containerDevice.id)}>
                       <Plus className="h-4 w-4" />
-                      Добавить устройство
+                      {t('containerModal.addDevice')}
                     </Button>
                   </div>
                 ) : (

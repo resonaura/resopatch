@@ -7,10 +7,12 @@ import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { getDisplayName } from '../lib/deviceNaming';
 import { useI18n } from '../lib/i18n';
+import { formatI18nText } from '../lib/i18nText';
 import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
 import { ProgressiveImage } from '../lib/img';
 import { portChannelColor } from '../lib/portChannel';
 import { PortTypeIcon } from '../lib/portIcons';
+import { formatOwnerRole } from '../lib/ownerRole';
 
 /** `imageUrl` doubles as either a relative path into the api's optimized image storage
  *  (see apps/api/src/images) or a raw `data:`/pasted URL from ImagePicker's upload flow —
@@ -47,6 +49,7 @@ function BannerImage({ url, alt, isOnly }: { url: string; alt: string; isOnly: b
  *  (max 140px). When `imageUrls` has multiple entries it renders an interactive slider
  *  allowing the user to slide left/right between all provided views. */
 function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'imageUrls' | 'name' | 'type'> }) {
+  const { t, language } = useI18n();
   const [currentIndex, setCurrentIndex] = useState(0);
 
   if (device.type === DeviceType.PEDALBOARD) return null;
@@ -62,7 +65,7 @@ function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 
   if (urls.length === 1) {
     return (
       <div className="flex w-full overflow-hidden border-b border-default-200/60 bg-black/20" style={{ height: '140px' }}>
-        <BannerImage url={urls[0]} alt={device.name} isOnly={true} />
+        <BannerImage url={urls[0]} alt={formatI18nText(device.name, language)} isOnly={true} />
       </div>
     );
   }
@@ -86,7 +89,7 @@ function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 
       >
         {urls.map((url, i) => (
           <div key={url} className="h-full w-full shrink-0 flex-none">
-            <BannerImage url={url} alt={`${device.name} view ${i + 1}`} isOnly={true} />
+            <BannerImage url={url} alt={`${formatI18nText(device.name, language)} view ${i + 1}`} isOnly={true} />
           </div>
         ))}
       </div>
@@ -95,14 +98,14 @@ function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 
       <button
         onClick={prev}
         className="absolute left-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white shadow transition-all hover:bg-black hover:scale-105 active:scale-95"
-        title="Предыдущий вид"
+        title={t('deviceNode.prevView')}
       >
         <ChevronLeft className="h-3.5 w-3.5" />
       </button>
       <button
         onClick={next}
         className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white shadow transition-all hover:bg-black hover:scale-105 active:scale-95"
-        title="Следующий вид"
+        title={t('deviceNode.nextView')}
       >
         <ChevronRight className="h-3.5 w-3.5" />
       </button>
@@ -147,13 +150,6 @@ export interface DeviceNodeData {
   onOpenInside: (deviceId: string) => void;
   [key: string]: unknown;
 }
-
-const STATUS_LABEL: Record<string, string> = {
-  [InventoryStatus.OWNED_ACTIVE]: 'в сетапе',
-  [InventoryStatus.OWNED_INACTIVE]: 'не активно',
-  [InventoryStatus.PLANNED_NOT_OWNED]: 'план',
-  [InventoryStatus.VENUE_PROVIDED]: 'площадка',
-};
 
 const STATUS_COLOR: Record<string, 'success' | 'default' | 'warning' | 'accent'> = {
   [InventoryStatus.OWNED_ACTIVE]: 'success',
@@ -202,6 +198,7 @@ function PortsSection({
   ports: GraphDevice['ports'];
   connectedPortIds: Set<string>;
 }) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
 
   const unusedCount = useMemo(() => ports.filter((p) => !connectedPortIds.has(p.id)).length, [ports, connectedPortIds]);
@@ -241,7 +238,7 @@ function PortsSection({
           className="flex w-full items-center justify-center gap-1 py-1.5 text-[10px] font-medium text-default-400 hover:bg-white/5 hover:text-foreground transition-colors border-t border-white/5"
         >
           <ChevronDown className="h-3 w-3" />
-          Показать все порты ({hiddenCount} скрыто)
+          {t('deviceNode.showAllPorts').replace('{count}', String(hiddenCount))}
         </button>
       )}
       {shouldCollapse && expanded && (
@@ -253,7 +250,7 @@ function PortsSection({
           className="flex w-full items-center justify-center gap-1 py-1 text-[9.5px] font-medium text-default-500 hover:bg-white/5 hover:text-foreground transition-colors border-t border-white/5"
         >
           <ChevronUp className="h-3 w-3" />
-          Свернуть неиспользуемые
+          {t('deviceNode.collapseUnused')}
         </button>
       )}
     </div>
@@ -288,7 +285,7 @@ function DeviceThumb({
 }
 
 function DeviceNodeImpl({ data, selected }: NodeProps) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { device, children, boundaryPorts, onSelectChild, onOpenInside } = data as unknown as DeviceNodeData;
   const ports = device.ports;
   const isVirtual = device.id.startsWith('virtual-ext-');
@@ -313,15 +310,20 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
         {/* Hide the small thumb when there is already a full-width banner above */}
         {!device.imageUrl && <DeviceThumb device={device} className="h-6 w-6" />}
         <span className="truncate font-semibold text-foreground" title={device.type}>
-          {getDisplayName(device, t)}
+          {getDisplayName(device, t, language)}
         </span>
       </div>
       <div className="flex items-center gap-1 px-2.5 pb-1.5 pt-1">
         <Chip size="sm" color={STATUS_COLOR[device.inventoryStatus]} variant="soft">
-          {STATUS_LABEL[device.inventoryStatus]}
+          {t(({
+            [InventoryStatus.OWNED_ACTIVE]: 'status.ownedActive',
+            [InventoryStatus.OWNED_INACTIVE]: 'status.ownedInactive',
+            [InventoryStatus.PLANNED_NOT_OWNED]: 'status.planned',
+            [InventoryStatus.VENUE_PROVIDED]: 'status.venueProvided',
+          } as Record<string, import('../lib/i18n/dictionaries').TranslationKey>)[device.inventoryStatus] ?? 'status.ownedActive')}
         </Chip>
       </div>
-      {device.ownerRole && <div className="px-2.5 pb-1.5 text-[10px] text-default-500">{device.ownerRole}</div>}
+      {device.ownerRole && <div className="px-2.5 pb-1.5 text-[10px] text-default-500">{formatOwnerRole(device.ownerRole, t)}</div>}
       {ports.length > 0 && <PortsSection ports={ports} connectedPortIds={(data.connectedPortIds as Set<string> | undefined) ?? new Set()} />}
       {isContainer && (
         <>
@@ -335,7 +337,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
                 className="flex w-full items-center justify-center gap-1 py-1 text-[9.5px] font-medium text-default-500 hover:bg-white/5 hover:text-foreground transition-colors"
               >
                 {boundaryOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                Внешние подключения ({boundaryPorts.length})
+                {t('deviceNode.externalConnections').replace('{count}', String(boundaryPorts.length))}
               </button>
               {boundaryOpen &&
                 boundaryPorts.map((b) => <PortRow key={b.port.id} port={b.port} subtitle={b.deviceName} />)}
@@ -350,14 +352,14 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
               className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent/10 px-2 py-1.5 text-[11px] font-medium text-accent hover:bg-accent/20"
             >
               <Layers className="h-3.5 w-3.5" />
-              Показать внутри ({portedChildren.length})
+              {t('deviceNode.openInside').replace('{count}', String(portedChildren.length))}
             </button>
           </div>
         </>
       )}
       {plainChildren.length > 0 && (
         <div className="border-t border-default-200 bg-black/10 px-2 py-1.5">
-          <div className="mb-1 text-[9px] font-medium uppercase tracking-wide text-default-500">Комплект / аксессуары</div>
+          <div className="mb-1 text-[9px] font-medium uppercase tracking-wide text-default-500">{t('deviceNode.kitAccessories')}</div>
           <div className="flex flex-col gap-0.5">
             {plainChildren.map((child) => (
               <button
@@ -367,10 +369,10 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
                   onSelectChild(child.id);
                 }}
                 className="flex items-center gap-2 rounded p-1 text-left hover:bg-white/10"
-                title={child.notes ?? child.name}
+                title={formatI18nText(child.notes ?? child.name, language)}
               >
                 <DeviceThumb device={child} className="h-8 w-8" dimFallback />
-                <span className="truncate text-xs font-medium text-foreground/90">{getDisplayName(child, t)}</span>
+                <span className="truncate text-xs font-medium text-foreground/90">{getDisplayName(child, t, language)}</span>
               </button>
             ))}
           </div>

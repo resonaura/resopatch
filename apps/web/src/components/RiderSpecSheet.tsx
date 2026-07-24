@@ -3,16 +3,11 @@ import { Chip, Disclosure } from '@heroui/react';
 import { ChevronLeft, ChevronRight, ListChecks, ScrollText, SlidersHorizontal, ToggleLeft, Zap } from 'lucide-react';
 import { DeviceType, PortDirection, type PowerProfile } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
+import { useI18n } from '../lib/i18n';
+import { formatI18nText } from '../lib/i18nText';
 import { ProgressiveImage } from '../lib/img';
 import { PortTypeIcon } from '../lib/portIcons';
 import { readRiderAttrs } from '../lib/riderSpec';
-
-const POLARITY_LABEL: Record<string, string> = {
-  CENTER_POSITIVE: 'Center Positive',
-  CENTER_NEGATIVE: 'Center Negative',
-  ANY: 'полярность любая',
-  NA: '',
-};
 
 const DIRECTION_LABEL: Record<string, string> = {
   [PortDirection.IN]: 'IN',
@@ -20,18 +15,8 @@ const DIRECTION_LABEL: Record<string, string> = {
   [PortDirection.BI]: 'I/O',
 };
 
-function formatPower(power: PowerProfile): string | null {
-  const parts: string[] = [];
-  if (power.voltageV != null) parts.push(`${power.voltageV}V`);
-  if (power.currentType) parts.push(power.currentType);
-  if (power.currentMA != null) parts.push(`${power.currentMA}мА`);
-  if (power.polarity && POLARITY_LABEL[power.polarity]) parts.push(POLARITY_LABEL[power.polarity]);
-  if (power.maxOutputPowerW != null) parts.push(`до ${power.maxOutputPowerW}W суммарно`);
-  if (power.maxOutputCurrentMA != null && power.maxOutputPowerW == null) parts.push(`до ${power.maxOutputCurrentMA}мА на выход`);
-  return parts.length > 0 ? parts.join(', ') : null;
-}
-
 function RiderImageBanner({ device }: { device: GraphDevice }) {
+  const { t, language } = useI18n();
   const [currentIndex, setCurrentIndex] = useState(0);
 
   if (device.type === DeviceType.PEDALBOARD) return null;
@@ -65,7 +50,7 @@ function RiderImageBanner({ device }: { device: GraphDevice }) {
           return (
             <div key={url} className="relative flex-1 h-full w-full shrink-0 flex-none flex items-center justify-center p-2">
               {isStorage ? (
-                <ProgressiveImage src={url} alt={`${device.name} view ${i + 1}`} className="h-full w-full max-h-full max-w-full" objectFit="contain" />
+                <ProgressiveImage src={url} alt={`${formatI18nText(device.name, language)} view ${i + 1}`} className="h-full w-full max-h-full max-w-full" objectFit="contain" />
               ) : (
                 <img src={url} alt="" className="max-h-full max-w-full object-contain m-auto" />
               )}
@@ -79,14 +64,14 @@ function RiderImageBanner({ device }: { device: GraphDevice }) {
           <button
             onClick={prev}
             className="absolute left-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white shadow transition-all hover:bg-black hover:scale-105 active:scale-95"
-            title="Предыдущий вид"
+            title={t('deviceNode.prevView')}
           >
             <ChevronLeft className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={next}
             className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-6 w-6 items-center justify-center rounded-full bg-black/75 text-white shadow transition-all hover:bg-black hover:scale-105 active:scale-95"
-            title="Следующий вид"
+            title={t('deviceNode.nextView')}
           >
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
@@ -114,8 +99,24 @@ function RiderImageBanner({ device }: { device: GraphDevice }) {
  *  already opens as a drawer on node click, see Constructor.tsx), it lives at the top of the same
  *  panel the editable form (DeviceForm, below it) already occupies. */
 export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(true);
   const { manufacturer, model, color, controls, footswitch, algorithms } = readRiderAttrs(device.attrs);
+
+  const formatPower = (power: PowerProfile): string | null => {
+    const parts: string[] = [];
+    if (power.voltageV != null) parts.push(`${power.voltageV}V`);
+    if (power.currentType) parts.push(power.currentType);
+    if (power.currentMA != null) parts.push(`${power.currentMA}${t('milliamp')}`);
+    if (power.polarity === 'CENTER_POSITIVE') parts.push('Center Positive');
+    else if (power.polarity === 'CENTER_NEGATIVE') parts.push('Center Negative');
+    else if (power.polarity === 'ANY') parts.push(t('polarity.any'));
+    if (power.maxOutputPowerW != null) parts.push(t('riderSpec.powerSuffix').replace('{w}', String(power.maxOutputPowerW)));
+    if (power.maxOutputCurrentMA != null && power.maxOutputPowerW == null)
+      parts.push(t('riderSpec.currentSuffix').replace('{ma}', String(power.maxOutputCurrentMA)));
+    return parts.length > 0 ? parts.join(', ') : null;
+  };
+
   const powerLine = formatPower(device.power);
   const hasPedalFacts =
     device.pedal &&
@@ -130,7 +131,7 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
       <Disclosure.Heading>
         <Disclosure.Trigger className="flex w-full items-center gap-1.5 py-2 text-left text-xs font-semibold text-foreground">
           <ScrollText className="h-3.5 w-3.5" />
-          Технический паспорт
+          {t('riderSpec.title')}
           <Disclosure.Indicator />
         </Disclosure.Trigger>
       </Disclosure.Heading>
@@ -153,7 +154,7 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
             <div>
               <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-default-500">
                 <ListChecks className="h-3 w-3" />
-                Входы/выходы ({device.ports.length})
+                {t('riderSpec.portsSection').replace('{count}', String(device.ports.length))}
               </div>
               <div className="flex flex-col gap-0.5">
                 {device.ports.map((port) => {
@@ -177,9 +178,9 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
             <div>
               <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-default-500">
                 <Zap className="h-3 w-3" />
-                Питание
+                {t('riderSpec.powerSection')}
               </div>
-              <div className="text-default-400">{powerLine ?? 'требуется, параметры не указаны'}</div>
+              <div className="text-default-400">{powerLine ?? t('riderSpec.powerUnknown')}</div>
             </div>
           )}
 
@@ -187,7 +188,7 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
             <div>
               <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-default-500">
                 <SlidersHorizontal className="h-3 w-3" />
-                Органы управления
+                {t('riderSpec.controlsSection')}
               </div>
               <ul className="flex flex-col gap-0.5 text-default-400">
                 {controls.map((c, i) => (
@@ -203,7 +204,7 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
             <div>
               <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-default-500">
                 <ToggleLeft className="h-3 w-3" />
-                Футсвич
+                {t('riderSpec.footswitch')}
               </div>
               <div className="text-default-400">{footswitch}</div>
             </div>
@@ -212,7 +213,7 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
           {algorithms && algorithms.length > 0 && (
             <div>
               <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-default-500">
-                Алгоритмы / модели ({algorithms.length})
+                {t('riderSpec.algorithms').replace('{count}', String(algorithms.length))}
               </div>
               <ul className="flex flex-col gap-0.5 text-default-400">
                 {algorithms.map((a, i) => (
@@ -226,10 +227,10 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
 
           {hasPedalFacts && device.pedal && (
             <div className="flex flex-wrap gap-1">
-              {device.pedal.isStereoIn != null && <Chip size="sm" variant="soft">{device.pedal.isStereoIn ? 'стерео IN' : 'моно IN'}</Chip>}
-              {device.pedal.isStereoOut != null && <Chip size="sm" variant="soft">{device.pedal.isStereoOut ? 'стерео OUT' : 'моно OUT'}</Chip>}
-              {device.pedal.hasPresets && <Chip size="sm" variant="soft">{device.pedal.presetCount ? `${device.pedal.presetCount} пресетов` : 'пресеты'}</Chip>}
-              {device.pedal.hasMidiControl && <Chip size="sm" variant="soft">MIDI-управление</Chip>}
+              {device.pedal.isStereoIn != null && <Chip size="sm" variant="soft">{device.pedal.isStereoIn ? 'Stereo IN' : 'Mono IN'}</Chip>}
+              {device.pedal.isStereoOut != null && <Chip size="sm" variant="soft">{device.pedal.isStereoOut ? 'Stereo OUT' : 'Mono OUT'}</Chip>}
+              {device.pedal.hasPresets && <Chip size="sm" variant="soft">{device.pedal.presetCount ? `${device.pedal.presetCount} presets` : 'presets'}</Chip>}
+              {device.pedal.hasMidiControl && <Chip size="sm" variant="soft">MIDI control</Chip>}
               {(device.pedal.smartModes ?? []).map((m) => (
                 <Chip key={m} size="sm" variant="soft">{m}</Chip>
               ))}

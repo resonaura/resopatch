@@ -5,6 +5,8 @@ import { Plus } from 'lucide-react';
 import { DeviceType, HostUsbType, InventoryStatus, PowerSourceType, type CreateDeviceDto } from '@resopatch/shared';
 import { api } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
+import { deviceTypeKey, getDisplayName } from '../lib/deviceNaming';
+import { useI18n } from '../lib/i18n';
 import ImagePicker from './ImagePicker';
 
 export default function NewDeviceModal({
@@ -17,6 +19,7 @@ export default function NewDeviceModal({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { t, language } = useI18n();
   const graphQuery = useQuery({ queryKey: ['graph', setupId], queryFn: () => api.getGraph(setupId) });
   const [name, setName] = useState('');
   const [type, setType] = useState<DeviceType>(DeviceType.ACCESSORY);
@@ -31,7 +34,7 @@ export default function NewDeviceModal({
       qc.invalidateQueries({ queryKey: ['graph', setupId] });
       onClose();
     },
-    onError: (err) => toast(err instanceof Error ? err.message : 'Не удалось создать устройство', { variant: 'danger' }),
+    onError: (err) => toast(err instanceof Error ? err.message : t('inspector.saveError'), { variant: 'danger' }),
   });
 
   const submit = () => {
@@ -63,83 +66,79 @@ export default function NewDeviceModal({
           <Modal.Dialog>
             <Modal.CloseTrigger />
             <Modal.Header>
-              <Modal.Heading>Новое устройство</Modal.Heading>
+              <Modal.Heading>{t('newDeviceModal.title')}</Modal.Heading>
             </Modal.Header>
             <Modal.Body className="flex flex-col gap-3">
               <TextField isRequired autoFocus>
-                <Label>Название</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Например: Boss RC-5 Loop Station" />
+                <Label>{t('newDeviceModal.name')}</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Boss RC-5 Loop Station" />
               </TextField>
               <Select value={type} onChange={(v) => setType(v as DeviceType)}>
-                <Label>Тип</Label>
+                <Label>{t('newDeviceModal.type')}</Label>
                 <Select.Trigger>
                   <Select.Value />
                   <Select.Indicator />
                 </Select.Trigger>
                 <Select.Popover>
                   <ListBox>
-                    {Object.values(DeviceType).map((t) => (
-                      <ListBox.Item key={t} id={t} textValue={t}>
-                        <DeviceTypeIcon type={t} className="h-3.5 w-3.5 text-default-500" />
-                        {t}
+                    {Object.values(DeviceType).map((devType) => (
+                      <ListBox.Item key={devType} id={devType} textValue={t(deviceTypeKey(devType))}>
+                        <DeviceTypeIcon type={devType} className="h-3.5 w-3.5 text-default-500" />
+                        {t(deviceTypeKey(devType))}
                       </ListBox.Item>
                     ))}
                   </ListBox>
                 </Select.Popover>
               </Select>
               <Select value={inventoryStatus} onChange={(v) => setInventoryStatus(v as InventoryStatus)}>
-                <Label>Статус</Label>
+                <Label>{t('newDeviceModal.status')}</Label>
                 <Select.Trigger>
                   <Select.Value />
                   <Select.Indicator />
                 </Select.Trigger>
                 <Select.Popover>
                   <ListBox>
-                    {Object.values(InventoryStatus).map((t) => (
-                      <ListBox.Item key={t} id={t} textValue={t}>
-                        {t}
+                    {Object.values(InventoryStatus).map((status) => (
+                      <ListBox.Item key={status} id={status} textValue={status}>
+                        {status}
                       </ListBox.Item>
                     ))}
                   </ListBox>
                 </Select.Popover>
               </Select>
               <TextField>
-                <Label>Владелец / роль</Label>
-                <Input value={ownerRole} onChange={(e) => setOwnerRole(e.target.value)} placeholder="Андрей / Даня-вокал / Даня-барабанщик…" />
+                <Label>{t('newDeviceModal.ownerRole')}</Label>
+                <Input value={ownerRole} onChange={(e) => setOwnerRole(e.target.value)} placeholder={t('ownerRole.placeholder')} />
               </TextField>
               <ImagePicker value={imageUrl} onChange={setImageUrl} />
               <Select value={parentDeviceId} onChange={(v) => setParentDeviceId(v as string)}>
-                <Label>Внутри устройства (необязательно)</Label>
+                <Label>{t('newDeviceModal.parent')}</Label>
                 <Select.Trigger>
                   <Select.Value />
                   <Select.Indicator />
                 </Select.Trigger>
                 <Select.Popover>
                   <ListBox>
-                    <ListBox.Item id="__none__" textValue="Отдельным узлом на схеме">
-                      — отдельным узлом на схеме —
+                    <ListBox.Item id="__none__" textValue={t('newDeviceModal.parentNone')}>
+                      — {t('newDeviceModal.parentNone')} —
                     </ListBox.Item>
                     {parentCandidates.map((d) => (
-                      <ListBox.Item key={d.id} id={d.id} textValue={d.name}>
+                      <ListBox.Item key={d.id} id={d.id} textValue={getDisplayName(d, t, language)}>
                         <DeviceTypeIcon type={d.type} className="h-3.5 w-3.5 text-default-500" />
-                        {d.name}
+                        {getDisplayName(d, t, language)}
                       </ListBox.Item>
                     ))}
                   </ListBox>
                 </Select.Popover>
               </Select>
-              <p className="text-xs text-default-500">
-                Если выбрать устройство — новое появится списком внутри его карточки (как тюнер на гитаре или педаль на педалборде),
-                а не отдельным блоком на канвасе.
-              </p>
             </Modal.Body>
             <Modal.Footer>
               <Button variant="secondary" onPress={onClose}>
-                Отмена
+                {t('newDeviceModal.cancel')}
               </Button>
               <Button onPress={submit} isDisabled={!name.trim()} isPending={create.isPending}>
                 <Plus className="h-3.5 w-3.5" />
-                Создать
+                {t('newDeviceModal.submit')}
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

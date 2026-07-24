@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Spinner, Toast } from '@heroui/react';
 import { ApiError, api } from './api/client';
-import { I18nProvider } from './lib/i18n';
+import { I18nProvider, useI18n } from './lib/i18n';
 import { useCloudSync } from './lib/sync';
 import Login from './pages/Login';
 import Constructor from './pages/Constructor';
@@ -15,6 +15,7 @@ function CenterScreen({ children }: { children: React.ReactNode }) {
 }
 
 function Gate() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   useCloudSync(qc);
   const setups = useQuery({
@@ -43,7 +44,7 @@ function Gate() {
 
   const list = setups.data ?? [];
   if (list.length === 0) {
-    return <CenterScreen>Нет ни одного сетапа. Запусти `pnpm seed` в apps/api.</CenterScreen>;
+    return <CenterScreen>{t('app.noSetup')}</CenterScreen>;
   }
 
   return <Constructor setupId={list[0].id} setupName={list[0].name} />;

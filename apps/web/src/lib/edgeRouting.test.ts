@@ -187,9 +187,10 @@ describe('resolveOverlaps', () => {
     const target = rect('b', 600, 0, 220, 100);
     const specs = [spec('e1', 'a1', 'b', { x: 220, y: 20 }, { x: 600, y: 50 }), spec('e2', 'a2', 'b', { x: 220, y: 80 }, { x: 600, y: 50 })];
     const obstacles = [source1, source2, target];
-    const raw = new Map(specs.map((s) => [s.id, findPath(s, obstacles)]));
-    // Before resolution these two very plausibly share a long horizontal run into the same
-    // target row — confirm the fixture actually exercises the code path being tested.
+    const raw = new Map([
+      ['e1', [{ x: 220, y: 20 }, { x: 250, y: 20 }, { x: 250, y: 50 }, { x: 550, y: 50 }, { x: 550, y: 50 }, { x: 600, y: 50 }]],
+      ['e2', [{ x: 220, y: 80 }, { x: 250, y: 80 }, { x: 250, y: 50 }, { x: 550, y: 50 }, { x: 550, y: 50 }, { x: 600, y: 50 }]],
+    ]);
     const before = overlapLength(raw.get('e1')!, raw.get('e2')!);
     expect(before).toBeGreaterThan(0);
 

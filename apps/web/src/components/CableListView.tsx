@@ -4,6 +4,7 @@ import { CABLE_COLORS, CableType } from '@resopatch/shared';
 import type { GraphCable, GraphDevice } from '../api/client';
 import { cableTypeLabel } from '../lib/cableTypeLabel';
 import { useI18n } from '../lib/i18n';
+import { formatOwnerRole } from '../lib/ownerRole';
 import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
 
 const AUDIO_TYPES = new Set<string>([CableType.AUDIO_BALANCED, CableType.AUDIO_UNBALANCED]);
@@ -128,7 +129,7 @@ export default function CableListView({ devices, cables }: { devices: GraphDevic
                   }`}
                 >
                   <input type="checkbox" checked={active} onChange={() => toggleZone(z)} className="h-3 w-3" />
-                  {z}
+                  {z === noZone ? noZone : formatOwnerRole(z, t)}
                 </label>
               );
             })}
@@ -154,12 +155,12 @@ export default function CableListView({ devices, cables }: { devices: GraphDevic
                 <CableIcon className={`shrink-0 text-default-400 ${FALLBACK_ICON_CLASS}`} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-foreground">
-                    {c.productName ?? cableTypeLabel(c.cableType, t)} — {c.length}м
+                    {c.productName ?? cableTypeLabel(c.cableType, t)} — {c.length}{t('meter')}
                     {c.color ? ` (${c.color})` : ''}
                     {!c.isUserOwned && <span className="ml-2 text-[10px] text-default-500">{t('cables.venueProvided')}</span>}
                   </div>
                   <div className="truncate text-xs text-default-500">
-                    {sourceDevice?.name ?? '?'} → {targetDevice?.name ?? '?'} · {zoneOf(c)}
+                    {sourceDevice?.name ?? '?'} → {targetDevice?.name ?? '?'} · {zoneOf(c) === noZone ? noZone : formatOwnerRole(zoneOf(c), t)}
                   </div>
                 </div>
               </div>

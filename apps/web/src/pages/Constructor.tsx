@@ -28,6 +28,8 @@ import Sidebar from "../components/Sidebar";
 import Inspector, { type Selection } from "../components/Inspector";
 import NewDeviceModal from "../components/NewDeviceModal";
 import NewCableModal from "../components/NewCableModal";
+import { formatI18nText } from "../lib/i18nText";
+import { formatOwnerRole } from "../lib/ownerRole";
 import SettingsModal from "../components/SettingsModal";
 import ContainerInsideModal from "../components/ContainerInsideModal";
 import StaffChecklist from "../components/StaffChecklist";
@@ -42,7 +44,7 @@ export default function Constructor({
   setupId: string;
   setupName: string;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const qc = useQueryClient();
   const graphQuery = useQuery({
     queryKey: ["graph", setupId],
@@ -401,7 +403,7 @@ export default function Constructor({
         <button
           type="button"
           onClick={() => setSidebarOpen((v) => !v)}
-          title={sidebarOpen ? "Скрыть инвентарь" : "Показать инвентарь"}
+          title={sidebarOpen ? t('constructor.hideInventory') : t('constructor.showInventory')}
           className="flex w-5 flex-none items-center justify-center border-r border-default-200 bg-surface text-default-500 hover:bg-surface-secondary hover:text-foreground"
         >
           {sidebarOpen ? (
@@ -455,7 +457,7 @@ export default function Constructor({
         <button
           type="button"
           onClick={() => setInspectorOpen((v) => !v)}
-          title={inspectorOpen ? "Скрыть инспектор" : "Показать инспектор"}
+          title={inspectorOpen ? t('constructor.hideInspector') : t('constructor.showInspector')}
           className="flex w-5 flex-none items-center justify-center border-l border-default-200 bg-surface text-default-500 hover:bg-surface-secondary hover:text-foreground"
         >
           {inspectorOpen ? (
@@ -527,8 +529,8 @@ export default function Constructor({
             targetPortId={pendingTargetPort.id}
             sourcePort={pendingSourcePort}
             targetPort={pendingTargetPort}
-            sourceDeviceName={pendingSourceDevice.name}
-            targetDeviceName={pendingTargetDevice.name}
+            sourceDeviceName={formatI18nText(pendingSourceDevice.name, language)}
+            targetDeviceName={formatI18nText(pendingTargetDevice.name, language)}
             onClose={() => setPendingConnection(null)}
           />
         )}
@@ -552,6 +554,7 @@ function DevicePhotoCell({ name, devices }: { name: string; devices?: GraphDevic
 }
 
 function InputListTable({ setupId, devices, hasKeys }: { setupId: string; devices?: GraphDevice[]; hasKeys: boolean }) {
+  const { t, language } = useI18n();
   const query = useQuery({
     queryKey: ["input-list", setupId, hasKeys],
     queryFn: () => api.getInputList(setupId, hasKeys),
@@ -559,23 +562,23 @@ function InputListTable({ setupId, devices, hasKeys }: { setupId: string; device
   if (query.isLoading)
     return (
       <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
-        Загрузка…
+        {t('constructor.loading')}
       </div>
     );
   if (query.isError || !query.data)
     return (
       <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
-        Ошибка загрузки.
+        {t('constructor.errorLoading')}
       </div>
     );
 
   const columns: { key: keyof InputListRow; label: string }[] = [
     { key: "channel", label: "CH" },
-    { key: "sourceName", label: "Источник" },
-    { key: "connector", label: "Разъём" },
-    { key: "routing", label: "Маршрут" },
-    { key: "zone", label: "Зона" },
-    { key: "owner", label: "Владелец" },
+    { key: "sourceName", label: t('constructor.table.source') },
+    { key: "connector", label: t('constructor.table.connector') },
+    { key: "routing", label: t('constructor.table.routing') },
+    { key: "zone", label: t('constructor.table.zone') },
+    { key: "owner", label: t('constructor.table.owner') },
   ];
 
   return (
@@ -593,12 +596,12 @@ function InputListTable({ setupId, devices, hasKeys }: { setupId: string; device
                 <Table.Row key={r.channel}>
                   <Table.Cell>{r.channel}</Table.Cell>
                   <Table.Cell>
-                    <DevicePhotoCell name={r.sourceName} devices={devices} />
+                    <DevicePhotoCell name={formatI18nText(r.sourceName, language)} devices={devices} />
                   </Table.Cell>
                   <Table.Cell>{r.connector}</Table.Cell>
                   <Table.Cell>{r.routing}</Table.Cell>
-                  <Table.Cell>{r.zone}</Table.Cell>
-                  <Table.Cell>{r.owner}</Table.Cell>
+                  <Table.Cell>{formatI18nText(r.zone, language)}</Table.Cell>
+                  <Table.Cell>{formatOwnerRole(r.owner, t)}</Table.Cell>
                 </Table.Row>
               ))}
             </Table.Body>
@@ -610,6 +613,7 @@ function InputListTable({ setupId, devices, hasKeys }: { setupId: string; device
 }
 
 function RiderTable({ setupId, devices, hasKeys }: { setupId: string; devices?: GraphDevice[]; hasKeys: boolean }) {
+  const { t, language } = useI18n();
   const query = useQuery({
     queryKey: ["rider", setupId, hasKeys],
     queryFn: () => api.getRider(setupId, hasKeys),
@@ -617,13 +621,13 @@ function RiderTable({ setupId, devices, hasKeys }: { setupId: string; devices?: 
   if (query.isLoading)
     return (
       <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
-        Загрузка…
+        {t('constructor.loading')}
       </div>
     );
   if (query.isError || !query.data)
     return (
       <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
-        Ошибка загрузки.
+        {t('constructor.errorLoading')}
       </div>
     );
 
@@ -635,20 +639,20 @@ function RiderTable({ setupId, devices, hasKeys }: { setupId: string; devices?: 
         <Table.ScrollContainer>
           <Table.Content aria-label="Rider">
             <Table.Header>
-              <Table.Column>Категория</Table.Column>
-              <Table.Column>Наименование оборудования площадки</Table.Column>
-              <Table.Column>Кол-во</Table.Column>
-              <Table.Column>Заметка</Table.Column>
+              <Table.Column>{t('constructor.table.category')}</Table.Column>
+              <Table.Column>{t('constructor.table.equipmentName')}</Table.Column>
+              <Table.Column>{t('constructor.table.quantity')}</Table.Column>
+              <Table.Column>{t('constructor.table.note')}</Table.Column>
             </Table.Header>
             <Table.Body>
               {venueRows.map((r: RiderRow, i: number) => (
                 <Table.Row key={i}>
                   <Table.Cell>{r.category}</Table.Cell>
                   <Table.Cell>
-                    <DevicePhotoCell name={r.name} devices={devices} />
+                    <DevicePhotoCell name={formatI18nText(r.name, language)} devices={devices} />
                   </Table.Cell>
                   <Table.Cell>{r.quantity}</Table.Cell>
-                  <Table.Cell>{r.note ?? ""}</Table.Cell>
+                  <Table.Cell>{formatI18nText(r.note ?? "", language)}</Table.Cell>
                 </Table.Row>
               ))}
             </Table.Body>

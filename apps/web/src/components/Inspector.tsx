@@ -17,6 +17,9 @@ import {
 } from '@resopatch/shared';
 import { api, type GraphCable, type GraphDevice, type GraphResponse } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
+import { getDisplayName } from '../lib/deviceNaming';
+import { useI18n } from '../lib/i18n';
+import { formatI18nText } from '../lib/i18nText';
 import CheckboxField from './CheckboxField';
 import ImagePicker from './ImagePicker';
 import RiderSpecSheet from './RiderSpecSheet';
@@ -98,9 +101,7 @@ function DeviceForm({
   onSelectChild: (id: string) => void;
 }) {
   const qc = useQueryClient();
-  // No effect needed to reset this on device change: DeviceForm is rendered with
-  // `key={device.id}` at its call site, so React already remounts it (fresh useState
-  // initializers) whenever the selected device changes.
+  const { t, language } = useI18n();
   const [form, setForm] = useState(device);
   const [attrsText, setAttrsText] = useState(() => JSON.stringify(device.attrs, null, 2));
   const [attrsError, setAttrsError] = useState<string | null>(null);
@@ -108,14 +109,14 @@ function DeviceForm({
   const save = useMutation({
     mutationFn: (dto: UpdateDeviceDto) => api.updateDevice(device.id, dto),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
-    onError: (err) => toast(err instanceof Error ? err.message : 'Не удалось сохранить', { variant: 'danger' }),
+    onError: (err) => toast(err instanceof Error ? err.message : t('inspector.saveError'), { variant: 'danger' }),
   });
   const remove = useMutation({
     mutationFn: () => api.deleteDevice(device.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
   });
   const addPort = useMutation({
-    mutationFn: () => api.createPort({ deviceId: device.id, name: 'Новый порт', portType: PortType.TS_14, direction: PortDirection.BI, power: {} }),
+    mutationFn: () => api.createPort({ deviceId: device.id, name: t('inspector.newPortDefault'), portType: PortType.TS_14, direction: PortDirection.BI, power: {} }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
   });
   const deletePort = useMutation({
@@ -144,7 +145,7 @@ function DeviceForm({
       setAttrsError(null);
       save.mutate({ attrs: parsed });
     } catch {
-      setAttrsError('Невалидный JSON');
+      setAttrsError(t('inspector.invalidJson'));
     }
   };
 
@@ -161,28 +162,28 @@ function DeviceForm({
   return (
     <div className="flex flex-col gap-3">
       <TextField>
-        <Label>Название</Label>
+        <Label>{t('inspector.name')}</Label>
         <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} onBlur={() => commitField('name', form.name)} />
       </TextField>
-      {enumSelect(Object.values(DeviceType), form.type, (v) => commitField('type', v), 'Тип')}
-      {enumSelect(Object.values(InventoryStatus), form.inventoryStatus, (v) => commitField('inventoryStatus', v), 'Статус в инвентаре')}
+      {enumSelect(Object.values(DeviceType), form.type, (v) => commitField('type', v), t('inspector.type'))}
+      {enumSelect(Object.values(InventoryStatus), form.inventoryStatus, (v) => commitField('inventoryStatus', v), t('inspector.inventoryStatus'))}
       <TextField>
-        <Label>Владелец / роль</Label>
+        <Label>{t('inspector.ownerRole')}</Label>
         <Input
           value={form.ownerRole ?? ''}
           onChange={(e) => setForm((f) => ({ ...f, ownerRole: e.target.value }))}
           onBlur={() => commitField('ownerRole', form.ownerRole || undefined)}
-          placeholder="Андрей / Даня-вокал / Даня-барабанщик…"
+          placeholder={t('ownerRole.placeholder')}
         />
       </TextField>
       <TextField>
-        <Label>Цвет</Label>
+        <Label>{t('inspector.color')}</Label>
         <div className="flex items-center gap-2">
           <Input
             value={colorAttr}
             onChange={(e) => setForm((f) => ({ ...f, attrs: { ...f.attrs, color: e.target.value } }))}
             onBlur={() => commitColor(colorAttr)}
-            placeholder="напр. Imperial Blue"
+            placeholder={t('inspector.colorPlaceholder')}
           />
           {colorAttr && (
             <span className="h-6 w-6 shrink-0 rounded-full border border-default-300" style={{ backgroundColor: colorAttr }} title={colorAttr} />
@@ -190,24 +191,24 @@ function DeviceForm({
         </div>
       </TextField>
 
-      <Section title="Питание" icon={Zap}>
+      <Section title={t('inspector.powerSection')} icon={Zap}>
         <CheckboxField isSelected={form.powerRequired} onChange={(v) => commitField('powerRequired', v)}>
-          Требует питание
+          {t('inspector.requiresPower')}
         </CheckboxField>
-        {enumSelect(Object.values(PowerSourceType), form.powerSourceType, (v) => commitField('powerSourceType', v), 'Источник питания')}
-        {enumSelect(Object.values(HostUsbType), form.hostUsbType, (v) => commitField('hostUsbType', v), 'Тип USB-хоста')}
+        {enumSelect(Object.values(PowerSourceType), form.powerSourceType, (v) => commitField('powerSourceType', v), t('inspector.powerSource'))}
+        {enumSelect(Object.values(HostUsbType), form.hostUsbType, (v) => commitField('hostUsbType', v), t('inspector.usbHostType'))}
         <div className="grid grid-cols-2 gap-2">
           {optionalEnumSelect(
             Object.values(CurrentType),
             form.power.currentType,
             (v) => commitField('power', { ...form.power, currentType: v }),
-            'Ток (AC/DC)',
+            t('inspector.currentType'),
           )}
-          {optionalEnumSelect(Object.values(Polarity), form.power.polarity, (v) => commitField('power', { ...form.power, polarity: v }), 'Полярность')}
+          {optionalEnumSelect(Object.values(Polarity), form.power.polarity, (v) => commitField('power', { ...form.power, polarity: v }), t('inspector.polarity'))}
         </div>
         <div className="grid grid-cols-2 gap-2">
           <TextField>
-            <Label>Напряжение, В</Label>
+            <Label>{t('inspector.voltage')}</Label>
             <Input
               type="number"
               value={form.power.voltageV ?? ''}
@@ -216,7 +217,7 @@ function DeviceForm({
             />
           </TextField>
           <TextField>
-            <Label>Ток, мА</Label>
+            <Label>{t('inspector.current')}</Label>
             <Input
               type="number"
               value={form.power.currentMA ?? ''}
@@ -227,7 +228,7 @@ function DeviceForm({
         </div>
         <div className="grid grid-cols-2 gap-2">
           <TextField>
-            <Label>Макс. отдача, мА</Label>
+            <Label>{t('inspector.maxDrawMa')}</Label>
             <Input
               type="number"
               value={form.power.maxOutputCurrentMA ?? ''}
@@ -238,7 +239,7 @@ function DeviceForm({
             />
           </TextField>
           <TextField>
-            <Label>Макс. отдача, Вт</Label>
+            <Label>{t('inspector.maxDrawW')}</Label>
             <Input
               type="number"
               value={form.power.maxOutputPowerW ?? ''}
@@ -252,33 +253,33 @@ function DeviceForm({
         {powerBudget.data && (
           <div className={`rounded-lg border p-2.5 text-xs ${powerBudget.data.overBudget ? 'border-danger text-danger' : 'border-success'}`}>
             <div>
-              Нагрузка: {powerBudget.data.drawnPowerW.toFixed(1)}W
+              {t('inspector.drawnPower')} {powerBudget.data.drawnPowerW.toFixed(1)}W
               {powerBudget.data.maxOutputPowerW != null ? ` / ${powerBudget.data.maxOutputPowerW}W` : ''}
-              {powerBudget.data.overBudget ? ' — ПРЕВЫШЕНО' : ''}
+              {powerBudget.data.overBudget ? ` — ${t('inspector.overBudget')}` : ''}
             </div>
             {powerBudget.data.unresolvedLoads.length > 0 && (
-              <div className="text-default-500">Без указанного потребления: {powerBudget.data.unresolvedLoads.map((l) => l.deviceName).join(', ')}</div>
+              <div className="text-default-500">{t('inspector.unresolvedLoads')} {powerBudget.data.unresolvedLoads.map((l) => l.deviceName).join(', ')}</div>
             )}
           </div>
         )}
       </Section>
 
       {form.type === DeviceType.PEDAL && (
-        <Section title="Педаль" icon={Layers}>
+        <Section title={t('inspector.pedalSection')} icon={Layers}>
           <div className="grid grid-cols-2 gap-2">
             <CheckboxField isSelected={form.pedal?.isStereoIn ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoIn: v })}>
-              Стерео вход
+              {t('inspector.stereoIn')}
             </CheckboxField>
             <CheckboxField isSelected={form.pedal?.isStereoOut ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), isStereoOut: v })}>
-              Стерео выход
+              {t('inspector.stereoOut')}
             </CheckboxField>
           </div>
           <div className="grid grid-cols-2 gap-2 items-end">
             <CheckboxField isSelected={form.pedal?.hasPresets ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasPresets: v })}>
-              Есть пресеты
+              {t('inspector.hasPresets')}
             </CheckboxField>
             <TextField>
-              <Label>Кол-во пресетов</Label>
+              <Label>{t('inspector.presetCount')}</Label>
               <Input
                 type="number"
                 value={form.pedal?.presetCount ?? ''}
@@ -290,10 +291,10 @@ function DeviceForm({
             </TextField>
           </div>
           <CheckboxField isSelected={form.pedal?.hasMidiControl ?? false} onChange={(v) => commitField('pedal', { ...(form.pedal ?? {}), hasMidiControl: v })}>
-            MIDI-управление пресетами
+            {t('inspector.midiControl')}
           </CheckboxField>
           <TextField>
-            <Label>Smart-режимы (через запятую)</Label>
+            <Label>{t('inspector.smartModes')}</Label>
             <Input
               value={(form.pedal?.smartModes ?? []).join(', ')}
               onChange={(e) =>
@@ -308,7 +309,7 @@ function DeviceForm({
         </Section>
       )}
 
-      <Section title={`Порты (${device.ports.length})`} icon={CableIcon}>
+      <Section title={t('inspector.portsSection').replace('{count}', String(device.ports.length))} icon={CableIcon}>
         {device.ports.map((port) => (
           <div key={port.id} className="grid grid-cols-[1fr_1fr_70px_auto] items-center gap-1.5">
             <Input defaultValue={port.name} onBlur={(e) => e.target.value !== port.name && updatePort.mutate({ id: port.id, dto: { name: e.target.value } })} />
@@ -341,11 +342,11 @@ function DeviceForm({
         ))}
         <Button size="sm" variant="secondary" onPress={() => addPort.mutate()}>
           <Plus className="h-3.5 w-3.5" />
-          Порт
+          {t('inspector.addPort')}
         </Button>
       </Section>
 
-      <Section title={`Комплект / аксессуары (${children.length})`} icon={Package}>
+      <Section title={t('inspector.kitSection').replace('{count}', String(children.length))} icon={Package}>
         {children.map((child) => (
           <button
             key={child.id}
@@ -353,21 +354,21 @@ function DeviceForm({
             className="flex items-center gap-2 rounded-md border border-default-200 px-2 py-1.5 text-left text-xs hover:bg-surface-secondary"
           >
             <DeviceTypeIcon type={child.type} className="h-3.5 w-3.5 shrink-0 text-default-500" />
-            <span className="truncate">{child.name}</span>
+            <span className="truncate">{getDisplayName(child, t, language)}</span>
           </button>
         ))}
         <Button size="sm" variant="secondary" onPress={onAddChild}>
           <Plus className="h-3.5 w-3.5" />
-          Добавить в комплект
+          {t('inspector.addChild')}
         </Button>
         <p className="text-[11px] text-default-500">
-          Тюнер, ремень, липучки, чехлы, педали на этом устройстве — показываются списком прямо на карточке на схеме, не отдельными узлами.
+          {t('inspector.kitNotice')}
         </p>
       </Section>
 
-      <Section title="Заметки и доп. поля" icon={StickyNote}>
+      <Section title={t('inspector.notesSection')} icon={StickyNote}>
         <TextField>
-          <Label>Заметки</Label>
+          <Label>{t('inspector.notes')}</Label>
           <TextArea
             value={form.notes ?? ''}
             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
@@ -383,7 +384,7 @@ function DeviceForm({
           }}
         />
         <TextField>
-          <Label>Произвольные атрибуты (JSON)</Label>
+          <Label>{t('inspector.customAttrs')}</Label>
           <TextArea value={attrsText} onChange={(e) => setAttrsText(e.target.value)} onBlur={commitAttrs} rows={6} className="font-mono text-xs" />
         </TextField>
         {attrsError && <p className="text-sm text-danger">{attrsError}</p>}
@@ -391,7 +392,7 @@ function DeviceForm({
 
       <Button variant="danger" fullWidth onPress={() => remove.mutate()} className="mt-2">
         <Trash2 className="h-3.5 w-3.5" />
-        Удалить устройство
+        {t('inspector.deleteDevice')}
       </Button>
     </div>
   );
@@ -399,10 +400,11 @@ function DeviceForm({
 
 function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: string; graph: GraphResponse }) {
   const qc = useQueryClient();
+  const { t, language } = useI18n();
   const save = useMutation({
     mutationFn: (dto: UpdateCableDto) => api.updateCable(cable.id, dto),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['graph', setupId] }),
-    onError: (err) => toast(err instanceof Error ? err.message : 'Ошибка', { variant: 'danger' }),
+    onError: (err) => toast(err instanceof Error ? err.message : t('inspector.saveError'), { variant: 'danger' }),
   });
   const remove = useMutation({
     mutationFn: () => api.deleteCable(cable.id),
@@ -418,64 +420,64 @@ function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: stri
     <div className="flex flex-col gap-3">
       <div className="rounded-lg border border-default-200 bg-surface-secondary p-2.5 text-xs">
         <div>
-          {sourceDevice?.name} — {sourcePort?.name}
+          {sourceDevice ? getDisplayName(sourceDevice, t, language) : ''} — {sourcePort?.name}
         </div>
         <div className="text-default-500">↓</div>
         <div>
-          {targetDevice?.name} — {targetPort?.name}
+          {targetDevice ? getDisplayName(targetDevice, t, language) : ''} — {targetPort?.name}
         </div>
       </div>
-      {enumSelect(Object.values(CableType), cable.cableType, (v) => save.mutate({ cableType: v }), 'Тип кабеля')}
+      {enumSelect(Object.values(CableType), cable.cableType, (v) => save.mutate({ cableType: v }), t('inspector.cableType'))}
       <TextField>
-        <Label>Марка / модель (опционально)</Label>
+        <Label>{t('inspector.brandModel')}</Label>
         <Input
           defaultValue={cable.productName ?? ''}
-          placeholder="напр. Fender Professional Series Tweed Instrument Cable"
+          placeholder="e.g. Fender Professional Series Tweed Instrument Cable"
           onBlur={(e) => save.mutate({ productName: e.target.value || null })}
         />
       </TextField>
       <TextField>
-        <Label>Длина, м</Label>
+        <Label>{t('inspector.lengthM')}</Label>
         <Input type="number" step="0.1" defaultValue={cable.length} onBlur={(e) => save.mutate({ length: Number(e.target.value) })} />
       </TextField>
       <TextField>
-        <Label>Цвет</Label>
+        <Label>{t('inspector.color')}</Label>
         <Input defaultValue={cable.color ?? ''} onBlur={(e) => save.mutate({ color: e.target.value || undefined })} />
       </TextField>
-      <Section title="Фото кабеля" icon={CableIcon}>
+      <Section title={t('inspector.cablePhoto')} icon={CableIcon}>
         <ImagePicker
-          label="Общее фото (для чеклиста и списков)"
+          label={t('inspector.cablePhotoMain')}
           value={cable.imageUrl ?? undefined}
           onChange={(url) => save.mutate({ imageUrl: url ?? null })}
         />
       </Section>
-      <Section title="Текстура кабеля" icon={CableIcon}>
+      <Section title={t('inspector.cableTexture')} icon={CableIcon}>
         <ImagePicker
-          label="Начало кабеля"
+          label={t('inspector.cableStart')}
           value={cable.textureStartUrl ?? undefined}
           onChange={(url) => save.mutate({ textureStartUrl: url ?? null })}
         />
         <ImagePicker
-          label="Конец кабеля"
+          label={t('inspector.cableEnd')}
           value={cable.textureEndUrl ?? undefined}
           onChange={(url) => save.mutate({ textureEndUrl: url ?? null })}
         />
         <ImagePicker
-          label="Повторяющийся сегмент"
+          label={t('inspector.cableSegment')}
           value={cable.textureMiddleUrl ?? undefined}
           onChange={(url) => save.mutate({ textureMiddleUrl: url ?? null })}
         />
       </Section>
       <CheckboxField isSelected={cable.isPatchCable} onChange={(v) => save.mutate({ isPatchCable: v })}>
-        Патч-кабель
+        Patch cable
       </CheckboxField>
       <CheckboxField isSelected={cable.isUserOwned} onChange={(v) => save.mutate({ isUserOwned: v })}>
-        Наш кабель (не площадки)
+        Band-owned cable
       </CheckboxField>
-      {cable.adapterName && <p className="text-xs text-default-500">Через переходник: {cable.adapterName}</p>}
+      {cable.adapterName && <p className="text-xs text-default-500">Adapter: {formatI18nText(cable.adapterName, language)}</p>}
       <Button variant="danger" fullWidth onPress={() => remove.mutate()} className="mt-2">
         <Trash2 className="h-3.5 w-3.5" />
-        Удалить кабель
+        {t('inspector.deleteCable')}
       </Button>
     </div>
   );
@@ -496,15 +498,17 @@ export default function Inspector({
   onAddChild: (parentId: string) => void;
   onSelectDevice: (id: string) => void;
 }) {
+  const { t, language } = useI18n();
+
   if (!selection) {
     return (
       <div className="h-full min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-4 text-sm text-default-500">
-        Выбери устройство или кабель на канвасе.
+        Select a device or cable on the canvas.
         <br />
         <br />
-        Устройств: {graph.devices.length}
+        Devices: {graph.devices.length}
         <br />
-        Кабелей: {graph.cables.length}
+        Cables: {graph.cables.length}
       </div>
     );
   }
@@ -515,7 +519,7 @@ export default function Inspector({
     const children = graph.devices.filter((d) => d.parentDeviceId === device.id);
     return (
       <div className="h-full min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
-        <h3 className="mb-2.5 text-sm font-semibold">{device.name}</h3>
+        <h3 className="mb-2.5 text-sm font-semibold">{getDisplayName(device, t, language)}</h3>
         <RiderSpecSheet key={`${device.id}-rider`} device={device} />
         <div className="mt-3">
           <DeviceForm
@@ -535,7 +539,7 @@ export default function Inspector({
   if (!cable) return null;
   return (
     <div className="h-full min-h-0 overflow-y-auto border-l border-default-200 bg-surface p-3.5">
-      <h3 className="mb-2.5 text-sm font-semibold">Кабель</h3>
+      <h3 className="mb-2.5 text-sm font-semibold">Cable</h3>
       <CableForm key={cable.id} cable={cable} setupId={setupId} graph={graph} />
     </div>
   );

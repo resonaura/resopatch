@@ -3,6 +3,19 @@ import { DeviceType, InventoryStatus } from '@resopatch/shared';
 import { Device } from '../database/entities/device.entity.js';
 import { Cable } from '../database/entities/cable.entity.js';
 import { Port } from '../database/entities/port.entity.js';
+import { greedySwapMinimize } from './crossings.js';
+
+/** Safely checks if a device's name (plain string or bilingual JSON) contains a substring. */
+function nameIncludes(device: Device, substr: string): boolean {
+  const raw = device.name ?? '';
+  // Try to parse as JSON first (bilingual: { en, ru })
+  try {
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return Object.values(parsed).some((v) => v.toLowerCase().includes(substr.toLowerCase()));
+  } catch {
+    return raw.toLowerCase().includes(substr.toLowerCase());
+  }
+}
 
 const FALLBACK_WIDTH = 260;
 const FALLBACK_HEIGHT = 240;
@@ -12,14 +25,14 @@ const CHAIN_GAP_X = 220;
 const ZONE_GAP_X = 520;
 const ZONE_GAP_Y = 480;
 
-type ZoneName = 'andrey' | 'barabanschik' | 'vokal' | 'service' | 'inactive';
+type ZoneName = 'andrii' | 'drummer' | 'vox' | 'service' | 'inactive';
 
 function zoneOf(device: Device): ZoneName {
   if (device.inventoryStatus === InventoryStatus.OWNED_INACTIVE || device.inventoryStatus === InventoryStatus.PLANNED_NOT_OWNED) return 'inactive';
   if (device.type === DeviceType.STAGE_BOX) return 'service';
-  if (device.ownerRole === 'Андрей') return 'andrey';
-  if (device.ownerRole === 'Даня-барабанщик') return 'barabanschik';
-  if (device.ownerRole === 'Даня-вокал') return 'vokal';
+  if (device.ownerRole === 'andrii') return 'andrii';
+  if (device.ownerRole === 'danDrummer') return 'drummer';
+  if (device.ownerRole === 'danVox') return 'vox';
   return 'service';
 }
 
@@ -244,12 +257,12 @@ export function computeAutoLayout(
   };
   const sizedOf = (id: string): SizedDevice => ({ id, ...sizeOf(id) });
 
-  const groups: Record<ZoneName, Device[]> = { andrey: [], barabanschik: [], vokal: [], service: [], inactive: [] };
+  const groups: Record<ZoneName, Device[]> = { andrii: [], drummer: [], vox: [], service: [], inactive: [] };
   for (const d of mainDevices) groups[zoneOf(d)].push(d);
 
-  const andrey = layoutZone(groups.andrey, cables, portToDevice, sizedOf);
-  const barabanschik = layoutZone(groups.barabanschik, cables, portToDevice, sizedOf);
-  const vokal = layoutZone(groups.vokal, cables, portToDevice, sizedOf);
+  const andrii = layoutZone(groups.andrii, cables, portToDevice, sizedOf);
+  const drummer = layoutZone(groups.drummer, cables, portToDevice, sizedOf);
+  const vox = layoutZone(groups.vox, cables, portToDevice, sizedOf);
   const service = layoutZone(groups.service, cables, portToDevice, sizedOf);
   const inactive = layoutZone(groups.inactive, cables, portToDevice, sizedOf);
 
@@ -258,23 +271,48 @@ export function computeAutoLayout(
     for (const [id, pos] of zone.positions) positions.set(id, { x: pos.x + anchorX, y: pos.y + anchorY });
   };
 
-  place(andrey, 0, 0);
-  const vokalX = andrey.width > 0 ? andrey.width + ZONE_GAP_X : 0;
-  place(vokal, vokalX, 0);
-  const drumsX = vokalX + (vokal.width > 0 ? vokal.width + ZONE_GAP_X : 0);
-  place(barabanschik, drumsX, 0);
-  const serviceX = drumsX + (barabanschik.width > 0 ? barabanschik.width + ZONE_GAP_X : 0);
+  place(andrii, 0, 0);
+  const voxX = andrii.width > 0 ? andrii.width + ZONE_GAP_X : 0;
+  place(vox, voxX, 0);
+  const drumsX = voxX + (vox.width > 0 ? vox.width + ZONE_GAP_X : 0);
+  place(drummer, drumsX, 0);
+  const serviceX = drumsX + (drummer.width > 0 ? drummer.width + ZONE_GAP_X : 0);
   place(service, serviceX, 0);
 
-  const tallestColumn = Math.max(andrey.height, vokal.height, barabanschik.height, service.height);
+  const tallestColumn = Math.max(andrii.height, vox.height, drummer.height, service.height);
   place(inactive, 0, tallestColumn + ZONE_GAP_Y);
+
+  // Post-process each zone: minimise cable crossings by swapping node positions
+  // within the zone. Edges that cross zone boundaries also contribute to the cost,
+  // so we pass the full cable list — greedySwapMinimize only moves nodes that
+  // are in the provided nodeIds set.
+  const sizeMap = new Map(
+    mainDevices.map((d) => {
+      const { width, height } = sizeOf(d.id);
+      return [d.id, { width, height }];
+    }),
+  );
+  const allEdges = cables
+    .map((c) => [portToDevice.get(c.sourcePortId), portToDevice.get(c.targetPortId)] as const)
+    .filter((e): e is [string, string] => e[0] != null && e[1] != null && e[0] !== e[1]);
+
+  const zoneGroups: [string[], ZoneLayout][] = [
+    [groups.andrii.map((d) => d.id), andrii],
+    [groups.vox.map((d) => d.id), vox],
+    [groups.drummer.map((d) => d.id), drummer],
+    [groups.service.map((d) => d.id), service],
+  ];
+  for (const [zoneIds, _] of zoneGroups) {
+    if (zoneIds.length < 2) continue;
+    greedySwapMinimize(zoneIds, allEdges, positions, sizeMap);
+  }
 
   // Ensure amp microphone (Sennheiser e835s) sits directly next to Danya-vocal's guitar combo amp (Egnater Tweaker 40W)
   const egnaterCombo = mainDevices.find(
-    (d) => d.name.includes('Egnater') || (d.ownerRole === 'Даня-вокал' && d.type === DeviceType.AMPLIFIER),
+    (d) => nameIncludes(d, 'Egnater') || (d.ownerRole === 'danVox' && d.type === DeviceType.AMPLIFIER),
   );
   const ampMicDev = mainDevices.find(
-    (d) => d.name.includes('e835s') || d.name.includes('комбика') || (d.name.includes('Sennheiser') && d.ownerRole === 'Даня-вокал'),
+    (d) => nameIncludes(d, 'e835s') || nameIncludes(d, 'combo amp') || (nameIncludes(d, 'Sennheiser') && d.ownerRole === 'danVox'),
   );
 
   if (egnaterCombo && ampMicDev) {
@@ -291,7 +329,7 @@ export function computeAutoLayout(
   // Same idea as the amp mic above: the combo's own dedicated venue outlet is cabled straight to
   // it (not through an Anker), so pin it directly next to the combo too rather than leaving it
   // wherever the generic power-infra column lands it.
-  const comboOutletDev = mainDevices.find((d) => d.name.includes('Розетка площадки (комбик'));
+  const comboOutletDev = mainDevices.find((d) => nameIncludes(d, 'venue outlet') && d.name.toLowerCase().includes('combo'));
   if (egnaterCombo && comboOutletDev) {
     const comboPos = positions.get(egnaterCombo.id);
     if (comboPos) {
@@ -306,8 +344,8 @@ export function computeAutoLayout(
   // Pin venue wall outlets, and any device's own charger/PSU node, directly next to whichever
   // Anker extension cord they actually belong to (by owner) — otherwise power-infra devices just
   // get shelf-packed together in rank order, with no relation to which Anker they're plugged into.
-  for (const role of ['Андрей', 'Даня-вокал']) {
-    const anker = mainDevices.find((d) => d.name.includes('Anker') && d.ownerRole === role);
+  for (const role of ['andrii', 'danVox']) {
+    const anker = mainDevices.find((d) => nameIncludes(d, 'Anker') && d.ownerRole === role);
     if (!anker) continue;
     const ankerPos = positions.get(anker.id);
     if (!ankerPos) continue;
@@ -318,13 +356,13 @@ export function computeAutoLayout(
     // Anker itself is at x=0, making the outlet overlap the Anker exactly.
     let stackY = ankerPos.y + ankerSize.height + 60;
 
-    const outlet = mainDevices.find((d) => d.name.includes('Розетка площадки') && !d.name.includes('комбик') && d.ownerRole === role);
+    const outlet = mainDevices.find((d) => nameIncludes(d, 'venue outlet') && !nameIncludes(d, 'combo') && d.ownerRole === role);
     if (outlet) {
       positions.set(outlet.id, { x: ankerPos.x, y: stackY });
       stackY += sizedOf(outlet.id).height + 60;
     }
 
-    const psu = mainDevices.find((d) => d.name.startsWith('БП ') && d.type === DeviceType.POWER_SUPPLY && d.ownerRole === role);
+    const psu = mainDevices.find((d) => (nameIncludes(d, 'PSU') || nameIncludes(d, 'Single')) && d.type === DeviceType.POWER_SUPPLY && d.ownerRole === role);
     if (psu) {
       positions.set(psu.id, { x: ankerPos.x, y: stackY });
     }

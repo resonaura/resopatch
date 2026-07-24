@@ -331,20 +331,29 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
   }
 
   if (found) {
-    const cellPoints = found.slice(1, -1).map(([cx, cy]) => ({ x: cx * cell, y: cy * cell }));
-    const sPortClearance = start.x + sSign * 24;
-    const tPortClearance = end.x + tSign * 24;
-    return simplifyColinear([
-      start,
-      { x: sPortClearance, y: start.y },
-      { x: sPortClearance, y: stubStart.y },
-      stubStart,
-      ...cellPoints,
-      stubEnd,
-      { x: tPortClearance, y: stubEnd.y },
-      { x: tPortClearance, y: end.y },
-      end,
-    ]);
+    const corners: Point[] = [];
+    for (let i = 0; i < found.length; i++) {
+      const [cx, cy] = found[i];
+      corners.push({ x: cx * cell, y: cy * cell });
+    }
+    const simplifiedCorners = simplifyColinear(corners);
+    const firstCorner = simplifiedCorners[0];
+    const lastCorner = simplifiedCorners[simplifiedCorners.length - 1];
+
+    const minStub = 24;
+    const sourceStubX = sSign === 1 ? Math.max(start.x + minStub, firstCorner.x) : Math.min(start.x - minStub, firstCorner.x);
+    const sourcePoints: Point[] = [start, { x: sourceStubX, y: start.y }, { x: sourceStubX, y: firstCorner.y }];
+
+    const targetStubX = tSign === 1 ? Math.max(end.x + minStub, lastCorner.x) : Math.min(end.x - minStub, lastCorner.x);
+    const targetPoints: Point[] = [{ x: targetStubX, y: lastCorner.y }, { x: targetStubX, y: end.y }, end];
+
+    const rawPath: Point[] = [
+      ...sourcePoints,
+      ...simplifiedCorners,
+      ...targetPoints,
+    ];
+
+    return simplifyColinear(rawPath);
   }
 
   // Genuinely no path found even at the coarsest, widest-margin attempt (pathologically boxed
@@ -381,11 +390,7 @@ export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObs
   for (const [edgeId, pts] of working) {
     if (pts.length < 3) continue;
     const spec = specById.get(edgeId);
-    const startIdx = pts.length >= 7 ? 2 : 1;
-    const endIdx = pts.length >= 7 ? pts.length - 3 : pts.length - 2;
-    const nearStartIdx = startIdx;
-    const nearEndIdx = endIdx - 1;
-    for (let i = startIdx; i < endIdx; i++) {
+    for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i];
       const b = pts[i + 1];
       let orientation: 'h' | 'v' | undefined;
@@ -397,23 +402,26 @@ export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObs
         fixed = a.y;
         lo = Math.min(a.x, b.x);
         hi = Math.max(a.x, b.x);
+        // Do not offset horizontal segment if attached to start port Y or end port Y
+        if (i === 0 && Math.abs(fixed - (spec?.start.y ?? fixed)) < 0.1) continue;
+        if (i === pts.length - 2 && Math.abs(fixed - (spec?.end.y ?? fixed)) < 0.1) continue;
       } else if (a.x === b.x) {
         orientation = 'v';
         fixed = a.x;
         lo = Math.min(a.y, b.y);
         hi = Math.max(a.y, b.y);
+        // Do not offset vertical segment if attached to start port X or end port X
+        if (i === 0 && Math.abs(fixed - (spec?.start.x ?? fixed)) < 0.1) continue;
+        if (i === pts.length - 2 && Math.abs(fixed - (spec?.end.x ?? fixed)) < 0.1) continue;
       } else {
         continue;
       }
-      // Default anchor: the segment's own (grid-rounded) position — i.e. no particular pull
-      // either way, so lane order falls back to plain left-to-right packing. Segments adjacent to
-      // a real port get pulled toward that port's *exact* coordinate instead (see field doc).
+      if (hi - lo < 1) continue;
+
       let anchor = fixed;
       if (spec) {
-        const nearStart = i === nearStartIdx;
-        const nearEnd = i === nearEndIdx;
-        if (nearEnd) anchor = orientation === 'h' ? spec.end.y : spec.end.x;
-        else if (nearStart) anchor = orientation === 'h' ? spec.start.y : spec.start.x;
+        if (i === pts.length - 2 || i === pts.length - 3) anchor = orientation === 'h' ? spec.end.y : spec.end.x;
+        else if (i === 0 || i === 1) anchor = orientation === 'h' ? spec.start.y : spec.start.x;
       }
       segments.push({ edgeId, i, orientation, fixed, lo, hi, anchor });
     }

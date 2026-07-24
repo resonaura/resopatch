@@ -17,12 +17,9 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import DeviceNode from './DeviceNode';
-import RoutedEdge from './RoutedEdge';
 import { computeRoutes, type EdgeRouteSpec, type Point, type RectObstacle } from '../lib/edgeRouting';
 
-export const patchCanvasNodeTypes = { device: DeviceNode };
-export const patchCanvasEdgeTypes = { routed: RoutedEdge };
+import { patchCanvasEdgeTypes, patchCanvasNodeTypes } from './patchCanvasTypes';
 
 /** Lives inside <ReactFlow> so it can read exact, per-handle pixel positions (including boundary
  *  ports proxied onto a collapsed container card) straight from the store — the same data React
@@ -53,9 +50,12 @@ function CableRouter({
     }
 
     const findClosestHandle = (node: Node, handleId: string, type: 'source' | 'target', otherCenter: { x: number; y: number }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const internalNode = node as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const handles: any[] = internalNode.internals?.handleBounds?.[type] ?? [];
       const baseId = handleId.replace(/-(src|tgt)-(left|right)$/, '');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const matches = handles.filter((h: any) => h.id === baseId || (h.id && h.id.includes(baseId)));
       if (matches.length === 0) return null;
 
@@ -79,7 +79,9 @@ function CableRouter({
       const targetNode = nodeLookup.get(e.target);
       if (!sourceNode || !targetNode || !e.sourceHandle || !e.targetHandle) continue;
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const srcInternal = sourceNode as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tgtInternal = targetNode as any;
 
       const targetCenter = {
@@ -115,7 +117,7 @@ function CableRouter({
         end,
         sourceDir: sHandle.position as 'left' | 'right',
         targetDir: tHandle.position as 'left' | 'right',
-        isPowerAdapter: (e.data as any)?.powerConverter != null,
+        isPowerAdapter: (e.data as Record<string, unknown>)?.powerConverter != null,
       });
     }
 

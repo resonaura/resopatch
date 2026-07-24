@@ -13,7 +13,7 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Не удалось прочитать изображение'));
+    img.onerror = () => reject(new Error('Failed to read image'));
     img.src = dataUrl;
   });
 }
@@ -22,7 +22,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+    reader.onerror = () => reject(new Error('Failed to read file'));
     reader.readAsDataURL(file);
   });
 }
@@ -30,7 +30,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 /** Downscales `file` to fit within MAX_DIMENSION on its longest side and re-encodes as JPEG,
  *  returning a compact `data:image/jpeg;base64,...` URL ready to store directly in `imageUrl`. */
 export async function fileToCompressedDataUrl(file: File): Promise<string> {
-  if (!file.type.startsWith('image/')) throw new ImageTooLargeError('Файл не является изображением');
+  if (!file.type.startsWith('image/')) throw new ImageTooLargeError('File is not an image');
 
   const raw = await readFileAsDataUrl(file);
   const img = await loadImage(raw);

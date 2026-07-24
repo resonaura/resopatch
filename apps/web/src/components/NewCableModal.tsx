@@ -4,6 +4,7 @@ import { Button, Input, Label, ListBox, Modal, Select, TextField, toast } from '
 import { Cable as CableIcon } from 'lucide-react';
 import { CableType, POWER_PORT_TYPES, PortType, type CreateCableDto, type PortDto } from '@resopatch/shared';
 import { api } from '../api/client';
+import { useI18n } from '../lib/i18n';
 
 function guessCableType(source: PortDto, target: PortDto): CableType {
   if (POWER_PORT_TYPES.includes(source.portType) && POWER_PORT_TYPES.includes(target.portType)) return CableType.POWER_LINE;
@@ -33,6 +34,7 @@ export default function NewCableModal({
   targetDeviceName: string;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const [cableType, setCableType] = useState<CableType>(() => guessCableType(sourcePort, targetPort));
   const [length, setLength] = useState('1');
@@ -47,7 +49,7 @@ export default function NewCableModal({
       qc.invalidateQueries({ queryKey: ['graph', setupId] });
       onClose();
     },
-    onError: (err) => toast(err instanceof Error ? err.message : 'Не удалось создать кабель', { variant: 'danger' }),
+    onError: (err) => toast(err instanceof Error ? err.message : t('newCableModal.createError'), { variant: 'danger' }),
   });
 
   const submit = () => {
@@ -70,7 +72,7 @@ export default function NewCableModal({
           <Modal.Dialog>
             <Modal.CloseTrigger />
             <Modal.Header>
-              <Modal.Heading>Новый кабель</Modal.Heading>
+              <Modal.Heading>{t('newCableModal.title')}</Modal.Heading>
             </Modal.Header>
             <Modal.Body className="flex flex-col gap-3">
               <div className="rounded-lg border border-default-200 bg-surface-secondary p-2.5 text-xs">
@@ -83,35 +85,35 @@ export default function NewCableModal({
                 </div>
               </div>
               <Select value={cableType} onChange={(v) => setCableType(v as CableType)}>
-                <Label>Тип кабеля</Label>
+                <Label>{t('newCableModal.type')}</Label>
                 <Select.Trigger>
                   <Select.Value />
                   <Select.Indicator />
                 </Select.Trigger>
                 <Select.Popover>
                   <ListBox>
-                    {Object.values(CableType).map((t) => (
-                      <ListBox.Item key={t} id={t} textValue={t}>
-                        {t}
+                    {Object.values(CableType).map((ct) => (
+                      <ListBox.Item key={ct} id={ct} textValue={ct}>
+                        {ct}
                       </ListBox.Item>
                     ))}
                   </ListBox>
                 </Select.Popover>
               </Select>
               <TextField>
-                <Label>Длина, м</Label>
+                <Label>{t('newCableModal.length')}</Label>
                 <Input type="number" step="0.1" value={length} onChange={(e) => setLength(e.target.value)} />
               </TextField>
               <Select value={adapterId} onChange={(v) => setAdapterId(v as string)}>
-                <Label>Переходник (если нужен)</Label>
+                <Label>{t('newCableModal.adapter')}</Label>
                 <Select.Trigger>
                   <Select.Value />
                   <Select.Indicator />
                 </Select.Trigger>
                 <Select.Popover>
                   <ListBox>
-                    <ListBox.Item id="__none__" textValue="без переходника">
-                      — без переходника —
+                    <ListBox.Item id="__none__" textValue={t('newCableModal.noAdapter')}>
+                      {t('newCableModal.noAdapter')}
                     </ListBox.Item>
                     {(adapters.data ?? []).map((a) => (
                       <ListBox.Item key={a.id} id={a.id} textValue={a.name}>
@@ -122,17 +124,17 @@ export default function NewCableModal({
                 </Select.Popover>
               </Select>
               <TextField>
-                <Label>Цвет кабеля</Label>
-                <Input value={color} onChange={(e) => setColor(e.target.value)} placeholder="красный / синий / зелёный…" />
+                <Label>{t('newCableModal.color')}</Label>
+                <Input value={color} onChange={(e) => setColor(e.target.value)} placeholder={t('newCableModal.colorPlaceholder')} />
               </TextField>
             </Modal.Body>
             <Modal.Footer>
               <Button variant="secondary" onPress={onClose}>
-                Отмена
+                {t('newCableModal.cancel')}
               </Button>
               <Button onPress={submit} isPending={create.isPending}>
                 <CableIcon className="h-3.5 w-3.5" />
-                Соединить
+                {t('newCableModal.connect')}
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

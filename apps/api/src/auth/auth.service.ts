@@ -36,7 +36,7 @@ export class AuthService {
     const credential = await this.getOrCreateCredential();
     const valid = bcrypt.compareSync(dto.currentPassword, credential.passphraseHash);
     if (!valid) {
-      throw new UnauthorizedException('Текущий пароль неверен.');
+      throw new UnauthorizedException('Invalid current password.');
     }
     credential.passphraseHash = bcrypt.hashSync(dto.newPassword, SALT_ROUNDS);
     await authRepo.save(credential);
