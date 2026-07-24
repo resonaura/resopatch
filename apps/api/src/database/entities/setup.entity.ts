@@ -12,6 +12,9 @@ export class Setup {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
+  @Column({ type: 'simple-json', nullable: true })
+  checklistState: Record<string, boolean> | null;
+
   @OneToMany(() => Device, (device) => device.setup)
   devices: Device[];
 

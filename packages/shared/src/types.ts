@@ -121,6 +121,9 @@ export interface SetupDto {
   id: string;
   name: string;
   description: string | null;
+  /** Staff checklist's checked-off state (item/cable-group id -> checked), synced across every
+   *  connected client for this setup instead of living only in one browser's localStorage. */
+  checklistState: Record<string, boolean> | null;
 }
 
 /** One row of the derived input list (Table 6 in the design doc). */

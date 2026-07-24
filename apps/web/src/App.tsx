@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Spinner, Toast } from '@heroui/react';
 import { ApiError, api } from './api/client';
+import { I18nProvider } from './lib/i18n';
+import { useCloudSync } from './lib/sync';
 import Login from './pages/Login';
 import Constructor from './pages/Constructor';
 
@@ -14,6 +16,7 @@ function CenterScreen({ children }: { children: React.ReactNode }) {
 
 function Gate() {
   const qc = useQueryClient();
+  useCloudSync(qc);
   const setups = useQuery({
     queryKey: ['setups'],
     queryFn: api.listSetups,
@@ -49,8 +52,10 @@ function Gate() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Toast.Provider />
-      <Gate />
+      <I18nProvider>
+        <Toast.Provider />
+        <Gate />
+      </I18nProvider>
     </QueryClientProvider>
   );
 }

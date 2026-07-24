@@ -2,10 +2,11 @@ import { memo, useState, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Chip } from '@heroui/react';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Layers } from 'lucide-react';
-import { DeviceType, InventoryStatus, PortDirection } from '@resopatch/shared';
+import { DeviceType, InventoryStatus } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { getDisplayName } from '../lib/deviceNaming';
+import { useI18n } from '../lib/i18n';
 import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
 import { ProgressiveImage } from '../lib/img';
 import { portChannelColor } from '../lib/portChannel';
@@ -46,6 +47,8 @@ function BannerImage({ url, alt, isOnly }: { url: string; alt: string; isOnly: b
  *  (max 140px). When `imageUrls` has multiple entries it renders an interactive slider
  *  allowing the user to slide left/right between all provided views. */
 function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'imageUrls' | 'name' | 'type'> }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
   if (device.type === DeviceType.PEDALBOARD) return null;
 
   const urls: string[] = device.imageUrls?.length
@@ -55,8 +58,6 @@ function DeviceImageBanner({ device }: { device: Pick<GraphDevice, 'imageUrl' | 
     : [];
 
   if (urls.length === 0) return null;
-
-  const [currentIndex, setCurrentIndex] = useState(0);
 
   if (urls.length === 1) {
     return (
@@ -287,6 +288,7 @@ function DeviceThumb({
 }
 
 function DeviceNodeImpl({ data, selected }: NodeProps) {
+  const { t } = useI18n();
   const { device, children, boundaryPorts, onSelectChild, onOpenInside } = data as unknown as DeviceNodeData;
   const ports = device.ports;
   const isVirtual = device.id.startsWith('virtual-ext-');
@@ -311,7 +313,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
         {/* Hide the small thumb when there is already a full-width banner above */}
         {!device.imageUrl && <DeviceThumb device={device} className="h-6 w-6" />}
         <span className="truncate font-semibold text-foreground" title={device.type}>
-          {getDisplayName(device)}
+          {getDisplayName(device, t)}
         </span>
       </div>
       <div className="flex items-center gap-1 px-2.5 pb-1.5 pt-1">
@@ -368,7 +370,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
                 title={child.notes ?? child.name}
               >
                 <DeviceThumb device={child} className="h-8 w-8" dimFallback />
-                <span className="truncate text-xs font-medium text-foreground/90">{getDisplayName(child)}</span>
+                <span className="truncate text-xs font-medium text-foreground/90">{getDisplayName(child, t)}</span>
               </button>
             ))}
           </div>

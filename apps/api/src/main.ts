@@ -2,6 +2,7 @@ import 'dotenv/config';
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import fastifyCookie from '@fastify/cookie';
 import { AppModule } from './app.module.js';
 
@@ -26,6 +27,7 @@ async function bootstrap() {
     origin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
     credentials: true,
   });
+  app.useWebSocketAdapter(new IoAdapter(app));
   const port = process.env.PORT ? Number(process.env.PORT) : 3001;
   await app.listen(port, '0.0.0.0');
   console.log(`resopatch API listening on http://localhost:${port}`);

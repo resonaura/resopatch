@@ -4,6 +4,7 @@ import { Layers, Plus, Wand2, X } from 'lucide-react';
 import type { Connection } from '@xyflow/react';
 import type { GraphCable, GraphDevice } from '../api/client';
 import { containerInternalGraph } from '../lib/containerGraph';
+import { useI18n } from '../lib/i18n';
 import PatchCanvas from './PatchCanvas';
 import Inspector, { type Selection } from './Inspector';
 import { DeviceType, InventoryStatus } from '@resopatch/shared';
@@ -100,6 +101,7 @@ export default function ContainerInsideModal({
   onRunAutoLayout,
   isAutoLayoutPending,
 }: ContainerInsideModalProps) {
+  const { t } = useI18n();
   const [modalSelection, setModalSelection] = useState<Selection>(null);
   const { nodes: childDevices, cables: internalCables } = useMemo(
     () => containerInternalGraph(allDevices, allCables, containerDevice.id),
@@ -191,7 +193,7 @@ export default function ContainerInsideModal({
         const extPort = sourceInChild ? allPortById.get(cable.targetPortId) : allPortById.get(cable.sourcePortId);
         if (!extDev || !extPort) continue;
 
-        let virtualDev = createdBoundaryDevices.get(extDev.id);
+        const virtualDev = createdBoundaryDevices.get(extDev.id);
         if (!virtualDev) {
           const isLeft = !sourceInChild; // If target is in child, connection enters from left
           const posX = isLeft ? -360 : 1340;
@@ -338,7 +340,7 @@ export default function ContainerInsideModal({
                       className="absolute bottom-3 right-3 z-10 shadow-lg"
                     >
                       <Wand2 className="h-3.5 w-3.5" />
-                      Упорядочить
+                      {t('canvas.arrange')}
                     </Button>
                   </>
                 )}

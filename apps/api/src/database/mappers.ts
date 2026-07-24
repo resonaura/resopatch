@@ -25,7 +25,7 @@ import { Cable } from './entities/cable.entity.js';
 import { Furniture } from './entities/furniture.entity.js';
 
 export function toSetupDto(s: Setup): SetupDto {
-  return { id: s.id, name: s.name, description: s.description };
+  return { id: s.id, name: s.name, description: s.description, checklistState: s.checklistState ?? null };
 }
 
 export function toDeviceDto(d: Device): DeviceDto {

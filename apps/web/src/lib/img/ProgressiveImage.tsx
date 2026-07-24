@@ -79,6 +79,10 @@ export const ProgressiveImage = forwardRef<HTMLDivElement, ProgressiveImageProps
     else if (forwardedRef) forwardedRef.current = node;
   };
 
+  // Reacting to an external system finishing (the browser loading `targetSrc`, tracked by
+  // useProgressiveImage), not deriving state from a prop — the state-in-effect lint warning
+  // doesn't apply to this case the way it does to plain prop-mirroring.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!isLoaded || !targetSrc) return;
     if (!currentSrc) {
@@ -89,6 +93,7 @@ export const ProgressiveImage = forwardRef<HTMLDivElement, ProgressiveImageProps
       setIsTransitioning(true);
     }
   }, [targetSrc, isLoaded, currentSrc]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handlePendingLoad = () => {
     if (!pendingSrc) return;

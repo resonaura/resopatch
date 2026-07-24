@@ -42,6 +42,7 @@ export type PedalProfileDto = z.infer<typeof pedalProfileSchema>;
 export const createSetupSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
+  checklistState: z.record(z.string(), z.boolean()).nullable().optional(),
 });
 export type CreateSetupDto = z.infer<typeof createSetupSchema>;
 export const updateSetupSchema = createSetupSchema.partial();

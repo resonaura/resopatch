@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Disclosure, Input, Label, ListBox, Select, TextArea, TextField, toast } from '@heroui/react';
 import { Cable as CableIcon, Layers, Package, Plus, StickyNote, Trash2, Zap, type LucideIcon } from 'lucide-react';
@@ -98,16 +98,12 @@ function DeviceForm({
   onSelectChild: (id: string) => void;
 }) {
   const qc = useQueryClient();
+  // No effect needed to reset this on device change: DeviceForm is rendered with
+  // `key={device.id}` at its call site, so React already remounts it (fresh useState
+  // initializers) whenever the selected device changes.
   const [form, setForm] = useState(device);
   const [attrsText, setAttrsText] = useState(() => JSON.stringify(device.attrs, null, 2));
   const [attrsError, setAttrsError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setForm(device);
-    setAttrsText(JSON.stringify(device.attrs, null, 2));
-    setAttrsError(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [device.id]);
 
   const save = useMutation({
     mutationFn: (dto: UpdateDeviceDto) => api.updateDevice(device.id, dto),

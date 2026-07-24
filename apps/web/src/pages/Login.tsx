@@ -22,9 +22,9 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <div className="flex h-full items-center justify-center">
-      <form onSubmit={submit}>
-        <Card className="w-80">
+    <div className="flex h-full items-center justify-center px-4">
+      <form onSubmit={submit} className="w-full max-w-80">
+        <Card className="w-full">
           <Card.Header>
             <Card.Title>Resopatch</Card.Title>
             <Card.Description>Конструктор сценического сетапа Resonaura</Card.Description>

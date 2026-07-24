@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { Connection, Edge, Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,6 +33,7 @@ import ContainerInsideModal from "../components/ContainerInsideModal";
 import StaffChecklist from "../components/StaffChecklist";
 import CableListView from "../components/CableListView";
 import { splitMainCanvasGraph } from "../lib/containerGraph";
+import { useI18n } from "../lib/i18n";
 
 export default function Constructor({
   setupId,
@@ -41,6 +42,7 @@ export default function Constructor({
   setupId: string;
   setupName: string;
 }) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const graphQuery = useQuery({
     queryKey: ["graph", setupId],
@@ -137,14 +139,14 @@ export default function Constructor({
     return map;
   }, [activeGraph]);
 
-  const onSelectChild = useCallback(
-    (id: string) => setSelection({ kind: "device", id }),
-    [],
-  );
+  // Selecting anything opens the inspector panel — folded into the same setter (rather than a
+  // separate effect reacting to `selection`) so it's one state update, not two render passes.
+  const selectItem = useCallback((sel: Selection) => {
+    setSelection(sel);
+    if (sel) setInspectorOpen(true);
+  }, []);
 
-  useEffect(() => {
-    if (selection) setInspectorOpen(true);
-  }, [selection]);
+  const onSelectChild = useCallback((id: string) => selectItem({ kind: "device", id }), [selectItem]);
 
   const connectedPortIds = useMemo(() => {
     const set = new Set<string>();
@@ -304,7 +306,7 @@ export default function Constructor({
                 : 'text-default-500 hover:text-foreground'
             }`}
           >
-            Без клавиш
+            {t('header.setupMode.noKeys')}
           </button>
           <button
             type="button"
@@ -315,7 +317,7 @@ export default function Constructor({
                 : 'text-default-500 hover:text-foreground'
             }`}
           >
-            С клавишами
+            {t('header.setupMode.withKeys')}
           </button>
         </div>
 
@@ -327,36 +329,36 @@ export default function Constructor({
             variant="secondary"
           >
             <Tabs.ListContainer>
-              <Tabs.List aria-label="Вид">
-                <Tabs.Tab id="canvas" aria-label="Схема">
-                  <span title="Схема"><LayoutGrid className="h-3.5 w-3.5" /></span>
+              <Tabs.List aria-label={t('header.tab.canvas')}>
+                <Tabs.Tab id="canvas" aria-label={t('header.tab.canvas')}>
+                  <span title={t('header.tab.canvas')}><LayoutGrid className="h-3.5 w-3.5" /></span>
                 </Tabs.Tab>
-                <Tabs.Tab id="input-list" aria-label="Input List">
+                <Tabs.Tab id="input-list" aria-label={t('header.tab.inputList')}>
                   <Tabs.Separator />
-                  <span title="Input List"><ListMusic className="h-3.5 w-3.5" /></span>
+                  <span title={t('header.tab.inputList')}><ListMusic className="h-3.5 w-3.5" /></span>
                 </Tabs.Tab>
-                <Tabs.Tab id="rider" aria-label="Райдер">
+                <Tabs.Tab id="rider" aria-label={t('header.tab.rider')}>
                   <Tabs.Separator />
-                  <span title="Райдер"><ClipboardList className="h-3.5 w-3.5" /></span>
+                  <span title={t('header.tab.rider')}><ClipboardList className="h-3.5 w-3.5" /></span>
                 </Tabs.Tab>
-                <Tabs.Tab id="checklist" aria-label="Чеклист стаффа">
+                <Tabs.Tab id="checklist" aria-label={t('header.tab.checklist')}>
                   <Tabs.Separator />
-                  <span title="Чеклист стаффа"><CheckSquare className="h-3.5 w-3.5" /></span>
+                  <span title={t('header.tab.checklist')}><CheckSquare className="h-3.5 w-3.5" /></span>
                 </Tabs.Tab>
-                <Tabs.Tab id="cables" aria-label="Кабели">
+                <Tabs.Tab id="cables" aria-label={t('header.tab.cables')}>
                   <Tabs.Separator />
-                  <span title="Кабели"><CableIcon className="h-3.5 w-3.5" /></span>
+                  <span title={t('header.tab.cables')}><CableIcon className="h-3.5 w-3.5" /></span>
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>
           </Tabs>
 
-          <span title="Настройки">
+          <span title={t('header.settings')}>
             <Button size="sm" variant="ghost" onPress={() => setShowSettings(true)}>
               <Settings className="h-3.5 w-3.5" />
             </Button>
           </span>
-          <span title="Выйти">
+          <span title={t('header.logout')}>
             <Button
               size="sm"
               variant="secondary"
@@ -370,16 +372,26 @@ export default function Constructor({
           </span>
         </div>
       </header>
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
+        {sidebarOpen && (
+          <div
+            className="absolute inset-0 z-20 bg-black/40 sm:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
         <div
-          className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${sidebarOpen ? "w-[260px]" : "w-0"}`}
+          className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${
+            sidebarOpen
+              ? "absolute inset-y-0 left-0 z-30 w-[85vw] max-w-[280px] shadow-2xl sm:static sm:z-auto sm:w-[260px] sm:max-w-none sm:shadow-none"
+              : "w-0"
+          }`}
         >
           <Sidebar
             devices={graph.devices}
             cables={graph.cables}
             selectedId={selection?.id ?? null}
-            onSelect={(id) => setSelection({ kind: "device", id })}
-            onSelectCable={(id) => setSelection({ kind: "cable", id })}
+            onSelect={(id) => selectItem({ kind: "device", id })}
+            onSelectCable={(id) => selectItem({ kind: "cable", id })}
             onNewDevice={() => {
               setNewDeviceParentId(null);
               setShowNewDevice(true);
@@ -404,8 +416,8 @@ export default function Constructor({
             <PatchCanvas
               nodes={initialNodes}
               edges={initialEdges}
-              onNodeClick={(id) => setSelection({ kind: "device", id })}
-              onEdgeClick={(id) => setSelection({ kind: "cable", id })}
+              onNodeClick={(id) => selectItem({ kind: "device", id })}
+              onEdgeClick={(id) => selectItem({ kind: "cable", id })}
               onPaneClick={() => setSelection(null)}
               onConnect={onConnect}
               onNodeMoved={(id, position) =>
@@ -425,7 +437,7 @@ export default function Constructor({
               className="absolute bottom-3 right-3 z-10 shadow-lg"
             >
               <Wand2 className="h-3.5 w-3.5" />
-              Упорядочить
+              {t('canvas.arrange')}
             </Button>
           )}
           {view === "input-list" && (
@@ -452,8 +464,18 @@ export default function Constructor({
             <ChevronLeft className="h-3.5 w-3.5" />
           )}
         </button>
+        {inspectorOpen && (
+          <div
+            className="absolute inset-0 z-20 bg-black/40 sm:hidden"
+            onClick={() => setInspectorOpen(false)}
+          />
+        )}
         <div
-          className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${inspectorOpen ? "w-[320px]" : "w-0"}`}
+          className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${
+            inspectorOpen
+              ? "absolute inset-y-0 right-0 z-30 w-[85vw] max-w-[320px] shadow-2xl sm:static sm:z-auto sm:w-[320px] sm:max-w-none sm:shadow-none"
+              : "w-0"
+          }`}
         >
           <Inspector
             graph={graph}
@@ -463,7 +485,7 @@ export default function Constructor({
               setNewDeviceParentId(parentId);
               setShowNewDevice(true);
             }}
-            onSelectDevice={(id) => setSelection({ kind: "device", id })}
+            onSelectDevice={(id) => selectItem({ kind: "device", id })}
           />
         </div>
       </div>
@@ -483,7 +505,7 @@ export default function Constructor({
           allDevices={graph.devices}
           allCables={graph.cables}
           onClose={() => setInsideContainerId(null)}
-          onSelectChild={(id) => setSelection({ kind: "device", id })}
+          onSelectChild={(id) => selectItem({ kind: "device", id })}
           onAddChild={(containerId) => {
             setNewDeviceParentId(containerId);
             setShowNewDevice(true);

@@ -18,6 +18,7 @@ import type {
   UpdateCableDto,
   UpdateDeviceDto,
   UpdatePortDto,
+  UpdateSetupDto,
 } from '@resopatch/shared';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3001';
@@ -75,7 +76,10 @@ export const api = {
   changePassword: (dto: ChangePasswordDto) => request<{ ok: true }>('/auth/password', { method: 'PATCH', body: JSON.stringify(dto) }),
 
   listSetups: () => request<SetupDto[]>('/setups'),
+  getSetup: (setupId: string) => request<SetupDto>(`/setups/${setupId}`),
   createSetup: (dto: CreateSetupDto) => request<SetupDto>('/setups', { method: 'POST', body: JSON.stringify(dto) }),
+  updateSetup: (setupId: string, dto: UpdateSetupDto) =>
+    request<SetupDto>(`/setups/${setupId}`, { method: 'PATCH', body: JSON.stringify(dto) }),
   getGraph: (setupId: string) => request<GraphResponse>(`/setups/${setupId}/graph`),
   getInputList: (setupId: string, hasKeys = true) =>
     request<InputListRow[]>(`/setups/${setupId}/input-list?hasKeys=${hasKeys}`),

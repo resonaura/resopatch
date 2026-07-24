@@ -18,7 +18,7 @@ export class SetupsService {
   }
 
   async create(dto: CreateSetupDto): Promise<SetupDto> {
-    const setup = setupsRepo.create({ name: dto.name, description: dto.description ?? null });
+    const setup = setupsRepo.create({ name: dto.name, description: dto.description ?? null, checklistState: dto.checklistState ?? null });
     await setupsRepo.save(setup);
     return toSetupDto(setup);
   }
@@ -28,6 +28,7 @@ export class SetupsService {
     if (!setup) throw new NotFoundException('Setup not found.');
     if (dto.name !== undefined) setup.name = dto.name;
     if (dto.description !== undefined) setup.description = dto.description ?? null;
+    if (dto.checklistState !== undefined) setup.checklistState = dto.checklistState ?? null;
     await setupsRepo.save(setup);
     return toSetupDto(setup);
   }

@@ -19,6 +19,7 @@ import { ImagesModule } from './images/images.module.js';
 import { ManifestModule } from './manifest/manifest.module.js';
 import { PortsModule } from './ports/ports.module.js';
 import { SetupsModule } from './setups/setups.module.js';
+import { SyncModule } from './sync/sync.module.js';
 import { WatcherModule } from './watcher/watcher.module.js';
 
 @Module({
@@ -54,6 +55,7 @@ import { WatcherModule } from './watcher/watcher.module.js';
     WatcherModule,
     ImagesModule,
     ManifestModule,
+    SyncModule,
   ],
 })
 export class AppModule {}

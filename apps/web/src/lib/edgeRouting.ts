@@ -331,9 +331,9 @@ export function resolveOverlaps(routes: Map<string, Point[]>, obstacles: RectObs
       const a = pts[i];
       const b = pts[i + 1];
       let orientation: 'h' | 'v' | undefined;
-      let fixed = 0;
-      let lo = 0;
-      let hi = 0;
+      let fixed: number;
+      let lo: number;
+      let hi: number;
       if (a.y === b.y) {
         orientation = 'h';
         fixed = a.y;

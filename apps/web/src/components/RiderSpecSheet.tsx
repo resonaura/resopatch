@@ -32,6 +32,8 @@ function formatPower(power: PowerProfile): string | null {
 }
 
 function RiderImageBanner({ device }: { device: GraphDevice }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
   if (device.type === DeviceType.PEDALBOARD) return null;
 
   const urls: string[] = device.imageUrls?.length
@@ -41,8 +43,6 @@ function RiderImageBanner({ device }: { device: GraphDevice }) {
     : [];
 
   if (urls.length === 0) return null;
-
-  const [currentIndex, setCurrentIndex] = useState(0);
 
   const prev = (e: React.MouseEvent) => {
     e.stopPropagation();

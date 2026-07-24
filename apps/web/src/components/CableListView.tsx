@@ -2,25 +2,18 @@ import { useMemo, useState } from 'react';
 import { Cable as CableIcon } from 'lucide-react';
 import { CABLE_COLORS, CableType } from '@resopatch/shared';
 import type { GraphCable, GraphDevice } from '../api/client';
+import { cableTypeLabel } from '../lib/cableTypeLabel';
+import { useI18n } from '../lib/i18n';
 import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
-
-const CABLE_TYPE_LABEL: Record<string, string> = {
-  AUDIO_BALANCED: 'Аудио (балансный)',
-  AUDIO_UNBALANCED: 'Аудио (небалансный)',
-  MIDI: 'MIDI',
-  USB_DATA: 'USB',
-  POWER_LINE: 'Питание',
-  CONTROL_LINK: 'Control link',
-};
 
 const AUDIO_TYPES = new Set<string>([CableType.AUDIO_BALANCED, CableType.AUDIO_UNBALANCED]);
 const POWER_TYPES = new Set<string>([CableType.POWER_LINE]);
 
 type Category = 'all' | 'audio' | 'power';
 
-const UNOWNED_ZONE = 'Без зоны';
-
 export default function CableListView({ devices, cables }: { devices: GraphDevice[]; cables: GraphCable[] }) {
+  const { t } = useI18n();
+  const noZone = t('cables.noZone');
   const [category, setCategory] = useState<Category>('all');
 
   const portToDevice = useMemo(() => {
@@ -29,14 +22,14 @@ export default function CableListView({ devices, cables }: { devices: GraphDevic
     return map;
   }, [devices]);
 
-  const zoneOf = (cable: GraphCable) => portToDevice.get(cable.sourcePortId)?.ownerRole?.trim() || UNOWNED_ZONE;
+  const zoneOf = (cable: GraphCable) => portToDevice.get(cable.sourcePortId)?.ownerRole?.trim() || noZone;
 
   const allZones = useMemo(() => {
     const zones = new Set<string>();
     for (const c of cables) zones.add(zoneOf(c));
     return Array.from(zones).sort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cables, portToDevice]);
+  }, [cables, portToDevice, noZone]);
 
   const allTypes = useMemo(() => {
     const types = new Set<string>();
@@ -47,11 +40,11 @@ export default function CableListView({ devices, cables }: { devices: GraphDevic
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [hiddenZones, setHiddenZones] = useState<Set<string>>(new Set());
 
-  const toggleType = (t: string) =>
+  const toggleType = (type: string) =>
     setHiddenTypes((prev) => {
       const next = new Set(prev);
-      if (next.has(t)) next.delete(t);
-      else next.add(t);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
       return next;
     });
 
@@ -80,9 +73,9 @@ export default function CableListView({ devices, cables }: { devices: GraphDevic
         <div className="flex items-center rounded-lg border border-default-200 bg-surface-secondary/80 p-0.5">
           {(
             [
-              ['all', 'Все кабели'],
-              ['audio', 'Аудио кабели'],
-              ['power', 'Кабели питания'],
+              ['all', t('cables.viewAll')],
+              ['audio', t('cables.viewAudio')],
+              ['power', t('cables.viewPower')],
             ] as [Category, string][]
           ).map(([key, label]) => (
             <button
@@ -99,24 +92,24 @@ export default function CableListView({ devices, cables }: { devices: GraphDevic
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-default-500">Тип:</span>
-          {allTypes.map((t) => {
-            const active = !hiddenTypes.has(t);
+          <span className="text-[10px] font-medium uppercase tracking-wide text-default-500">{t('cables.filterType')}</span>
+          {allTypes.map((type) => {
+            const active = !hiddenTypes.has(type);
             return (
               <button
-                key={t}
+                key={type}
                 type="button"
-                onClick={() => toggleType(t)}
-                title={CABLE_TYPE_LABEL[t] ?? t}
+                onClick={() => toggleType(type)}
+                title={cableTypeLabel(type, t)}
                 className={`flex items-center gap-1.5 rounded-full border px-2 py-1 text-[11px] transition-opacity ${
                   active ? 'border-default-200 opacity-100' : 'border-default-200 opacity-40'
                 }`}
               >
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-full border border-white/20"
-                  style={{ backgroundColor: CABLE_COLORS[t as CableType] }}
+                  style={{ backgroundColor: CABLE_COLORS[type as CableType] }}
                 />
-                {CABLE_TYPE_LABEL[t] ?? t}
+                {cableTypeLabel(type, t)}
               </button>
             );
           })}
@@ -124,7 +117,7 @@ export default function CableListView({ devices, cables }: { devices: GraphDevic
 
         {allZones.length > 1 && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-medium uppercase tracking-wide text-default-500">Зона:</span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-default-500">{t('cables.filterZone')}</span>
             {allZones.map((z) => {
               const active = !hiddenZones.has(z);
               return (
@@ -145,12 +138,10 @@ export default function CableListView({ devices, cables }: { devices: GraphDevic
 
       <div className="rounded-xl border border-default-200 bg-surface shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-default-200 bg-surface-secondary/50 px-4 py-2.5">
-          <span className="text-sm font-semibold text-foreground">Кабели ({visibleCables.length})</span>
+          <span className="text-sm font-semibold text-foreground">{t('cables.count', { count: visibleCables.length })}</span>
         </div>
         <div className="divide-y divide-default-100">
-          {visibleCables.length === 0 && (
-            <div className="p-4 text-sm text-default-500">Нет кабелей, соответствующих текущим фильтрам.</div>
-          )}
+          {visibleCables.length === 0 && <div className="p-4 text-sm text-default-500">{t('cables.empty')}</div>}
           {visibleCables.map((c) => {
             const sourceDevice = portToDevice.get(c.sourcePortId);
             const targetDevice = portToDevice.get(c.targetPortId);
@@ -163,9 +154,9 @@ export default function CableListView({ devices, cables }: { devices: GraphDevic
                 <CableIcon className={`shrink-0 text-default-400 ${FALLBACK_ICON_CLASS}`} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-foreground">
-                    {c.productName ?? CABLE_TYPE_LABEL[c.cableType] ?? c.cableType} — {c.length}м
+                    {c.productName ?? cableTypeLabel(c.cableType, t)} — {c.length}м
                     {c.color ? ` (${c.color})` : ''}
-                    {!c.isUserOwned && <span className="ml-2 text-[10px] text-default-500">(площадка)</span>}
+                    {!c.isUserOwned && <span className="ml-2 text-[10px] text-default-500">{t('cables.venueProvided')}</span>}
                   </div>
                   <div className="truncate text-xs text-default-500">
                     {sourceDevice?.name ?? '?'} → {targetDevice?.name ?? '?'} · {zoneOf(c)}

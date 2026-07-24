@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Button, Input, Label, Modal, TextField, toast } from '@heroui/react';
+import { Button, Input, Label, ListBox, Modal, Select, TextField, toast } from '@heroui/react';
 import { KeyRound } from 'lucide-react';
 import { api, ApiError } from '../api/client';
+import { useI18n } from '../lib/i18n';
 
 export default function SettingsModal({ onClose }: { onClose: () => void }) {
+  const { t, language, setLanguage } = useI18n();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -41,9 +43,26 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
           <Modal.Dialog>
             <Modal.CloseTrigger />
             <Modal.Header>
-              <Modal.Heading>Настройки — смена пароля</Modal.Heading>
+              <Modal.Heading>{t('settings.title')}</Modal.Heading>
             </Modal.Header>
             <Modal.Body className="flex flex-col gap-3">
+              <Select value={language} onChange={(v) => setLanguage(v as 'en' | 'ru')}>
+                <Label>{t('settings.language')}</Label>
+                <Select.Trigger>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    <ListBox.Item id="en" textValue="English">
+                      English
+                    </ListBox.Item>
+                    <ListBox.Item id="ru" textValue="Русский">
+                      Русский
+                    </ListBox.Item>
+                  </ListBox>
+                </Select.Popover>
+              </Select>
               <TextField isRequired>
                 <Label>Текущий пароль</Label>
                 <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} autoFocus />

@@ -1,23 +1,15 @@
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Chip } from '@heroui/react';
 import { RotateCcw, PackageCheck, Cable as CableIcon } from 'lucide-react';
 import { InventoryStatus } from '@resopatch/shared';
-import type { GraphCable, GraphDevice } from '../api/client';
+import { api, type GraphCable, type GraphDevice } from '../api/client';
+import { cableTypeLabel } from '../lib/cableTypeLabel';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { getDisplayName } from '../lib/deviceNaming';
+import { useI18n } from '../lib/i18n';
 import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
 import CheckboxField from './CheckboxField';
-
-const CABLE_TYPE_LABEL: Record<string, string> = {
-  AUDIO_BALANCED: 'Аудио (балансный)',
-  AUDIO_UNBALANCED: 'Аудио (небалансный)',
-  MIDI: 'MIDI',
-  USB_DATA: 'USB',
-  POWER_LINE: 'Питание',
-  CONTROL_LINK: 'Control link',
-};
-
-const UNOWNED = 'Общее оборудование';
 
 interface CableGroup {
   key: string;
@@ -56,6 +48,9 @@ function ItemThumb({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'type'> 
 }
 
 export default function StaffChecklist({ devices, cables, setupId }: { devices: GraphDevice[]; cables: GraphCable[]; setupId: string }) {
+  const { t } = useI18n();
+  const unowned = t('checklist.unowned');
+  const qc = useQueryClient();
   const storageKey = `resopatch_checklist_${setupId}`;
   const [checkedMap, setCheckedMap] = useState<Record<string, boolean>>(() => {
     try {
@@ -66,12 +61,41 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
     }
   });
 
+  // Cloud sync: the setup's `checklistState` is the source of truth once loaded (falls back to
+  // whatever's in localStorage until then, so this still works offline / before first sync).
+  // Writes are debounced and pushed to the server; other connected clients pick them up via the
+  // WebSocket-driven `['setup', setupId]` invalidation in lib/sync.ts.
+  const setupQuery = useQuery({ queryKey: ['setup', setupId], queryFn: () => api.getSetup(setupId) });
+  const lastSyncedRemote = useRef<Record<string, boolean> | null>(null);
+  useEffect(() => {
+    const remote = setupQuery.data?.checklistState;
+    if (remote && remote !== lastSyncedRemote.current) {
+      lastSyncedRemote.current = remote;
+      setCheckedMap(remote);
+    }
+  }, [setupQuery.data]);
+
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveChecklistState = useMutation({
+    mutationFn: (state: Record<string, boolean>) => api.updateSetup(setupId, { checklistState: state }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['setup', setupId] }),
+  });
+
   useEffect(() => {
     try {
       localStorage.setItem(storageKey, JSON.stringify(checkedMap));
     } catch {
       // ignore
     }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      lastSyncedRemote.current = checkedMap;
+      saveChecklistState.mutate(checkedMap);
+    }, 500);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkedMap, storageKey]);
 
   const toggleCheck = (id: string) => {
@@ -89,7 +113,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
   };
 
   const resetAll = () => {
-    if (confirm('Сбросить все отметки в чеклисте?')) {
+    if (confirm(t('checklist.confirmReset'))) {
       setCheckedMap({});
     }
   };
@@ -119,7 +143,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
     const groups = new Map<string, { parent: GraphDevice; accessories: GraphDevice[] }[]>();
 
     for (const parent of parentDevices) {
-      const owner = parent.ownerRole?.trim() || UNOWNED;
+      const owner = parent.ownerRole?.trim() || unowned;
       const list = groups.get(owner) ?? [];
       list.push({
         parent,
@@ -129,7 +153,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
     }
 
     return groups;
-  }, [devices]);
+  }, [devices, unowned]);
 
   // Cables to pack: user-owned physical cables (excludes venue-provided runs and wireless
   // control links, which aren't things you throw in a bag), grouped by owner (whoever's device
@@ -139,7 +163,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
     const groups = new Map<string, Map<string, CableGroup>>();
     for (const c of cables) {
       if (!c.isUserOwned || c.cableType === 'CONTROL_LINK') continue;
-      const owner = portToDevice.get(c.sourcePortId)?.ownerRole?.trim() || UNOWNED;
+      const owner = portToDevice.get(c.sourcePortId)?.ownerRole?.trim() || unowned;
       const ownerGroups = groups.get(owner) ?? new Map<string, CableGroup>();
       const key = `${c.cableType}|${c.length}|${c.color ?? ''}|${c.productName ?? ''}`;
       const group =
@@ -158,7 +182,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
       );
     }
     return result;
-  }, [cables, portToDevice]);
+  }, [cables, portToDevice, unowned]);
 
   const allCableGroups = useMemo(() => Array.from(cableGroupsByOwner.values()).flat(), [cableGroupsByOwner]);
   const cableChecked = allCableGroups.filter((g) => checkedMap[`cable:${g.key}`]).length;
@@ -204,20 +228,20 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
               <PackageCheck className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-foreground">Чеклист стаффа (концертный сбор)</h2>
-              <p className="text-xs text-default-500">Проверьте оборудование и аксессуары перед выездом на площадку</p>
+              <h2 className="text-base font-semibold text-foreground">{t('checklist.title')}</h2>
+              <p className="text-xs text-default-500">{t('checklist.subtitle')}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
               <div className="text-sm font-semibold text-foreground">
-                {checkedCount} из {totalCheckableCount} собрано
+                {t('checklist.progress', { checked: checkedCount, total: totalCheckableCount })}
               </div>
-              <div className="text-xs text-default-500">{progressPercent}% готовности</div>
+              <div className="text-xs text-default-500">{t('checklist.readiness', { percent: progressPercent })}</div>
             </div>
             <Button size="sm" variant="secondary" onPress={resetAll}>
               <RotateCcw className="h-3.5 w-3.5" />
-              Сбросить
+              {t('checklist.reset')}
             </Button>
           </div>
         </div>
@@ -282,7 +306,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                              {getDisplayName(parent)}
+                              {getDisplayName(parent, t)}
                             </span>
                             <Chip size="sm" variant="soft" className="text-[10px]">
                               {parent.type}
@@ -300,7 +324,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                           {accessories.length > 0 && (
                             <div className="mt-3 flex flex-col gap-1.5 border-l-2 border-accent/40 pl-3">
                               <div className="text-[11px] font-medium text-default-500 uppercase tracking-wide">
-                                Комплект / Аксессуары ({accessories.length}):
+                                {t('checklist.kit')} ({accessories.length}):
                               </div>
                               {accessories.map((acc) => {
                                 const accChecked = !!checkedMap[acc.id];
@@ -321,7 +345,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                                     </div>
                                     <ItemThumb device={acc} />
                                     <span className={`text-xs ${accChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                                      {getDisplayName(acc)}
+                                      {getDisplayName(acc, t)}
                                     </span>
                                   </div>
                                 );
@@ -340,7 +364,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                     <div className="flex items-center gap-2 px-3.5 pt-3 pb-1.5">
                       <CableIcon className="h-3 w-3 text-default-500" />
                       <span className="text-[11px] font-medium text-default-500 uppercase tracking-wide">
-                        Кабели ({ownerCables.length}):
+                        {t('checklist.cables')} ({ownerCables.length}):
                       </span>
                     </div>
                     {ownerCables.map((group) => {
@@ -361,7 +385,7 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                           </Chip>
                           <div className="min-w-0 flex-1">
                             <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                              {group.productName ?? CABLE_TYPE_LABEL[group.cableType] ?? group.cableType} — {group.length}м
+                              {group.productName ?? cableTypeLabel(group.cableType, t)} — {group.length}м
                               {group.color ? ` (${group.color})` : ''}
                             </span>
                           </div>

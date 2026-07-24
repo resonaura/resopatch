@@ -5,6 +5,8 @@ import { CABLE_COLORS, InventoryStatus } from '@resopatch/shared';
 import type { GraphCable, GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { getDisplayName } from '../lib/deviceNaming';
+import { useI18n } from '../lib/i18n';
+import type { TranslationKey } from '../lib/i18n/dictionaries';
 import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
 
 /** Same fallback-to-type-icon convention as DeviceNode's thumbnail — kept as its own tiny
@@ -20,11 +22,11 @@ function DeviceThumb({ device, className }: { device: Pick<GraphDevice, 'imageUr
   return <DeviceTypeIcon type={device.type} className={`shrink-0 aspect-square text-default-500 ${FALLBACK_ICON_CLASS}`} />;
 }
 
-const GROUPS: { status: string; title: string }[] = [
-  { status: InventoryStatus.OWNED_ACTIVE, title: 'В сетапе' },
-  { status: InventoryStatus.OWNED_INACTIVE, title: 'Есть, не активно' },
-  { status: InventoryStatus.PLANNED_NOT_OWNED, title: 'В планах' },
-  { status: InventoryStatus.VENUE_PROVIDED, title: 'От площадки' },
+const GROUPS: { status: string; titleKey: TranslationKey }[] = [
+  { status: InventoryStatus.OWNED_ACTIVE, titleKey: 'sidebar.group.ownedActive' },
+  { status: InventoryStatus.OWNED_INACTIVE, titleKey: 'sidebar.group.ownedInactive' },
+  { status: InventoryStatus.PLANNED_NOT_OWNED, titleKey: 'sidebar.group.planned' },
+  { status: InventoryStatus.VENUE_PROVIDED, titleKey: 'sidebar.group.venueProvided' },
 ];
 
 const CABLES_GROUP = 'cables';
@@ -44,6 +46,7 @@ export default function Sidebar({
   onSelectCable: (id: string) => void;
   onNewDevice: () => void;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({
     [InventoryStatus.OWNED_ACTIVE]: true,
@@ -79,14 +82,14 @@ export default function Sidebar({
   return (
     <div className="flex h-full min-h-0 flex-col border-r border-default-200 bg-surface">
       <div className="flex items-center justify-between gap-2 p-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-default-500">Инвентарь</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-default-500">{t('sidebar.inventory')}</h2>
         <Button size="sm" onPress={onNewDevice}>
           <Plus className="h-3.5 w-3.5" />
-          Устройство
+          {t('sidebar.addDevice')}
         </Button>
       </div>
       <div className="px-3 pb-2">
-        <Input placeholder="Поиск…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <Input placeholder={t('sidebar.search')} value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-3">
         {GROUPS.map((group) => {
@@ -101,7 +104,7 @@ export default function Sidebar({
             >
               <Disclosure.Heading>
                 <Disclosure.Trigger className="w-full px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-default-500">
-                  {group.title} ({items.length})
+                  {t(group.titleKey)} ({items.length})
                   <Disclosure.Indicator />
                 </Disclosure.Trigger>
               </Disclosure.Heading>
@@ -117,7 +120,7 @@ export default function Sidebar({
                       }`}
                     >
                       <DeviceThumb device={d} className="h-7 w-7" />
-                      <span className="truncate">{getDisplayName(d)}</span>
+                      <span className="truncate">{getDisplayName(d, t)}</span>
                     </button>
                   ))}
                 </div>
@@ -133,7 +136,7 @@ export default function Sidebar({
           >
             <Disclosure.Heading>
               <Disclosure.Trigger className="w-full px-2 py-1.5 text-left text-[11px] font-medium uppercase tracking-wide text-default-500">
-                Кабели ({filteredCables.length})
+                {t('sidebar.cables')} ({filteredCables.length})
                 <Disclosure.Indicator />
               </Disclosure.Trigger>
             </Disclosure.Heading>

@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
@@ -28,6 +29,11 @@ export const jsonDbPath = process.env.JSON_DB_PATH
   ? path.resolve(process.cwd(), process.env.JSON_DB_PATH)
   : path.resolve(process.cwd(), 'data', 'resopatch.json');
 
+/** Fires once per `persist()` call — i.e. after every save/delete across every repo below.
+ *  SyncGateway listens on this to broadcast live updates to connected WebSocket clients instead
+ *  of each controller/service having to remember to notify it individually. */
+export const dbEvents = new EventEmitter();
+
 /**
  * Whole app's persistence: one hand-editable JSON file, loaded into memory at startup and
  * rewritten in full on every mutation. Deliberately not a real database while the setup data is
@@ -50,6 +56,7 @@ class JsonDatabase {
 
   persist() {
     fs.writeFileSync(jsonDbPath, JSON.stringify(this.data, null, 2));
+    dbEvents.emit('change');
   }
 }
 
@@ -147,7 +154,7 @@ export class JsonRepository<T extends { id: string }> {
   }
 }
 
-export const setupsRepo = new JsonRepository<Setup>('setups', () => ({ description: null }) as Partial<Setup>);
+export const setupsRepo = new JsonRepository<Setup>('setups', () => ({ description: null, checklistState: null }) as Partial<Setup>);
 
 export const devicesRepo = new JsonRepository<Device>(
   'devices',
