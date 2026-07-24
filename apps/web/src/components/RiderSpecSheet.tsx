@@ -115,7 +115,7 @@ function RiderImageBanner({ device }: { device: GraphDevice }) {
  *  panel the editable form (DeviceForm, below it) already occupies. */
 export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
   const [open, setOpen] = useState(true);
-  const { manufacturer, model, controls, footswitch, algorithms } = readRiderAttrs(device.attrs);
+  const { manufacturer, model, color, controls, footswitch, algorithms } = readRiderAttrs(device.attrs);
   const powerLine = formatPower(device.power);
   const hasPedalFacts =
     device.pedal &&
@@ -137,9 +137,15 @@ export default function RiderSpecSheet({ device }: { device: GraphDevice }) {
       <Disclosure.Content>
         <div className="flex flex-col gap-3 pb-3 text-xs">
           <RiderImageBanner device={device} />
-          {(manufacturer || model) && (
-            <div className="text-default-500">
-              {[manufacturer, model].filter(Boolean).join(' — ')}
+          {(manufacturer || model || color) && (
+            <div className="flex items-center gap-1.5 text-default-500">
+              <span>{[manufacturer, model].filter(Boolean).join(' — ')}</span>
+              {color && (
+                <span className="flex items-center gap-1 shrink-0">
+                  <span className="h-3 w-3 rounded-full border border-default-300" style={{ backgroundColor: color }} />
+                  {color}
+                </span>
+              )}
             </div>
           )}
 

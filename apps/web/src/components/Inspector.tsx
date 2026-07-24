@@ -152,6 +152,16 @@ function DeviceForm({
     }
   };
 
+  const colorAttr = typeof form.attrs.color === 'string' ? form.attrs.color : '';
+  const commitColor = (value: string) => {
+    const nextAttrs = { ...form.attrs };
+    if (value) nextAttrs.color = value;
+    else delete nextAttrs.color;
+    setForm((f) => ({ ...f, attrs: nextAttrs }));
+    setAttrsText(JSON.stringify(nextAttrs, null, 2));
+    save.mutate({ attrs: nextAttrs });
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <TextField>
@@ -168,6 +178,20 @@ function DeviceForm({
           onBlur={() => commitField('ownerRole', form.ownerRole || undefined)}
           placeholder="Андрей / Даня-вокал / Даня-барабанщик…"
         />
+      </TextField>
+      <TextField>
+        <Label>Цвет</Label>
+        <div className="flex items-center gap-2">
+          <Input
+            value={colorAttr}
+            onChange={(e) => setForm((f) => ({ ...f, attrs: { ...f.attrs, color: e.target.value } }))}
+            onBlur={() => commitColor(colorAttr)}
+            placeholder="напр. Imperial Blue"
+          />
+          {colorAttr && (
+            <span className="h-6 w-6 shrink-0 rounded-full border border-default-300" style={{ backgroundColor: colorAttr }} title={colorAttr} />
+          )}
+        </div>
       </TextField>
 
       <Section title="Питание" icon={Zap}>
@@ -406,6 +430,14 @@ function CableForm({ cable, setupId, graph }: { cable: GraphCable; setupId: stri
         </div>
       </div>
       {enumSelect(Object.values(CableType), cable.cableType, (v) => save.mutate({ cableType: v }), 'Тип кабеля')}
+      <TextField>
+        <Label>Марка / модель (опционально)</Label>
+        <Input
+          defaultValue={cable.productName ?? ''}
+          placeholder="напр. Fender Professional Series Tweed Instrument Cable"
+          onBlur={(e) => save.mutate({ productName: e.target.value || null })}
+        />
+      </TextField>
       <TextField>
         <Label>Длина, м</Label>
         <Input type="number" step="0.1" defaultValue={cable.length} onBlur={(e) => save.mutate({ length: Number(e.target.value) })} />

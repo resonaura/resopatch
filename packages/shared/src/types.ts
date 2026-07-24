@@ -97,6 +97,10 @@ export interface CableDto {
   adapterId: string | null;
   isUserOwned: boolean;
   color: string | null;
+  /** Brand/model of the physical cable product (e.g. "Fender Professional Series Tweed
+   *  Instrument Cable", "AZOR Guitar Patch Cable 6-Pack") — distinct from `length`/`color`,
+   *  which stay their own fields per the no-length-in-title naming convention. */
+  productName: string | null;
   isPatchCable: boolean;
   /** A plain reference photo of the cable (what it looks like) — distinct from the texture fields
    *  below, which are used to render the repeating pattern along the wire's path on the canvas. */

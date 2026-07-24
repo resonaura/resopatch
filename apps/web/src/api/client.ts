@@ -77,8 +77,9 @@ export const api = {
   listSetups: () => request<SetupDto[]>('/setups'),
   createSetup: (dto: CreateSetupDto) => request<SetupDto>('/setups', { method: 'POST', body: JSON.stringify(dto) }),
   getGraph: (setupId: string) => request<GraphResponse>(`/setups/${setupId}/graph`),
-  getInputList: (setupId: string) => request<InputListRow[]>(`/setups/${setupId}/input-list`),
-  getRider: (setupId: string) => request<RiderRow[]>(`/setups/${setupId}/rider`),
+  getInputList: (setupId: string, hasKeys = true) =>
+    request<InputListRow[]>(`/setups/${setupId}/input-list?hasKeys=${hasKeys}`),
+  getRider: (setupId: string, hasKeys = true) => request<RiderRow[]>(`/setups/${setupId}/rider?hasKeys=${hasKeys}`),
   autoLayout: (setupId: string, sizes: Record<string, { width: number; height: number }>) =>
     request<{ updated: number }>(`/setups/${setupId}/auto-layout`, { method: 'POST', body: JSON.stringify({ sizes }) }),
 

@@ -89,9 +89,11 @@ export class SetupsService {
     return { updated: positions.size };
   }
 
-  /** Derived input list (Table 6): one row per cable feeding a STAGE_BOX device. */
-  async getInputList(setupId: string): Promise<InputListRow[]> {
-    const devices = await devicesRepo.find({ where: { setupId } });
+  /** Derived input list (Table 6): one row per cable feeding a STAGE_BOX device.
+   *  When `hasKeys` is false, devices/accessories flagged `attrs.isKeysOnly` (and anything wired
+   *  only through them) are excluded — same convention the canvas's setup-mode switcher uses. */
+  async getInputList(setupId: string, hasKeys = true): Promise<InputListRow[]> {
+    const devices = (await devicesRepo.find({ where: { setupId } })).filter((d) => hasKeys || !d.attrs?.isKeysOnly);
     const deviceById = new Map(devices.map((d) => [d.id, d]));
     const deviceIds = devices.map((d) => d.id);
     const ports = deviceIds.length ? await portsRepo.find({ where: { deviceId: In(deviceIds) } }) : [];
@@ -132,9 +134,11 @@ export class SetupsService {
       });
   }
 
-  /** Derived packing/rider checklist (Table 7): cables, adapters, furniture and power needs grouped by ownership. */
-  async getRider(setupId: string): Promise<RiderRow[]> {
-    const devices = await devicesRepo.find({ where: { setupId } });
+  /** Derived packing/rider checklist (Table 7): cables, adapters, furniture and power needs grouped by ownership.
+   *  When `hasKeys` is false, devices/accessories flagged `attrs.isKeysOnly` are excluded — same
+   *  convention the canvas's setup-mode switcher uses. */
+  async getRider(setupId: string, hasKeys = true): Promise<RiderRow[]> {
+    const devices = (await devicesRepo.find({ where: { setupId } })).filter((d) => hasKeys || !d.attrs?.isKeysOnly);
     const deviceIds = devices.map((d) => d.id);
     const furniture = deviceIds.length ? await furnitureRepo.find({ where: { deviceId: In(deviceIds) } }) : [];
     const furnitureByDevice = new Map(furniture.map((f) => [f.deviceId, f]));

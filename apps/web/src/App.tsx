@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Toast } from '@heroui/react';
+import { Spinner, Toast } from '@heroui/react';
 import { ApiError, api } from './api/client';
 import Login from './pages/Login';
 import Constructor from './pages/Constructor';
@@ -14,7 +14,15 @@ function CenterScreen({ children }: { children: React.ReactNode }) {
 
 function Gate() {
   const qc = useQueryClient();
-  const setups = useQuery({ queryKey: ['setups'], queryFn: api.listSetups });
+  const setups = useQuery({
+    queryKey: ['setups'],
+    queryFn: api.listSetups,
+    // A 401 means "show the login screen", not a connectivity problem — don't retry that.
+    // Anything else (server not up yet, network hiccup, etc.) retries forever with backoff,
+    // since there's no useful error state to show the user here beyond "still connecting".
+    retry: (_failureCount, error) => !(error instanceof ApiError && error.status === 401),
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+  });
 
   const needsLogin = setups.isError && setups.error instanceof ApiError && setups.error.status === 401;
 
@@ -22,12 +30,12 @@ function Gate() {
     return <Login onSuccess={() => qc.invalidateQueries({ queryKey: ['setups'] })} />;
   }
 
-  if (setups.isLoading) {
-    return <CenterScreen>Загрузка…</CenterScreen>;
-  }
-
-  if (setups.isError) {
-    return <CenterScreen>Ошибка: {(setups.error as Error).message}</CenterScreen>;
+  if (!setups.data) {
+    return (
+      <CenterScreen>
+        <Spinner size="lg" />
+      </CenterScreen>
+    );
   }
 
   const list = setups.data ?? [];

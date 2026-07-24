@@ -178,6 +178,10 @@ export default function PatchCanvas({
   }, [nodes, onGetMeasuredSizes]);
 
   const [routes, setRoutes] = useState<Map<string, Point[]>>(new Map());
+  // Cheap straight-line approximation for whichever edges touch the node currently being
+  // dragged — recomputed every drag frame, but ONLY for those edges, so a drag never pays for
+  // full obstacle-avoiding A* over the whole graph. Cleared on drop, once `routes` is refreshed.
+  const [liveDragRoutes, setLiveDragRoutes] = useState<Map<string, Point[]>>(new Map());
   const [routeVersion, setRouteVersion] = useState(0);
   const routeRafRef = useRef<number | null>(null);
   const requestRouteRecompute = useCallback(() => {
@@ -196,7 +200,10 @@ export default function PatchCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialNodes, initialEdges]);
 
-  const renderEdges = useMemo(() => edges.map((e) => ({ ...e, data: { ...(e.data ?? {}), points: routes.get(e.id) } })), [edges, routes]);
+  const renderEdges = useMemo(
+    () => edges.map((e) => ({ ...e, data: { ...(e.data ?? {}), points: liveDragRoutes.get(e.id) ?? routes.get(e.id) } })),
+    [edges, routes, liveDragRoutes],
+  );
 
   // Throttle lightweight cable position updates during drag to stay at 60 FPS,
   // leaving full A* obstacle-avoidance routing for onNodeDragStop.
@@ -205,15 +212,43 @@ export default function PatchCanvas({
     isDraggingRef.current = true;
   }, []);
 
-  const handleNodeDrag = useCallback(() => {
-    // During active drag, do not trigger heavy A* pathfinding.
-    // ReactFlow updates node positions smoothly on screen.
-  }, []);
+  const handleNodeDrag = useCallback(
+    (_: unknown, node: Node) => {
+      // Only the edges attached to the node being dragged need to move this frame — everything
+      // else keeps its last-computed (obstacle-avoiding) path untouched until drop.
+      const touching = edges.filter((e) => e.source === node.id || e.target === node.id);
+      if (touching.length === 0) return;
+
+      const nodeById = new Map(nodes.map((n) => [n.id, n]));
+      nodeById.set(node.id, node); // live position for the node actually being dragged
+
+      const next = new Map<string, Point[]>();
+      for (const e of touching) {
+        const s = nodeById.get(e.source);
+        const t = nodeById.get(e.target);
+        if (!s || !t) continue;
+        const sw = s.measured?.width ?? s.width ?? 240;
+        const sh = s.measured?.height ?? s.height ?? 100;
+        const tw = t.measured?.width ?? t.width ?? 240;
+        const th = t.measured?.height ?? t.height ?? 100;
+        const sCenter = { x: s.position.x + sw / 2, y: s.position.y + sh / 2 };
+        const tCenter = { x: t.position.x + tw / 2, y: t.position.y + th / 2 };
+        const sOnRight = sCenter.x <= tCenter.x;
+        next.set(e.id, [
+          { x: s.position.x + (sOnRight ? sw : 0), y: sCenter.y },
+          { x: t.position.x + (sOnRight ? 0 : tw), y: tCenter.y },
+        ]);
+      }
+      setLiveDragRoutes(next);
+    },
+    [edges, nodes],
+  );
 
   const handleNodeDragStop = useCallback(
     (_: unknown, node: Node) => {
       isDraggingRef.current = false;
       onNodeMoved(node.id, { x: node.position.x, y: node.position.y });
+      setLiveDragRoutes(new Map());
       requestRouteRecompute();
     },
     [onNodeMoved, requestRouteRecompute],

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards, UsePipes } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards, UsePipes } from '@nestjs/common';
 import { autoLayoutSchema, createSetupSchema, updateSetupSchema } from '@resopatch/shared';
 import { AuthGuard } from '../auth/auth.guard.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
@@ -25,13 +25,13 @@ export class SetupsController {
   }
 
   @Get(':id/input-list')
-  getInputList(@Param('id') id: string) {
-    return this.setupsService.getInputList(id);
+  getInputList(@Param('id') id: string, @Query('hasKeys') hasKeys?: string) {
+    return this.setupsService.getInputList(id, hasKeys !== 'false');
   }
 
   @Get(':id/rider')
-  getRider(@Param('id') id: string) {
-    return this.setupsService.getRider(id);
+  getRider(@Param('id') id: string, @Query('hasKeys') hasKeys?: string) {
+    return this.setupsService.getRider(id, hasKeys !== 'false');
   }
 
   @Post(':id/auto-layout')

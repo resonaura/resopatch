@@ -203,6 +203,7 @@ export const cablesRepo = new JsonRepository<Cable>(
       adapterId: null,
       isUserOwned: true,
       color: null,
+      productName: null,
       isPatchCable: false,
       imageUrl: null,
       textureStartUrl: null,

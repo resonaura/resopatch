@@ -5,6 +5,8 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Layers } from 'lucid
 import { DeviceType, InventoryStatus, PortDirection } from '@resopatch/shared';
 import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
+import { getDisplayName } from '../lib/deviceNaming';
+import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
 import { ProgressiveImage } from '../lib/img';
 import { portChannelColor } from '../lib/portChannel';
 import { PortTypeIcon } from '../lib/portIcons';
@@ -264,14 +266,24 @@ function PortsSection({
  *  Storage images (relative paths into the API image store) are fetched through the
  *  /img/ optimisation endpoint at 64 px so the browser doesn't download a full-res
  *  photo just to render a 16 × 16 square. */
-function DeviceThumb({ device, className }: { device: Pick<GraphDevice, 'imageUrl' | 'type'>; className: string }) {
+function DeviceThumb({
+  device,
+  className,
+  dimFallback,
+}: {
+  device: Pick<GraphDevice, 'imageUrl' | 'type'>;
+  className: string;
+  /** Applies the unified fallback-icon presentation (32×32, 50% opacity) instead of the caller's
+   *  own size — used for accessory rows, where a missing photo shouldn't look like a real photo. */
+  dimFallback?: boolean;
+}) {
   if (device.imageUrl) {
     const thumbSrc = isStorageImage(device.imageUrl)
       ? `/img/${device.imageUrl}?w=128`
       : device.imageUrl;
     return <img src={thumbSrc} alt="" className={`shrink-0 aspect-square rounded object-contain object-center bg-black/20 p-0.5 ${className}`} />;
   }
-  return <DeviceTypeIcon type={device.type} className={`shrink-0 aspect-square text-default-500 ${className}`} />;
+  return <DeviceTypeIcon type={device.type} className={`shrink-0 aspect-square text-default-500 ${dimFallback ? FALLBACK_ICON_CLASS : className}`} />;
 }
 
 function DeviceNodeImpl({ data, selected }: NodeProps) {
@@ -282,6 +294,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
   const portedChildren = children.filter((c) => c.ports.length > 0);
   const plainChildren = children.filter((c) => c.ports.length === 0);
   const isContainer = portedChildren.length > 0;
+  const [boundaryOpen, setBoundaryOpen] = useState(false);
 
   return (
     <div
@@ -298,7 +311,7 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
         {/* Hide the small thumb when there is already a full-width banner above */}
         {!device.imageUrl && <DeviceThumb device={device} className="h-6 w-6" />}
         <span className="truncate font-semibold text-foreground" title={device.type}>
-          {device.name}
+          {getDisplayName(device)}
         </span>
       </div>
       <div className="flex items-center gap-1 px-2.5 pb-1.5 pt-1">
@@ -312,9 +325,18 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
         <>
           {boundaryPorts.length > 0 && (
             <div className="border-t border-default-200">
-              {boundaryPorts.map((b) => (
-                <PortRow key={b.port.id} port={b.port} subtitle={b.deviceName} />
-              ))}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBoundaryOpen((v) => !v);
+                }}
+                className="flex w-full items-center justify-center gap-1 py-1 text-[9.5px] font-medium text-default-500 hover:bg-white/5 hover:text-foreground transition-colors"
+              >
+                {boundaryOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                Внешние подключения ({boundaryPorts.length})
+              </button>
+              {boundaryOpen &&
+                boundaryPorts.map((b) => <PortRow key={b.port.id} port={b.port} subtitle={b.deviceName} />)}
             </div>
           )}
           <div className="border-t border-default-200 p-1.5">
@@ -345,8 +367,8 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
                 className="flex items-center gap-2 rounded p-1 text-left hover:bg-white/10"
                 title={child.notes ?? child.name}
               >
-                <DeviceThumb device={child} className="h-8 w-8" />
-                <span className="truncate text-xs font-medium text-foreground/90">{child.name}</span>
+                <DeviceThumb device={child} className="h-8 w-8" dimFallback />
+                <span className="truncate text-xs font-medium text-foreground/90">{getDisplayName(child)}</span>
               </button>
             ))}
           </div>

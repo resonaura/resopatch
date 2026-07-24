@@ -100,6 +100,7 @@ export const createCableSchema = z.object({
   adapterId: z.string().optional(),
   isUserOwned: z.boolean().default(true),
   color: z.string().optional(),
+  productName: z.string().nullable().optional(),
   isPatchCable: z.boolean().default(false),
   imageUrl: z.string().nullable().optional(),
   textureStartUrl: z.string().nullable().optional(),

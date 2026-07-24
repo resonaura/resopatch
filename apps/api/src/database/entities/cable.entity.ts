@@ -43,6 +43,11 @@ export class Cable {
   @Column({ type: 'varchar', nullable: true })
   color: string | null;
 
+  /** Brand/model of the physical cable product, e.g. "Fender Professional Series Tweed
+   *  Instrument Cable" — kept separate from `length`/`color` per the naming convention. */
+  @Column({ type: 'varchar', nullable: true })
+  productName: string | null;
+
   @Column({ type: 'boolean', default: false })
   isPatchCable: boolean;
 

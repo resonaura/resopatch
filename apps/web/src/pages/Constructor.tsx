@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Connection, Edge, Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Table, Tabs } from "@heroui/react";
+import { Button, Spinner, Table, Tabs } from "@heroui/react";
 import {
+  Cable as CableIcon,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
@@ -30,6 +31,7 @@ import NewCableModal from "../components/NewCableModal";
 import SettingsModal from "../components/SettingsModal";
 import ContainerInsideModal from "../components/ContainerInsideModal";
 import StaffChecklist from "../components/StaffChecklist";
+import CableListView from "../components/CableListView";
 import { splitMainCanvasGraph } from "../lib/containerGraph";
 
 export default function Constructor({
@@ -43,6 +45,10 @@ export default function Constructor({
   const graphQuery = useQuery({
     queryKey: ["graph", setupId],
     queryFn: () => api.getGraph(setupId),
+    // Keep retrying indefinitely on connectivity failures during initial load, instead of
+    // surfacing a raw "Failed to fetch" — see graphQuery.isLoading/!graph branch below.
+    retry: true,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
   const graph = graphQuery.data;
 
@@ -55,7 +61,7 @@ export default function Constructor({
   const [pendingConnection, setPendingConnection] = useState<Connection | null>(
     null,
   );
-  const [view, setView] = useState<"canvas" | "input-list" | "rider" | "checklist">("canvas");
+  const [view, setView] = useState<"canvas" | "input-list" | "rider" | "checklist" | "cables">("canvas");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [insideContainerId, setInsideContainerId] = useState<string | null>(null);
@@ -251,16 +257,10 @@ export default function Constructor({
     setPendingConnection(connection);
   }, []);
 
-  if (graphQuery.isLoading)
+  if (!graph || !activeGraph)
     return (
-      <div className="flex h-full items-center justify-center text-default-500">
-        Загрузка сетапа…
-      </div>
-    );
-  if (graphQuery.isError || !graph || !activeGraph)
-    return (
-      <div className="flex h-full items-center justify-center text-default-500">
-        Не удалось загрузить сетап.
+      <div className="flex h-full items-center justify-center">
+        <Spinner size="lg" />
       </div>
     );
 
@@ -328,40 +328,29 @@ export default function Constructor({
           >
             <Tabs.ListContainer>
               <Tabs.List aria-label="Вид">
-                <Tabs.Tab id="canvas">
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  Схема
+                <Tabs.Tab id="canvas" aria-label="Схема">
+                  <span title="Схема"><LayoutGrid className="h-3.5 w-3.5" /></span>
                 </Tabs.Tab>
-                <Tabs.Tab id="input-list">
+                <Tabs.Tab id="input-list" aria-label="Input List">
                   <Tabs.Separator />
-                  <ListMusic className="h-3.5 w-3.5" />
-                  Input List
+                  <span title="Input List"><ListMusic className="h-3.5 w-3.5" /></span>
                 </Tabs.Tab>
-                <Tabs.Tab id="rider">
+                <Tabs.Tab id="rider" aria-label="Райдер">
                   <Tabs.Separator />
-                  <ClipboardList className="h-3.5 w-3.5" />
-                  Райдер
+                  <span title="Райдер"><ClipboardList className="h-3.5 w-3.5" /></span>
                 </Tabs.Tab>
-                <Tabs.Tab id="checklist">
+                <Tabs.Tab id="checklist" aria-label="Чеклист стаффа">
                   <Tabs.Separator />
-                  <CheckSquare className="h-3.5 w-3.5" />
-                  Чеклист стаффа
+                  <span title="Чеклист стаффа"><CheckSquare className="h-3.5 w-3.5" /></span>
+                </Tabs.Tab>
+                <Tabs.Tab id="cables" aria-label="Кабели">
+                  <Tabs.Separator />
+                  <span title="Кабели"><CableIcon className="h-3.5 w-3.5" /></span>
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>
           </Tabs>
 
-          {view === "canvas" && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onPress={runAutoLayout}
-              isPending={autoLayout.isPending}
-            >
-              <Wand2 className="h-3.5 w-3.5" />
-              Упорядочить
-            </Button>
-          )}
           <span title="Настройки">
             <Button size="sm" variant="ghost" onPress={() => setShowSettings(true)}>
               <Settings className="h-3.5 w-3.5" />
@@ -387,8 +376,10 @@ export default function Constructor({
         >
           <Sidebar
             devices={graph.devices}
-            selectedId={selection?.kind === "device" ? selection.id : null}
+            cables={graph.cables}
+            selectedId={selection?.id ?? null}
             onSelect={(id) => setSelection({ kind: "device", id })}
+            onSelectCable={(id) => setSelection({ kind: "cable", id })}
             onNewDevice={() => {
               setNewDeviceParentId(null);
               setShowNewDevice(true);
@@ -425,9 +416,28 @@ export default function Constructor({
               }}
             />
           )}
-          {view === "input-list" && <InputListTable setupId={setupId} devices={graph.devices} />}
-          {view === "rider" && <RiderTable setupId={setupId} devices={graph.devices} />}
-          {view === "checklist" && <StaffChecklist devices={graph.devices} cables={graph.cables} setupId={setupId} />}
+          {view === "canvas" && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onPress={runAutoLayout}
+              isPending={autoLayout.isPending}
+              className="absolute bottom-3 right-3 z-10 shadow-lg"
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              Упорядочить
+            </Button>
+          )}
+          {view === "input-list" && (
+            <InputListTable setupId={setupId} devices={activeGraph.devices} hasKeys={setupMode === "with-keys"} />
+          )}
+          {view === "rider" && (
+            <RiderTable setupId={setupId} devices={activeGraph.devices} hasKeys={setupMode === "with-keys"} />
+          )}
+          {view === "checklist" && (
+            <StaffChecklist devices={activeGraph.devices} cables={activeGraph.cables} setupId={setupId} />
+          )}
+          {view === "cables" && <CableListView devices={graph.devices} cables={graph.cables} />}
         </div>
 
         <button
@@ -480,6 +490,8 @@ export default function Constructor({
           }}
           onConnect={onConnect}
           onNodeMoved={(id, position) => movePosition.mutate({ id, position })}
+          onRunAutoLayout={runAutoLayout}
+          isAutoLayoutPending={autoLayout.isPending}
         />
       )}
       {pendingConnection &&
@@ -517,20 +529,20 @@ function DevicePhotoCell({ name, devices }: { name: string; devices?: GraphDevic
   return <span className="font-medium">{name}</span>;
 }
 
-function InputListTable({ setupId, devices }: { setupId: string; devices?: GraphDevice[] }) {
+function InputListTable({ setupId, devices, hasKeys }: { setupId: string; devices?: GraphDevice[]; hasKeys: boolean }) {
   const query = useQuery({
-    queryKey: ["input-list", setupId],
-    queryFn: () => api.getInputList(setupId),
+    queryKey: ["input-list", setupId, hasKeys],
+    queryFn: () => api.getInputList(setupId, hasKeys),
   });
   if (query.isLoading)
     return (
-      <div className="overflow-auto p-4 text-sm text-default-500">
+      <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
         Загрузка…
       </div>
     );
   if (query.isError || !query.data)
     return (
-      <div className="overflow-auto p-4 text-sm text-default-500">
+      <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
         Ошибка загрузки.
       </div>
     );
@@ -545,7 +557,7 @@ function InputListTable({ setupId, devices }: { setupId: string; devices?: Graph
   ];
 
   return (
-    <div className="min-h-0 overflow-auto p-4">
+    <div className="h-full min-h-0 overflow-auto p-4">
       <Table>
         <Table.ScrollContainer>
           <Table.Content aria-label="Input list">
@@ -575,20 +587,20 @@ function InputListTable({ setupId, devices }: { setupId: string; devices?: Graph
   );
 }
 
-function RiderTable({ setupId, devices }: { setupId: string; devices?: GraphDevice[] }) {
+function RiderTable({ setupId, devices, hasKeys }: { setupId: string; devices?: GraphDevice[]; hasKeys: boolean }) {
   const query = useQuery({
-    queryKey: ["rider", setupId],
-    queryFn: () => api.getRider(setupId),
+    queryKey: ["rider", setupId, hasKeys],
+    queryFn: () => api.getRider(setupId, hasKeys),
   });
   if (query.isLoading)
     return (
-      <div className="overflow-auto p-4 text-sm text-default-500">
+      <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
         Загрузка…
       </div>
     );
   if (query.isError || !query.data)
     return (
-      <div className="overflow-auto p-4 text-sm text-default-500">
+      <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
         Ошибка загрузки.
       </div>
     );
@@ -596,7 +608,7 @@ function RiderTable({ setupId, devices }: { setupId: string; devices?: GraphDevi
   const venueRows = query.data.filter((r) => !r.isUserOwned);
 
   return (
-    <div className="min-h-0 overflow-auto p-4">
+    <div className="h-full min-h-0 overflow-auto p-4">
       <Table>
         <Table.ScrollContainer>
           <Table.Content aria-label="Rider">

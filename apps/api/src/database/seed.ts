@@ -126,7 +126,7 @@ async function main() {
     outputType: PortType.USB_B,
   });
   const adapterTrs14to18 = await mkAdapter({
-    name: 'Переходник TRS 1/4" → TRS 1/8" (мини-джек)',
+    name: 'ANDTOBO 1/4" Male to 1/8" Female Stereo Audio Jack Adapter (Black, non-threaded)',
     inputType: PortType.TRS_14,
     outputType: PortType.TRS_18,
   });
@@ -243,7 +243,7 @@ async function main() {
       await mkPort(anker2, { name: `Розетка ${i}`, portType: PortType.POWER_SCHUKO, direction: PortDirection.OUT, power: { currentType: CurrentType.AC } }),
     );
   }
-  const anker2UsbA1 = await mkPort(anker2, { name: 'USB-A #1 (резерв — план: микшер Дани-вокала)', portType: PortType.USB_A, direction: PortDirection.OUT, power: { maxOutputPowerW: 12 } });
+  const anker2UsbA1 = await mkPort(anker2, { name: 'USB-A #1 (резерв)', portType: PortType.USB_A, direction: PortDirection.OUT, power: { maxOutputPowerW: 12 } });
   await mkPort(anker2, { name: 'USB-A #2', portType: PortType.USB_A, direction: PortDirection.OUT, power: { maxOutputPowerW: 12 } });
   await mkPort(anker2, { name: 'USB-C (PD)', portType: PortType.USB_C, direction: PortDirection.OUT, power: { maxOutputPowerW: 20 } });
 
@@ -261,14 +261,14 @@ async function main() {
   // pedals were itemized) — the guitar cables straight into the first pedal and the last pedal's
   // stereo out cables straight into UMC404HD, same as ISO-12 Pro's own ports already did.
   const pedalboard = await mkDevice({
-    name: 'Педалборд Harley Benton SpaceShip',
+    name: 'Педалборд Harley Benton SpaceShip 60XL',
     type: DeviceType.PEDALBOARD,
     ownerRole: 'Андрей',
     position: { x: -700, y: 0 },
     powerRequired: true,
     powerSourceType: PowerSourceType.DC_BARREL,
-    attrs: { model: 'SpaceShip (точный размер 40/50M/60/60XL не уточнён)', originalMisnomer: 'Starship' },
-    notes: 'Состав педалей — см. дочерние устройства ниже, в порядке сигнальной цепи.',
+    attrs: { manufacturer: 'Harley Benton', model: 'SpaceShip 60XL' },
+    notes: 'Состав педалей — см. дочерние устройства ниже, в порядке сигнальной цепи. Велкро включено в комплект поставки.',
   });
 
   // Physically straps to the underside of the pedalboard and travels as one unit with it — part
@@ -284,7 +284,9 @@ async function main() {
     powerSourceType: PowerSourceType.AC_MAINS,
     power: { maxOutputPowerW: 27 },
     imageUrl: 'andrii-pedalboard-power.png',
-    notes: 'Изолированный мультиблок питания педалборда Андрея. Глобальный лимит 27W суммарно на все выходы. Крепится к педалборду — физически единое целое с ним.',
+    attrs: { manufacturer: 'Harley Benton', model: 'PowerPlant ISO-12 Pro' },
+    notes:
+      'Изолированный мультиблок питания педалборда Андрея. Глобальный лимит 27W суммарно на все выходы. Крепится к педалборду — физически единое целое с ним. Кабели питания входят в комплект поставки блока — докупать не нужно.',
   });
   const iso12ProIn = await mkPort(iso12pro, { name: 'Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN, power: { currentType: CurrentType.AC } });
   const iso12Pro9vGroup = await mkPort(iso12pro, {
@@ -303,12 +305,12 @@ async function main() {
   await mkCable({ sourcePortId: anker1SchukoOuts[0].id, targetPortId: iso12ProIn.id, cableType: CableType.POWER_LINE, length: 1 });
 
   const andreyGuitar = await mkDevice({
-    name: 'Гитара Андрея',
+    name: 'Squier Bullet Mustang HH',
     type: DeviceType.INSTRUMENT,
     ownerRole: 'Андрей',
     position: { x: -900, y: 0 },
     imageUrl: 'guitar-andrii.webp',
-    attrs: { kind: 'guitar' },
+    attrs: { kind: 'guitar', manufacturer: 'Squier', model: 'Bullet Mustang HH', color: 'Imperial Blue' },
   });
   const andreyGuitarOut = await mkPort(andreyGuitar, { name: 'Jack Out', portType: PortType.TS_14, direction: PortDirection.OUT });
 
@@ -332,12 +334,12 @@ async function main() {
   });
 
   const andreyBass = await mkDevice({
-    name: 'Бас-гитара Андрея',
+    name: 'Harley Benton JB-75MN SB Vintage Series',
     type: DeviceType.INSTRUMENT,
     ownerRole: 'Андрей',
     position: { x: -1100, y: 150 },
     imageUrl: 'andrii-bass.png',
-    attrs: { kind: 'bass' },
+    attrs: { kind: 'bass', manufacturer: 'Harley Benton', model: 'JB-75MN SB Vintage Series', color: 'Sunburst' },
     notes: 'Используется на некоторых песнях вместо гитары — подключается напрямую в басовый комбик площадки.',
   });
   const andreyBassOut = await mkPort(andreyBass, { name: 'Jack Out', portType: PortType.TS_14, direction: PortDirection.OUT });
@@ -359,13 +361,16 @@ async function main() {
     ownerRole: 'Андрей',
     parentDeviceId: pedalboard.id,
     position: { x: -700, y: 100 },
+    notes: 'Идёт в комплекте поставки педалборда Harley Benton SpaceShip 60XL — докупать не нужно.',
   });
   await mkDevice({
-    name: 'Патч-кабели педалборда (комплект)',
+    name: 'Патч-кабели педалборда (запасной комплект)',
     type: DeviceType.ACCESSORY,
     ownerRole: 'Андрей',
     parentDeviceId: pedalboard.id,
     position: { x: -650, y: 100 },
+    attrs: { manufacturer: 'AZOR', model: 'Guitar Patch Cable 1/4 Inch 6-Pack Right Angle, 4 Inch (Multicolored)' },
+    notes: 'Запасная упаковка патч-кабелей — 12 коротких + 1 длинный (Cordial) уже подключены как рёбра графа между педалями; это физический запасной комплект.',
   });
   await mkFurniture({ deviceId: pedalboard.id, kind: FurnitureKind.PEDALBOARD_CASE, isVenueProvided: false });
   await mkFurniture({ deviceId: andreyGuitar.id, kind: FurnitureKind.GUITAR_STAND, isVenueProvided: false });
@@ -726,18 +731,39 @@ async function main() {
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 300, polarity: Polarity.CENTER_NEGATIVE },
   });
 
-  await mkCable({ sourcePortId: andreyGuitarOut.id, targetPortId: yellowCompIn.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.3, color: 'red' });
+  // Andrey's patch cable kit: 12 short (AZOR 6-pack — buy two) + 1 long (Cordial Essentials,
+  // crosses from board row 2 to row 3) — see docs/stage-setup.md and Task #23 hardware catalog.
+  // Exact row-crossing connection is a provisional pick (real board layout / wire specs TBD).
+  const AZOR_PATCH_CABLE = 'AZOR Guitar Patch Cable 1/4 Inch 6-Pack Right Angle, 4 Inch Instrument Cables for Guitar Bass Effect Pedals (Multicolored)';
+  const CORDIAL_LONG_PATCH_CABLE = 'Cordial Essentials 6.35mm TRS Balanced Cable – 1.5m CMN 220';
+
+  await mkCable({
+    sourcePortId: andreyGuitarOut.id,
+    targetPortId: yellowCompIn.id,
+    cableType: CableType.AUDIO_UNBALANCED,
+    length: 3,
+    color: 'red',
+    productName: 'Fender Professional Series Tweed Instrument Cable',
+  });
   const pedalChain: { out: Port; in: Port }[] = [
     { out: yellowCompOut, in: cs400In },
     { out: cs400Out, in: to800In },
     { out: to800Out, in: grungeIn },
     { out: grungeAmpOut, in: fs06In },
     { out: fs06Out, in: fc14In },
-    { out: fc14Out, in: jetEngineIn },
+    { out: fc14Out, in: jetEngineIn }, // provisional: the one cable crossing board row 2 → row 3
     { out: jetEngineOut, in: fs05InL },
   ];
-  for (const link of pedalChain) {
-    await mkCable({ sourcePortId: link.out.id, targetPortId: link.in.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.2, isPatchCable: true });
+  for (const [i, link] of pedalChain.entries()) {
+    const isLongCrossRow = i === 5;
+    await mkCable({
+      sourcePortId: link.out.id,
+      targetPortId: link.in.id,
+      cableType: CableType.AUDIO_UNBALANCED,
+      length: isLongCrossRow ? 1.5 : 0.1,
+      isPatchCable: true,
+      productName: isLongCrossRow ? CORDIAL_LONG_PATCH_CABLE : AZOR_PATCH_CABLE,
+    });
   }
   const stereoPedalChain: { outL: Port; outR: Port; inL: Port; inR: Port }[] = [
     { outL: fs05OutL, outR: fs05OutR, inL: dseed2InL, inR: dseed2InR },
@@ -745,8 +771,8 @@ async function main() {
     { outL: fs02OutL, outR: fs02OutR, inL: fs07InL, inR: fs07InR },
   ];
   for (const link of stereoPedalChain) {
-    await mkCable({ sourcePortId: link.outL.id, targetPortId: link.inL.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.2, isPatchCable: true });
-    await mkCable({ sourcePortId: link.outR.id, targetPortId: link.inR.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.2, isPatchCable: true });
+    await mkCable({ sourcePortId: link.outL.id, targetPortId: link.inL.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.1, isPatchCable: true, productName: AZOR_PATCH_CABLE });
+    await mkCable({ sourcePortId: link.outR.id, targetPortId: link.inR.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.1, isPatchCable: true, productName: AZOR_PATCH_CABLE });
   }
 
   for (const powerIn of [yellowCompPower, cs400Power, to800Power, grungePower, fs06Power, fc14Power, jetEnginePower, fs05Power, dseed2Power, fs02Power, fs07Power]) {
@@ -846,14 +872,27 @@ async function main() {
   await mkCable({ sourcePortId: mx400Out.id, targetPortId: palmerInCombo.id, cableType: CableType.AUDIO_UNBALANCED, length: 0.5 });
 
   const andreyHeadphones = await mkDevice({
-    name: 'Наушники Андрея (личный мониторинг)',
+    name: 'Audio-Technica ATH-PRO5XWH',
     type: DeviceType.MONITOR,
     ownerRole: 'Андрей',
     position: { x: -500, y: 550 },
     imageUrl: 'andrii-headphones.webp',
+    attrs: {
+      manufacturer: 'Audio-Technica',
+      model: 'ATH-PRO5XWH Professional Closed-Back Dynamic Over-Ear DJ Monitor Headphones',
+      color: 'White',
+    },
   });
   const andreyHeadphonesIn = await mkPort(andreyHeadphones, { name: 'In', portType: PortType.TRS_18, direction: PortDirection.IN });
   await mkCable({ sourcePortId: palmerOutMini.id, targetPortId: andreyHeadphonesIn.id, cableType: CableType.AUDIO_UNBALANCED, length: 3 });
+  await mkDevice({
+    name: 'Переходник 1/4" TRS → 1/8" (навинчивающийся)',
+    type: DeviceType.ACCESSORY,
+    ownerRole: 'Андрей',
+    parentDeviceId: andreyHeadphones.id,
+    position: { x: -500, y: 600 },
+    notes: 'Резьбовой (screw-on) переходник TRS 1/4" → 1/8" для наушников Андрея.',
+  });
 
   const govee = await mkDevice({
     name: 'Govee RGBIC Smart Table Lamp 2',
@@ -920,28 +959,24 @@ async function main() {
   await mkCable({ sourcePortId: anker1UsbC.id, targetPortId: volt276UsbC.id, cableType: CableType.USB_DATA, length: 6 });
 
   const danyaVIem = await mkDevice({
-    name: 'IEM Дани-вокала (свои)',
+    name: 'KZ ZS10 Pro IEM Earphones (Purple, No Mic)',
     type: DeviceType.MONITOR,
     ownerRole: 'Даня-вокал',
     position: { x: 300, y: -300 },
     imageUrl: 'dan-vocalist-iem.png',
+    attrs: { manufacturer: 'KZ', model: 'ZS10 Pro IEM Earphones (No Mic)', color: 'Purple' },
     notes:
-      'Подключены НАПРЯМУЮ в Volt 276 (без микшера — см. план в §2.3). Сейчас Даня-вокал слышит в ушах только себя, не полный мониторный микс — это нормальное текущее состояние (docs/stage-setup.md §2.1).',
+      'Подключены НАПРЯМУЮ в Volt 276 (без микшера). Сейчас Даня-вокал слышит в ушах только себя, не полный мониторный микс — это нормальное текущее состояние (docs/stage-setup.md §2.1).',
   });
   const danyaVIemIn = await mkPort(danyaVIem, { name: 'In', portType: PortType.TRS_18, direction: PortDirection.IN });
-  await mkCable({ sourcePortId: volt276Out1.id, targetPortId: danyaVIemIn.id, cableType: CableType.AUDIO_UNBALANCED, length: 3, adapterId: adapterTrs14to18.id });
-
-  const danyaVMixerPlanned = await mkDevice({
-    name: 'Стерео-микшер Дани-вокала (план)',
-    type: DeviceType.MIXER,
-    ownerRole: 'Даня-вокал',
-    inventoryStatus: InventoryStatus.PLANNED_NOT_OWNED,
-    position: { x: 550, y: -300 },
-    notes: 'Не куплен. До покупки актуальна прямая схема Volt276 → IEM (docs/stage-setup.md §2.3).',
+  await mkCable({
+    sourcePortId: volt276Out1.id,
+    targetPortId: danyaVIemIn.id,
+    cableType: CableType.AUDIO_UNBALANCED,
+    length: 7.6,
+    adapterId: adapterTrs14to18.id,
+    productName: 'Pig Hog PHX14-25 1/4" TRSF to 1/4" TRSM Headphone Extension Cable, 25 Feet',
   });
-  await mkPort(danyaVMixerPlanned, { name: 'In 1 (Volt276 Phones)', portType: PortType.TRS_14, direction: PortDirection.IN });
-  await mkPort(danyaVMixerPlanned, { name: 'In 2 (Playback)', portType: PortType.TRS_14, direction: PortDirection.IN });
-  await mkPort(danyaVMixerPlanned, { name: 'Out (к IEM)', portType: PortType.TRS_18, direction: PortDirection.OUT });
 
   const fex800 = await mkDevice({
     name: 'Behringer FEX800 (MINIFEX)',
@@ -976,12 +1011,17 @@ async function main() {
   await mkCable({ sourcePortId: anker2SchukoOuts[0].id, targetPortId: fex800Power.id, cableType: CableType.POWER_LINE, length: 1.5, adapterId: adapterFex800Psu.id });
 
   const danyaVGuitar = await mkDevice({
-    name: 'Гитара Дани-вокала',
+    name: 'Jackson JS Series Dinky Arch Top JS22-7 DKA HT',
     type: DeviceType.INSTRUMENT,
     ownerRole: 'Даня-вокал',
     position: { x: 550, y: 350 },
     imageUrl: 'dan-vocalist-guitar.webp',
-    attrs: { kind: 'guitar' },
+    attrs: {
+      kind: 'guitar',
+      manufacturer: 'Jackson Guitars',
+      model: 'JS Series Dinky Arch Top JS22-7 DKA HT, Amaranth Fingerboard',
+      color: 'Satin Black',
+    },
     notes: 'Используется не на всех песнях (docs/stage-setup.md §2.2).',
   });
   const danyaVGuitarOut = await mkPort(danyaVGuitar, { name: 'Jack Out', portType: PortType.TS_14, direction: PortDirection.OUT });
@@ -1003,34 +1043,61 @@ async function main() {
       footswitch: 'Включение режима настройки — отключает сигнал на OUTPUT (Mute).',
     },
     notes:
-      'Раздаёт 9V DC OUT (до 200мА) на разветвитель → Cinders + FC03 (см. ниже) — резолвит открытый вопрос docs/stage-setup.md §2.2/§12.4 про питание 3 педалей. Собственный upstream-источник питания TU-3 (что запитывает сам тюнер) пока не уточнён.',
+      'Питание — отдельный одноканальный БП (см. ниже), плюс раздаёт свой daisy-chain выход джампером напрямую на FC03 (3-я педаль в цепи). Итого: 3 педали запитаны от 2 одноканальных БП + 1 джампер (docs/stage-setup.md §2.2/§12.4).',
   });
   const tu3In = await mkPort(tu3, { name: 'Input (с гитары Дани-вокала)', portType: PortType.TS_14, direction: PortDirection.IN });
   const tu3Out = await mkPort(tu3, { name: 'Output (с mute при настройке)', portType: PortType.TS_14, direction: PortDirection.OUT });
-  await mkPort(tu3, {
-    name: 'Power In (upstream ❓)',
+  const tu3Power = await mkPort(tu3, {
+    name: 'Power In',
     portType: PortType.DC_BARREL,
     direction: PortDirection.IN,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 30, polarity: Polarity.CENTER_NEGATIVE },
   });
   const tu3DaisyOut = await mkPort(tu3, {
-    name: '9V DC OUT (Daisy Chain, до 200мА)',
+    name: '9V DC OUT (Daisy Chain, джампер на FC03)',
     portType: PortType.DC_BARREL,
     direction: PortDirection.OUT,
     power: { currentType: CurrentType.DC, voltageV: 9, polarity: Polarity.CENTER_NEGATIVE, maxOutputCurrentMA: 200 },
   });
 
-  const danyaVSplitter = await mkDevice({
-    name: 'Разветвитель питания 1→2 (от TU-3, на Cinders + FC03)',
-    type: DeviceType.POWER_SPLITTER,
+  const danyaVPsu1 = await mkDevice({
+    name: 'БП педалей Дани-вокала #1 (одноканальный, 9V — Boss TU-3)',
+    type: DeviceType.POWER_SUPPLY,
     ownerRole: 'Даня-вокал',
-    position: { x: 610, y: 550 },
-    notes: 'Даёт TU-3-у раздать один daisy-chain выход на 2 педали (15мА + 128мА = 143мА, укладывается в лимит 200мА).',
+    position: { x: 590, y: 550 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.AC_MAINS,
+    power: { currentType: CurrentType.DC, voltageV: 9, maxOutputCurrentMA: 200 },
+    notes: 'Одноканальный БП — питает только тюнер. Тюнер сам раздаёт daisy-chain джампером на FC03 (3-я педаль).',
   });
-  const splitterIn = await mkPort(danyaVSplitter, { name: 'In', portType: PortType.DC_BARREL, direction: PortDirection.IN });
-  const splitterOut1 = await mkPort(danyaVSplitter, { name: 'Out 1 (→ Cinders)', portType: PortType.DC_BARREL, direction: PortDirection.OUT });
-  const splitterOut2 = await mkPort(danyaVSplitter, { name: 'Out 2 (→ FC03)', portType: PortType.DC_BARREL, direction: PortDirection.OUT });
-  await mkCable({ sourcePortId: tu3DaisyOut.id, targetPortId: splitterIn.id, cableType: CableType.POWER_LINE, length: 0.2 });
+  const danyaVPsu1In = await mkPort(danyaVPsu1, { name: 'Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN, power: { currentType: CurrentType.AC } });
+  const danyaVPsu1Out = await mkPort(danyaVPsu1, {
+    name: '9V DC Out',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.OUT,
+    power: { currentType: CurrentType.DC, voltageV: 9, polarity: Polarity.CENTER_NEGATIVE, maxOutputCurrentMA: 200 },
+  });
+  await mkCable({ sourcePortId: anker2SchukoOuts[1].id, targetPortId: danyaVPsu1In.id, cableType: CableType.POWER_LINE, length: 1 });
+  await mkCable({ sourcePortId: danyaVPsu1Out.id, targetPortId: tu3Power.id, cableType: CableType.POWER_LINE, length: 0.3 });
+
+  const danyaVPsu2 = await mkDevice({
+    name: 'БП педалей Дани-вокала #2 (одноканальный, 9V — Cinders)',
+    type: DeviceType.POWER_SUPPLY,
+    ownerRole: 'Даня-вокал',
+    position: { x: 660, y: 550 },
+    powerRequired: true,
+    powerSourceType: PowerSourceType.AC_MAINS,
+    power: { currentType: CurrentType.DC, voltageV: 9, maxOutputCurrentMA: 200 },
+    notes: 'Одноканальный БП — питает только TC Electronic Cinders.',
+  });
+  const danyaVPsu2In = await mkPort(danyaVPsu2, { name: 'Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN, power: { currentType: CurrentType.AC } });
+  const danyaVPsu2Out = await mkPort(danyaVPsu2, {
+    name: '9V DC Out',
+    portType: PortType.DC_BARREL,
+    direction: PortDirection.OUT,
+    power: { currentType: CurrentType.DC, voltageV: 9, polarity: Polarity.CENTER_NEGATIVE, maxOutputCurrentMA: 200 },
+  });
+  await mkCable({ sourcePortId: anker2SchukoOuts[4].id, targetPortId: danyaVPsu2In.id, cableType: CableType.POWER_LINE, length: 1 });
 
   const cinders = await mkDevice({
     name: 'TC Electronic Cinders Overdrive',
@@ -1057,7 +1124,7 @@ async function main() {
     direction: PortDirection.IN,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 15, polarity: Polarity.CENTER_NEGATIVE },
   });
-  await mkCable({ sourcePortId: splitterOut1.id, targetPortId: cindersPower.id, cableType: CableType.POWER_LINE, length: 0.3 });
+  await mkCable({ sourcePortId: danyaVPsu2Out.id, targetPortId: cindersPower.id, cableType: CableType.POWER_LINE, length: 0.3 });
 
   const fc03 = await mkDevice({
     name: 'FLAMMA FC03 Delay',
@@ -1089,7 +1156,7 @@ async function main() {
     direction: PortDirection.IN,
     power: { currentType: CurrentType.DC, voltageV: 9, currentMA: 128, polarity: Polarity.CENTER_NEGATIVE },
   });
-  await mkCable({ sourcePortId: splitterOut2.id, targetPortId: fc03Power.id, cableType: CableType.POWER_LINE, length: 0.3 });
+  await mkCable({ sourcePortId: tu3DaisyOut.id, targetPortId: fc03Power.id, cableType: CableType.POWER_LINE, length: 0.3 });
 
   const pedalPorts = [
     { in: tu3In, out: tu3Out },
@@ -1141,7 +1208,7 @@ async function main() {
   // Даня-вокал + плейбеки — сетап плейбеков. Ноут (MacBook Pro M5) → MOTU → стейджбокс
   // ---------------------------------------------------------------------------------------
   const playbackLaptop = await mkDevice({
-    name: 'MacBook Pro 16" (M5) — Плейбеки',
+    name: 'MacBook Pro 14" (M5) — Плейбеки',
     type: DeviceType.LAPTOP,
     ownerRole: 'Даня-вокал',
     position: { x: 1200, y: -150 },
@@ -1152,7 +1219,9 @@ async function main() {
     imageUrl: 'dan-vocalist-macbook.webp',
     attrs: {
       manufacturer: 'Apple',
-      model: 'MacBook Pro 16" (M5 Max, 3x Thunderbolt 4 / USB-C, MagSafe 3)',
+      model: 'MacBook Pro 14" (M5, 2x Thunderbolt 4 / USB-C, MagSafe 3)',
+      ramGB: 24,
+      storageGB: 1024,
     },
     notes: 'Основной ноутбук для воспроизведения плейбеков и управления сценой.',
   });
@@ -1221,13 +1290,19 @@ async function main() {
 
   await mkCable({ sourcePortId: playbackLaptopUsbC.id, targetPortId: motuUsbB.id, cableType: CableType.USB_DATA, length: 1.5, adapterId: adapterUsbCtoB.id });
   await mkCable({ sourcePortId: anker2SchukoOuts[2].id, targetPortId: motuPower.id, cableType: CableType.POWER_LINE, length: 2, adapterId: adapterMotuPsu.id });
-  await mkCable({ sourcePortId: motuOutMonitorFeed.id, targetPortId: mx400In1.id, cableType: CableType.AUDIO_UNBALANCED, length: 10 });
+  await mkCable({
+    sourcePortId: motuOutMonitorFeed.id,
+    targetPortId: mx400In1.id,
+    cableType: CableType.AUDIO_UNBALANCED,
+    length: 10,
+    productName: 'Fun Generation INS 5',
+  });
 
   // ---------------------------------------------------------------------------------------
   // Devices & Cabling for Setup Mode "С клавишами" (Keys + MIDI Sync)
   // ---------------------------------------------------------------------------------------
   const synthLaptop = await mkDevice({
-    name: 'MacBook Pro 16" (M1) — Синты/Клавиши',
+    name: 'MacBook Pro 13" (M1, 2020) — Синты/Клавиши',
     type: DeviceType.LAPTOP,
     ownerRole: 'Андрей',
     position: { x: -800, y: -250 },
@@ -1237,12 +1312,14 @@ async function main() {
     imageUrl: 'andrii-macbook.png',
     attrs: {
       manufacturer: 'Apple',
-      model: 'MacBook Pro 16" (M1 Pro/Max, 3x Thunderbolt 4, HDMI, MagSafe 3)',
+      model: 'MacBook Pro 13" (M1, 2020, 2x Thunderbolt/USB 4, без MagSafe)',
+      ramGB: 8,
+      storageGB: 512,
       isKeysOnly: true,
     },
     notes: 'Ноутбук Андрея для софт-синтезаторов и виртуальных клавишных инструментов.',
   });
-  const synthLaptopPowerIn = await mkPort(synthLaptop, { name: 'MagSafe / USB-C Power In', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN });
+  const synthLaptopPowerIn = await mkPort(synthLaptop, { name: 'USB-C Power In (без MagSafe)', portType: PortType.POWER_SCHUKO, direction: PortDirection.IN });
   const synthLaptopUsbC = await mkPort(synthLaptop, { name: 'USB-C (клавиши, вход MIDI/аудио)', portType: PortType.USB_C, direction: PortDirection.BI });
   await mkFurniture({ deviceId: synthLaptop.id, kind: FurnitureKind.CHAIR, isVenueProvided: true });
 
@@ -1369,12 +1446,12 @@ async function main() {
   await mkCable({ sourcePortId: keyboardUsbC.id, targetPortId: synthLaptopUsbC.id, cableType: CableType.USB_DATA, length: 1.5 });
 
   await mkDevice({
-    name: 'Педаль сустейна (к клавишам)',
+    name: 'M-Audio SP-2',
     type: DeviceType.ACCESSORY,
     ownerRole: 'Андрей',
     parentDeviceId: keyboard.id,
     position: { x: -800, y: -50 },
-    attrs: { isKeysOnly: true },
+    attrs: { manufacturer: 'M-Audio', model: 'SP-2 Sustain Pedal', isKeysOnly: true },
   });
 
   // Lay everything out instead of leaving the arbitrary hand-picked x/y above as the persisted

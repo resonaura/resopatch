@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Button, Modal } from '@heroui/react';
-import { Layers, Plus, X } from 'lucide-react';
+import { Layers, Plus, Wand2, X } from 'lucide-react';
 import type { Connection } from '@xyflow/react';
 import type { GraphCable, GraphDevice } from '../api/client';
 import { containerInternalGraph } from '../lib/containerGraph';
@@ -20,6 +20,8 @@ export interface ContainerInsideModalProps {
   onAddChild: (containerId: string) => void;
   onConnect: (connection: Connection) => void;
   onNodeMoved: (id: string, position: { x: number; y: number }) => void;
+  onRunAutoLayout: () => void;
+  isAutoLayoutPending: boolean;
 }
 
 /** Orders devices inside a container topologically by signal cable connections (source -> target),
@@ -95,6 +97,8 @@ export default function ContainerInsideModal({
   onAddChild,
   onConnect,
   onNodeMoved,
+  onRunAutoLayout,
+  isAutoLayoutPending,
 }: ContainerInsideModalProps) {
   const [modalSelection, setModalSelection] = useState<Selection>(null);
   const { nodes: childDevices, cables: internalCables } = useMemo(
@@ -311,20 +315,32 @@ export default function ContainerInsideModal({
                     </Button>
                   </div>
                 ) : (
-                  <PatchCanvas
-                    nodes={nodes}
-                    edges={edges}
-                    onNodeClick={(id) => {
-                      setModalSelection({ kind: 'device', id });
-                      onSelectChild(id);
-                    }}
-                    onEdgeClick={(id) => setModalSelection({ kind: 'cable', id })}
-                    onPaneClick={() => setModalSelection(null)}
-                    onConnect={onConnect}
-                    onNodeMoved={onNodeMoved}
-                    minimap={false}
-                    fitPadding={0.06}
-                  />
+                  <>
+                    <PatchCanvas
+                      nodes={nodes}
+                      edges={edges}
+                      onNodeClick={(id) => {
+                        setModalSelection({ kind: 'device', id });
+                        onSelectChild(id);
+                      }}
+                      onEdgeClick={(id) => setModalSelection({ kind: 'cable', id })}
+                      onPaneClick={() => setModalSelection(null)}
+                      onConnect={onConnect}
+                      onNodeMoved={onNodeMoved}
+                      minimap={false}
+                      fitPadding={0.06}
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onPress={onRunAutoLayout}
+                      isPending={isAutoLayoutPending}
+                      className="absolute bottom-3 right-3 z-10 shadow-lg"
+                    >
+                      <Wand2 className="h-3.5 w-3.5" />
+                      Упорядочить
+                    </Button>
+                  </>
                 )}
               </div>
               <div className="w-[320px] h-full flex-none overflow-hidden border-l border-default-200 bg-surface">

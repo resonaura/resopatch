@@ -165,9 +165,32 @@ export default function RoutedEdge({ id, data, style, markerEnd, label, sourceX,
   const hasTexture = texture && (texture.start || texture.end || texture.middle);
   const thickness = Math.max(8, (Number(effectiveStyle.strokeWidth) || 4) * 2.4);
 
+  // Textured cables draw their own raster stamps over the plain colored stroke, which would
+  // otherwise fully hide it — offsetting a second copy of the same line a couple px down-right,
+  // underneath the texture, keeps a sliver of the cable's real color/shape peeking out (matches
+  // how a physical cable's jacket shows at its edges under a printed wrap).
+  const TEXTURE_UNDERLAY_OFFSET = 2;
+  const underlayPath =
+    hasTexture && points && points.length >= 2
+      ? roundedPathFromPoints(
+          points.map((p) => ({ x: p.x + TEXTURE_UNDERLAY_OFFSET, y: p.y + TEXTURE_UNDERLAY_OFFSET })),
+          16,
+        )
+      : null;
+
   return (
     <>
       <BaseEdge id={id} path={path} style={effectiveStyle} markerEnd={markerEnd} interactionWidth={14} />
+      {underlayPath && (
+        <path
+          d={underlayPath}
+          stroke={effectiveStyle.stroke ?? '#8E8E93'}
+          strokeWidth={effectiveStyle.strokeWidth ?? 4}
+          fill="none"
+          strokeLinecap="round"
+          opacity={0.55}
+        />
+      )}
       {hasTexture && points && points.length >= 2 ? (
         <CableTexture id={id} points={points} texture={texture} thickness={thickness} />
       ) : null}

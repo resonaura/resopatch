@@ -172,6 +172,7 @@ export function toCableDto(c: Cable): CableDto {
     adapterId: c.adapterId,
     isUserOwned: c.isUserOwned,
     color: c.color,
+    productName: c.productName,
     isPatchCable: c.isPatchCable,
     imageUrl: c.imageUrl,
     textureStartUrl: c.textureStartUrl,
@@ -188,6 +189,7 @@ export function applyCableDto(entity: Cable, dto: Partial<CreateCableDto> & Part
   if (dto.adapterId !== undefined) entity.adapterId = dto.adapterId ?? null;
   if (dto.isUserOwned !== undefined) entity.isUserOwned = dto.isUserOwned;
   if (dto.color !== undefined) entity.color = dto.color ?? null;
+  if (dto.productName !== undefined) entity.productName = dto.productName ?? null;
   if (dto.isPatchCable !== undefined) entity.isPatchCable = dto.isPatchCable;
   if (dto.imageUrl !== undefined) entity.imageUrl = dto.imageUrl ?? null;
   if (dto.textureStartUrl !== undefined) entity.textureStartUrl = dto.textureStartUrl ?? null;

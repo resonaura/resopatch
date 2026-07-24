@@ -4,6 +4,8 @@ import { RotateCcw, PackageCheck, Cable as CableIcon } from 'lucide-react';
 import { InventoryStatus } from '@resopatch/shared';
 import type { GraphCable, GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
+import { getDisplayName } from '../lib/deviceNaming';
+import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
 import CheckboxField from './CheckboxField';
 
 const CABLE_TYPE_LABEL: Record<string, string> = {
@@ -22,6 +24,7 @@ interface CableGroup {
   cableType: string;
   length: number;
   color: string | null;
+  productName: string | null;
   quantity: number;
   imageUrl: string | null;
 }
@@ -49,7 +52,7 @@ function Thumb({ imageUrl, fallback }: { imageUrl: string | null | undefined; fa
 }
 
 function ItemThumb({ device }: { device: Pick<GraphDevice, 'imageUrl' | 'type'> }) {
-  return <Thumb imageUrl={device.imageUrl} fallback={<DeviceTypeIcon type={device.type} className="h-6 w-6" />} />;
+  return <Thumb imageUrl={device.imageUrl} fallback={<DeviceTypeIcon type={device.type} className={FALLBACK_ICON_CLASS} />} />;
 }
 
 export default function StaffChecklist({ devices, cables, setupId }: { devices: GraphDevice[]; cables: GraphCable[]; setupId: string }) {
@@ -138,8 +141,10 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
       if (!c.isUserOwned || c.cableType === 'CONTROL_LINK') continue;
       const owner = portToDevice.get(c.sourcePortId)?.ownerRole?.trim() || UNOWNED;
       const ownerGroups = groups.get(owner) ?? new Map<string, CableGroup>();
-      const key = `${c.cableType}|${c.length}|${c.color ?? ''}`;
-      const group = ownerGroups.get(key) ?? { key, cableType: c.cableType, length: c.length, color: c.color, quantity: 0, imageUrl: null };
+      const key = `${c.cableType}|${c.length}|${c.color ?? ''}|${c.productName ?? ''}`;
+      const group =
+        ownerGroups.get(key) ??
+        { key, cableType: c.cableType, length: c.length, color: c.color, productName: c.productName, quantity: 0, imageUrl: null };
       group.quantity += 1;
       if (!group.imageUrl && c.imageUrl) group.imageUrl = c.imageUrl;
       ownerGroups.set(key, group);
@@ -260,21 +265,24 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                   return (
                     <div
                       key={parent.id}
-                      className={`p-3.5 transition-colors ${isChecked ? 'bg-accent/5' : 'hover:bg-surface-secondary/30'}`}
+                      onClick={() => toggleParent(parent, accessories)}
+                      className={`cursor-pointer p-3.5 transition-colors ${isChecked ? 'bg-accent/5' : 'hover:bg-surface-secondary/30'}`}
                     >
                       <div className="flex items-start gap-3">
-                        <CheckboxField
-                          isSelected={isChecked}
-                          onChange={() => toggleParent(parent, accessories)}
-                          className="mt-1"
-                        />
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <CheckboxField
+                            isSelected={isChecked}
+                            onChange={() => toggleParent(parent, accessories)}
+                            className="mt-1"
+                          />
+                        </div>
 
                         <ItemThumb device={parent} />
 
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                              {parent.name}
+                              {getDisplayName(parent)}
                             </span>
                             <Chip size="sm" variant="soft" className="text-[10px]">
                               {parent.type}
@@ -297,14 +305,23 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                               {accessories.map((acc) => {
                                 const accChecked = !!checkedMap[acc.id];
                                 return (
-                                  <div key={acc.id} className="flex items-center gap-2 py-0.5">
-                                    <CheckboxField
-                                      isSelected={accChecked}
-                                      onChange={() => toggleCheck(acc.id)}
-                                    />
+                                  <div
+                                    key={acc.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleCheck(acc.id);
+                                    }}
+                                    className="flex cursor-pointer items-center gap-2 py-0.5"
+                                  >
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                      <CheckboxField
+                                        isSelected={accChecked}
+                                        onChange={() => toggleCheck(acc.id)}
+                                      />
+                                    </div>
                                     <ItemThumb device={acc} />
                                     <span className={`text-xs ${accChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                                      {acc.name}
+                                      {getDisplayName(acc)}
                                     </span>
                                   </div>
                                 );
@@ -332,19 +349,22 @@ export default function StaffChecklist({ devices, cables, setupId }: { devices: 
                       return (
                         <div
                           key={group.key}
-                          className={`flex items-center gap-3 p-3.5 transition-colors ${isChecked ? 'bg-accent/5' : 'hover:bg-surface-secondary/30'}`}
+                          onClick={() => toggleCheck(storageKeyForGroup)}
+                          className={`flex cursor-pointer items-center gap-3 p-3.5 transition-colors ${isChecked ? 'bg-accent/5' : 'hover:bg-surface-secondary/30'}`}
                         >
-                          <CheckboxField isSelected={isChecked} onChange={() => toggleCheck(storageKeyForGroup)} />
-                          <Thumb imageUrl={group.imageUrl} fallback={<CableIcon className="h-5 w-5" />} />
-                          <div className="min-w-0 flex-1">
-                            <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
-                              {CABLE_TYPE_LABEL[group.cableType] ?? group.cableType} — {group.length}м
-                              {group.color ? ` (${group.color})` : ''}
-                            </span>
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <CheckboxField isSelected={isChecked} onChange={() => toggleCheck(storageKeyForGroup)} />
                           </div>
+                          <Thumb imageUrl={group.imageUrl} fallback={<CableIcon className={FALLBACK_ICON_CLASS} />} />
                           <Chip size="sm" variant="soft" className="shrink-0">
                             x{group.quantity}
                           </Chip>
+                          <div className="min-w-0 flex-1">
+                            <span className={`font-semibold text-sm ${isChecked ? 'line-through text-default-400' : 'text-foreground'}`}>
+                              {group.productName ?? CABLE_TYPE_LABEL[group.cableType] ?? group.cableType} — {group.length}м
+                              {group.color ? ` (${group.color})` : ''}
+                            </span>
+                          </div>
                         </div>
                       );
                     })}
