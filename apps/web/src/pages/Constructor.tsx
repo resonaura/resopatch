@@ -84,15 +84,6 @@ export default function Constructor({
     }
   });
 
-  const handleSetupModeChange = (mode: 'no-keys' | 'with-keys') => {
-    setSetupMode(mode);
-    try {
-      localStorage.setItem(`resopatch_setup_mode_${setupId}`, mode);
-    } catch {
-      // ignore
-    }
-  };
-
   const activeDevices = useMemo(() => {
     if (!graph?.devices) return [];
     if (setupMode === 'with-keys') return graph.devices;
@@ -108,6 +99,23 @@ export default function Constructor({
       (c) => activePortIds.has(c.sourcePortId) && activePortIds.has(c.targetPortId),
     );
   }, [graph, activeDevices, setupMode]);
+
+  /** Devices/cables visible for a given setup mode (Arrange must match the canvas). */
+  const graphSliceForMode = useCallback(
+    (mode: 'no-keys' | 'with-keys') => {
+      if (!graph) return { devices: [] as typeof graph.devices, cables: [] as typeof graph.cables };
+      if (mode === 'with-keys') {
+        return { devices: graph.devices, cables: graph.cables };
+      }
+      const devices = graph.devices.filter((d) => !d.attrs?.isKeysOnly);
+      const portIds = new Set(devices.flatMap((d) => d.ports).map((p) => p.id));
+      const cables = graph.cables.filter(
+        (c) => portIds.has(c.sourcePortId) && portIds.has(c.targetPortId),
+      );
+      return { devices, cables };
+    },
+    [graph],
+  );
 
   const activeGraph = useMemo(() => {
     if (!graph) return null;
@@ -299,12 +307,14 @@ export default function Constructor({
   });
 
   /** Layout is computed entirely in the browser; the API only stores the result.
-   *  Arrange always recomputes with default packing and overwrites manual drags. */
+   *  Arrange always recomputes with default packing and overwrites manual drags.
+   *  Pass `mode` to arrange the visible slice for that setup mode (no-keys / with-keys). */
   const autoLayout = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (vars?: { mode?: 'no-keys' | 'with-keys' }) => {
       // Invalidate any in-flight drag saves even if graph is missing.
       arrangeEpochRef.current += 1;
       const epoch = arrangeEpochRef.current;
+      const mode = vars?.mode ?? setupMode;
 
       if (!graph) {
         return {
@@ -321,7 +331,12 @@ export default function Constructor({
         sizes = getMeasuredSizesRef.current ? getMeasuredSizesRef.current() : {};
       }
 
-      const { positions } = computeAutoLayout(graph.devices, graph.cables, sizes);
+      const { devices, cables } = graphSliceForMode(mode);
+      if (devices.length === 0) {
+        return { updated: 0, positions: {} as Record<string, { x: number; y: number }>, epoch };
+      }
+
+      const { positions } = computeAutoLayout(devices, cables, sizes);
       const record = positionsToRecord(positions);
       lastArrangePositionsRef.current = record;
 
@@ -337,7 +352,7 @@ export default function Constructor({
       try {
         localStorage.setItem(
           `resopatch_layout_topo_${setupId}`,
-          graphTopologyKey(graph.devices, graph.cables),
+          graphTopologyKey(devices, cables),
         );
         localStorage.setItem(`resopatch_layout_rev_${setupId}`, LAYOUT_REVISION);
       } catch {
@@ -358,8 +373,25 @@ export default function Constructor({
   });
 
   const runAutoLayout = useCallback(() => {
-    autoLayout.mutate();
-  }, [autoLayout]);
+    autoLayout.mutate({ mode: setupMode });
+  }, [autoLayout, setupMode]);
+
+  const handleSetupModeChange = useCallback(
+    (mode: 'no-keys' | 'with-keys') => {
+      if (mode === setupMode) return;
+      setSetupMode(mode);
+      try {
+        localStorage.setItem(`resopatch_setup_mode_${setupId}`, mode);
+      } catch {
+        // ignore
+      }
+      // Re-pack for the new visible graph (keys in/out). Delay so RF can drop/add nodes first.
+      window.setTimeout(() => {
+        autoLayout.mutate({ mode });
+      }, 100);
+    },
+    [setupMode, setupId, autoLayout],
+  );
 
   // Auto re-layout when:
   //  - topology (devices/cables/ownership) changes, or
@@ -403,9 +435,9 @@ export default function Constructor({
     if (layoutTopoRef.current === key && !revisionStale) return;
     layoutTopoRef.current = key;
 
-    // Wait for canvas measure, then apply default wide-gap pack.
+    // Wait for canvas measure, then apply default pack for the current setup mode.
     const t = window.setTimeout(() => {
-      if (!autoLayout.isPending) autoLayout.mutate();
+      if (!autoLayout.isPending) autoLayout.mutate({ mode: setupMode });
     }, 120);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- topology + revision only
