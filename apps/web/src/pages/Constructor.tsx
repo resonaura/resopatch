@@ -31,7 +31,12 @@ import PatchCanvas from "../components/PatchCanvas";
 import SettingsModal from "../components/SettingsModal";
 import Sidebar from "../components/Sidebar";
 import StaffChecklist from "../components/StaffChecklist";
-import { computeAutoLayout, graphTopologyKey, positionsToRecord } from "../lib/autoLayout";
+import {
+    computeAutoLayout,
+    graphTopologyKey,
+    LAYOUT_REVISION,
+    positionsToRecord,
+} from "../lib/autoLayout";
 import { splitMainCanvasGraph } from "../lib/containerGraph";
 import { graphCableToEdge } from "../lib/graphCableToEdge";
 import { useI18n } from "../lib/i18n";
@@ -244,64 +249,113 @@ export default function Constructor({
     (() => Record<string, { width: number; height: number }>) | null
   >(null);
 
-  /** Layout is computed entirely in the browser; the API only stores the result. */
+  const applyPositionsToCache = useCallback(
+    (record: Record<string, { x: number; y: number }>) => {
+      qc.setQueryData(["graph", setupId], (old: typeof graph) => {
+        if (!old) return old;
+        return {
+          ...old,
+          devices: old.devices.map((d) => {
+            const pos = record[d.id];
+            return pos ? { ...d, position: { x: pos.x, y: pos.y } } : d;
+          }),
+        };
+      });
+    },
+    [qc, setupId, graph],
+  );
+
+  /** Layout is computed entirely in the browser; the API only stores the result.
+   *  Arrange always recomputes with default wide-gap packing and overwrites drags. */
   const autoLayout = useMutation({
     mutationFn: async () => {
-      if (!graph) return { updated: 0 };
-      const sizes = getMeasuredSizesRef.current ? getMeasuredSizesRef.current() : {};
+      if (!graph) return { updated: 0, positions: {} as Record<string, { x: number; y: number }> };
+
+      // Prefer live measured sizes; if canvas not ready, wait one frame and retry once.
+      let sizes = getMeasuredSizesRef.current ? getMeasuredSizesRef.current() : {};
+      if (Object.keys(sizes).length === 0) {
+        await new Promise((r) => setTimeout(r, 50));
+        sizes = getMeasuredSizesRef.current ? getMeasuredSizesRef.current() : {};
+      }
+
       const { positions } = computeAutoLayout(graph.devices, graph.cables, sizes);
       const record = positionsToRecord(positions);
+
+      // Always paint defaults immediately (this is what "Arrange = reset" means).
+      applyPositionsToCache(record);
+
       const result = await api.autoLayout(setupId, record);
       try {
         localStorage.setItem(
           `resopatch_layout_topo_${setupId}`,
           graphTopologyKey(graph.devices, graph.cables),
         );
+        localStorage.setItem(`resopatch_layout_rev_${setupId}`, LAYOUT_REVISION);
       } catch {
-        // ignore storage failures
+        // ignore
       }
-      return result;
+      return { ...result, positions: record };
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["graph", setupId] }),
+    onSuccess: async (data) => {
+      // Re-apply after refetch so a stale server response cannot undo Arrange.
+      applyPositionsToCache(data.positions);
+      await qc.invalidateQueries({ queryKey: ["graph", setupId] });
+      applyPositionsToCache(data.positions);
+    },
   });
 
   const runAutoLayout = useCallback(() => {
     autoLayout.mutate();
   }, [autoLayout]);
 
-  // When graph topology changes (devices / cables / ownership), saved positions are stale —
-  // re-run layout on the client and overwrite the backend save. First visit with no stored
-  // fingerprint just records the current topology and keeps DB positions.
+  // Auto re-layout when:
+  //  - topology (devices/cables/ownership) changes, or
+  //  - LAYOUT_REVISION bumps (default gap pack changed) so old saves pick up new defaults once.
   const layoutTopoRef = useRef<string | null>(null);
   useEffect(() => {
     if (!graph) return;
     const key = graphTopologyKey(graph.devices, graph.cables);
-    if (layoutTopoRef.current === key) return;
-    layoutTopoRef.current = key;
 
-    let stored: string | null;
+    let stored: string | null = null;
+    let storedRev: string | null = null;
     try {
       stored = localStorage.getItem(`resopatch_layout_topo_${setupId}`);
+      storedRev = localStorage.getItem(`resopatch_layout_rev_${setupId}`);
     } catch {
-      stored = null;
+      // ignore
     }
 
-    if (stored == null) {
+    const revisionStale = storedRev !== LAYOUT_REVISION;
+    const topoStale = stored != null && stored !== key;
+    const firstVisit = stored == null;
+
+    if (firstVisit && !revisionStale) {
+      // Brand-new setup: remember fingerprint, keep seed positions until user hits Arrange
+      // (or until a later topology change). Still stamp revision so we don't thrash.
       try {
         localStorage.setItem(`resopatch_layout_topo_${setupId}`, key);
+        localStorage.setItem(`resopatch_layout_rev_${setupId}`, LAYOUT_REVISION);
       } catch {
         // ignore
       }
+      layoutTopoRef.current = key;
       return;
     }
-    if (stored === key) return;
 
-    // Topology changed since last layout → recompute after nodes can measure.
+    if (!revisionStale && !topoStale) {
+      layoutTopoRef.current = key;
+      return;
+    }
+
+    if (layoutTopoRef.current === key && !revisionStale) return;
+    layoutTopoRef.current = key;
+
+    // Wait for canvas measure, then apply default wide-gap pack.
     const t = window.setTimeout(() => {
       if (!autoLayout.isPending) autoLayout.mutate();
-    }, 80);
+    }, 120);
     return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to topology, not mutation identity
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- topology + revision only
   }, [graph, setupId]);
 
   const onConnect = useCallback((connection: Connection) => {

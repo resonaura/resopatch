@@ -1,43 +1,19 @@
 /**
- * Grid-based orthogonal cable router, in two independent stages:
+ * Orthogonal cable routing for the patch canvas (main-thread safe).
  *
- *  1. `findPath` — plain obstacle-avoiding A* per cable: shortest path, fewest turns, never
- *     crosses a *different* device's box. No notion of other cables at all.
- *  2. `resolveOverlaps` — a separate geometry pass over the finished paths: wherever two cables'
- *     straight runs exactly coincide (same line, overlapping range), nudge them apart into
- *     parallel lanes. Runs *after* pathfinding and only ever moves a route by a few pixels, with
- *     every offset re-verified against every obstacle afterwards — an offset that would introduce
- *     a new crossing is reverted for that one route rather than applied.
+ * **Important:** this module must NEVER import `libavoidRouter` / `obstacle-router`.
+ * That package is ~0.5MB of sync JS and used to freeze the tab on every import of
+ * PatchCanvas/RoutedEdge. Libavoid runs only in `routeWorker.ts` (Web Worker).
  *
- * Keeping these separate (instead of one shared cost function trying to do both) is what makes
- * each half testable and tunable on its own — see edgeRouting.test.ts.
+ * This file keeps: local A* findPath, geometric findBestPath, legacy fan-in, labels, SVG helpers.
  */
 
-export interface RectObstacle {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import type { EdgeRouteSpec, Point, RectObstacle } from './routingTypes';
+export type { EdgeRouteSpec, Point, RectObstacle } from './routingTypes';
 
-export interface EdgeRouteSpec {
-  id: string;
-  sourceNodeId: string;
-  targetNodeId: string;
-  start: { x: number; y: number };
-  end: { x: number; y: number };
-  sourceDir?: 'left' | 'right';
-  targetDir?: 'left' | 'right';
-  isPowerAdapter?: boolean;
-}
-
-export type Point = { x: number; y: number };
-
-// Keep-out margin around every device box. Wide enough that a cable passing "near" a cluster of
-// unrelated nodes reads as routed around them, not hugging their edges — the difference between
-// looking deliberate and looking like it's cutting through the pile.
-const OBSTACLE_PADDING = 20;
+// Keep-out around chip bodies (package-to-trace clearance on a dense board — NOT a huge halo).
+// Real stages pack cards ~50px apart (MOTU then CME); a 20px pad on each side left zero channel.
+const OBSTACLE_PADDING = 8;
 // How far a cable travels straight out from its port ("сосочек") before the first bend is allowed.
 // Must clear the handle/dot and a bit of the card edge so the cable never turns straight up/down
 // on top of the nipple.
@@ -47,9 +23,10 @@ const MIN_STUB = 20;
 // High turn cost so A* strongly prefers long straight runs over staircases when both work.
 const TURN_PENALTY = 22;
 const MAX_EXPANSIONS = 40000;
-// Gap between adjacent lanes when parallel runs (e.g. MOTU → stagebox fan-in) are separated.
-// Wide enough to read as distinct cables after zooming out to the whole stage.
-const LANE_GAP = 24;
+// Minimum center-to-center spacing between parallel traces.
+const LANE_GAP = 18;
+/** Half-gap: how far a finished trace's keep-out extends from its centerline. */
+const TRACE_CLEARANCE = 8;
 // Group near-coincident parallel runs (grid rounding / float noise), not only exact equals.
 const LANE_GROUP_TOLERANCE = 12;
 
@@ -361,9 +338,12 @@ function buildCorridorPath(
 }
 
 /**
- * Stub-first detour on a horizontal "highway" below or above the obstacle cluster.
- * After the port stub we walk further out until a clear vertical drop to the highway exists
- * (critical when the neighbour card sits right next to the source — e.g. CME beside MOTU).
+ * Stub-first detour on a horizontal "highway" (1-layer PCB multi-pin breakout).
+ *
+ *   pad → stub off nipple → unique column (lane) → highway Y → unique approach column → pad
+ *
+ * Columns are scanned in free air (package clearance, not a huge halo) so several tracks fit
+ * in the ~50px channel between packed stage cards.
  */
 function buildHighwayPath(
   start: Point,
@@ -374,40 +354,47 @@ function buildHighwayPath(
   sourceStubLen: number,
   targetStubLen: number,
   segmentClear: (a: Point, b: Point) => boolean,
+  laneIndex = 0,
+  _laneCount = 1,
 ): Point[] | null {
   const stubS: Point = { x: start.x + sSign * sourceStubLen, y: start.y };
   const stubT: Point = { x: end.x + tSign * targetStubLen, y: end.y };
   if (!segmentClear(start, stubS) || !segmentClear(stubT, end)) return null;
 
-  // Walk outward from the source stub until the vertical run down/up to the highway is clear.
-  let runX = stubS.x;
-  let foundRun = false;
-  for (let step = 0; step < 50; step++) {
-    const x = stubS.x + sSign * step * 12;
-    const toHwy: Point = { x, y: highwayY };
-    const along: Point = { x: stubT.x, y: highwayY };
-    if (
-      (step === 0 || segmentClear(stubS, { x, y: stubS.y })) &&
-      segmentClear({ x, y: stubS.y }, toHwy) &&
-      segmentClear(toHwy, along) &&
-      segmentClear(along, stubT)
-    ) {
-      runX = x;
-      foundRun = true;
-      break;
-    }
+  // Collect free source-side columns (pad row → highway), spaced by LANE_GAP.
+  const runCols: number[] = [];
+  for (let step = 0; step < 80 && runCols.length <= laneIndex; step++) {
+    const x = Math.round(stubS.x + sSign * step * 3);
+    if (runCols.length && Math.abs(x - runCols[runCols.length - 1]) < LANE_GAP) continue;
+    if (!segmentClear(stubS, { x, y: stubS.y })) continue;
+    if (!segmentClear({ x, y: stubS.y }, { x, y: highwayY })) continue;
+    runCols.push(x);
   }
-  if (!foundRun) return null;
+  if (runCols.length === 0) return null;
+  const runX = runCols[Math.min(laneIndex, runCols.length - 1)];
+
+  // Free target-side columns (highway → pad).
+  const appCols: number[] = [];
+  for (let step = 0; step < 80 && appCols.length <= laneIndex; step++) {
+    const x = Math.round(stubT.x + tSign * step * 3);
+    if (appCols.length && Math.abs(x - appCols[appCols.length - 1]) < LANE_GAP) continue;
+    if (!segmentClear({ x, y: stubT.y }, stubT)) continue;
+    if (!segmentClear({ x, y: highwayY }, { x, y: stubT.y })) continue;
+    appCols.push(x);
+  }
+  const approachX = appCols.length ? appCols[Math.min(laneIndex, appCols.length - 1)] : stubT.x;
 
   const path = simplifyColinear([
     start,
     stubS,
     { x: runX, y: stubS.y },
     { x: runX, y: highwayY },
-    { x: stubT.x, y: highwayY },
+    { x: approachX, y: highwayY },
+    { x: approachX, y: stubT.y },
     stubT,
     end,
   ]).map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+
   if (!pathIsClear(path, segmentClear)) return null;
   if (Math.abs(path[1].y - start.y) > 0.5) return null;
   if (Math.sign(path[1].x - start.x || sSign) !== sSign) return null;
@@ -612,7 +599,13 @@ function hasHorizontalExit(path: Point[], start: Point, sSign: number): boolean 
   return Math.abs(dy) < 0.5 && Math.sign(dx || sSign) === sSign && Math.abs(dx) >= STUB * 0.5;
 }
 
-/** Stage 1: one cable's obstacle-avoiding path, entirely independent of every other cable. */
+/**
+ * One cable's obstacle-avoiding path (fast local A* / elbows).
+ *
+ * Intentionally NOT libavoid: `findBestPath` may call this for every L/R handle candidate
+ * on every edge at canvas open — a full visibility-graph transaction per call freezes the tab.
+ * Multi-net spacing happens in `computeRoutes` (libavoid once, or legacy fan-in).
+ */
 export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[] {
   const { start, end } = spec;
 
@@ -800,13 +793,22 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
     if (ok) return ok;
   }
 
-  // Absolute last resort: stub-first highway far below/above both ports.
-  for (const hy of [Math.max(start.y, end.y) + 200, Math.min(start.y, end.y) - 200, Math.max(start.y, end.y) + 400, Math.min(start.y, end.y) - 400]) {
-    const hw = buildHighwayPath(start, end, sSign, tSign, hy, sStub, tStub, segmentClear);
+  // Absolute last resort: stub-first highways far below/above — only accept if DRC-clean.
+  for (const hy of [
+    Math.max(start.y, end.y) + 200,
+    Math.min(start.y, end.y) - 200,
+    Math.max(start.y, end.y) + 400,
+    Math.min(start.y, end.y) - 400,
+    Math.max(start.y, end.y) + 600,
+    Math.min(start.y, end.y) - 600,
+  ]) {
+    const hw = buildHighwayPath(start, end, sSign, tSign, hy, sStub, tStub, segmentClear, 0, 1);
     if (hw) return hw;
   }
 
-  // Only return an unvalidated elbow if absolutely nothing clear was found — still stub-first.
+  // PCB rule: never ship a trace that shorts a chip or another net. Return the best
+  // stub-first elbow only when it is clear; otherwise the shortest clear highway-ish path
+  // we can still assemble (even if long).
   const fallback = enforceExitStubs(
     [
       start,
@@ -822,7 +824,39 @@ export function findPath(spec: EdgeRouteSpec, obstacles: RectObstacle[]): Point[
     sStub,
   );
   if (pathIsClear(fallback, segmentClear)) return fallback;
-  // Prefer any earlier candidate that at least doesn't hit *foreign* devices.
+
+  // Last ditch: go very far around the bounding box of every obstacle.
+  let minOx = start.x;
+  let maxOx = start.x;
+  let minOy = start.y;
+  let maxOy = start.y;
+  for (const o of obstacles) {
+    if (o.id === spec.sourceNodeId || o.id === spec.targetNodeId) continue;
+    if (o.id.startsWith('trace:') || o.id.startsWith('adapter-card-')) continue;
+    minOx = Math.min(minOx, o.x);
+    maxOx = Math.max(maxOx, o.x + o.width);
+    minOy = Math.min(minOy, o.y);
+    maxOy = Math.max(maxOy, o.y + o.height);
+  }
+  for (const hy of [minOy - 80, maxOy + 80, minOy - 200, maxOy + 200]) {
+    const hw = buildHighwayPath(start, end, sSign, tSign, hy, sStub, tStub, segmentClear, 0, 1);
+    if (hw) return hw;
+  }
+  for (const hx of [minOx - 80, maxOx + 80]) {
+    const path = simplifyColinear([
+      start,
+      { x: start.x + sSign * sStub, y: start.y },
+      { x: hx, y: start.y },
+      { x: hx, y: end.y },
+      { x: end.x + tSign * tStub, y: end.y },
+      end,
+    ]);
+    if (pathIsClear(path, segmentClear)) return path;
+  }
+
+  // Truly boxed in: still return stub-first geometry (UI must show something) but never a
+  // raw vertical-on-port. Callers doing sequential PCB routing should treat uncleared paths
+  // as soft failures.
   return fallback;
 }
 
@@ -892,14 +926,18 @@ function bundleFanInRoutes(
     const highwayBelow0 = clusterBottom + 36;
     const highwayAbove0 = clusterTop - 36;
 
+    // Sequential breakout within the group: each placed net becomes copper keep-out for the next
+    // (true 1-layer PCB). That forces later pins off a shared vertical short into free columns.
+    const groupLive: RectObstacle[] = obstacles.map((o) => ({ ...o }));
+
     for (let i = 0; i < n; i++) {
       const spec = sorted[i];
       const sSign = spec.sourceDir === 'left' ? -1 : 1;
       const tSign = spec.targetDir === 'right' ? 1 : -1;
       const own = new Set([spec.sourceNodeId, spec.targetNodeId]);
-      const sStub = exitStubLen(spec.start, sSign, obstacles, own);
-      const tStub = exitStubLen(spec.end, tSign, obstacles, own);
-      const clear = makeSegmentClear(spec, obstacles);
+      const sStub = exitStubLen(spec.start, sSign, groupLive, own);
+      const tStub = exitStubLen(spec.end, tSign, groupLive, own);
+      const clear = makeSegmentClear(spec, groupLive);
       let placed: Point[] | null = null;
 
       // 1) Vertical corridor in the gap (each cable its own X).
@@ -907,7 +945,7 @@ function bundleFanInRoutes(
         const corridorX = firstCorridorX + i * LANE_GAP;
         placed = buildCorridorPath(spec.start, spec.end, sSign, tSign, corridorX, sStub, clear);
         if (!placed) {
-          for (const nOff of [12, -12, 24, -24, 40, -40, 60, -60]) {
+          for (const nOff of [12, -12, 24, -24, 40, -40, 60, -60, 90, -90]) {
             const x = Math.min(gapHi, Math.max(gapLo, corridorX + nOff));
             placed = buildCorridorPath(spec.start, spec.end, sSign, tSign, x, sStub, clear);
             if (placed) break;
@@ -915,47 +953,37 @@ function bundleFanInRoutes(
         }
       }
 
-      // 2) Parallel highways below / above the obstacle cluster (each cable its own Y).
+      // 2) Highways below / above the cluster with lane columns (respects groupLive copper).
       if (!placed) {
         const hyBelow = highwayBelow0 + i * LANE_GAP;
         const hyAbove = highwayAbove0 - i * LANE_GAP;
         const midY = (spec.start.y + spec.end.y) / 2;
         const order = Math.abs(hyBelow - midY) <= Math.abs(hyAbove - midY) ? [hyBelow, hyAbove] : [hyAbove, hyBelow];
         for (const hy of order) {
-          placed = buildHighwayPath(spec.start, spec.end, sSign, tSign, hy, sStub, tStub, clear);
+          placed = buildHighwayPath(spec.start, spec.end, sSign, tSign, hy, sStub, tStub, clear, i, n);
           if (placed) break;
         }
         if (!placed) {
-          for (const extra of [40, 80, 120, 180, 240, 320]) {
-            placed = buildHighwayPath(
-              spec.start,
-              spec.end,
-              sSign,
-              tSign,
-              highwayBelow0 + i * LANE_GAP + extra,
-              sStub,
-              tStub,
-              clear,
-            );
-            if (placed) break;
-            placed = buildHighwayPath(
-              spec.start,
-              spec.end,
-              sSign,
-              tSign,
-              highwayAbove0 - i * LANE_GAP - extra,
-              sStub,
-              tStub,
-              clear,
-            );
+          for (const extra of [40, 80, 120, 180, 240, 320, 400]) {
+            for (const hy of [highwayBelow0 + i * LANE_GAP + extra, highwayAbove0 - i * LANE_GAP - extra]) {
+              placed = buildHighwayPath(spec.start, spec.end, sSign, tSign, hy, sStub, tStub, clear, i, n);
+              if (placed) break;
+            }
             if (placed) break;
           }
         }
       }
 
+      // 3) Full A* against chips + already-routed nets in this fan (last resort for this pin).
+      if (!placed) {
+        const astarPath = dropMicroSegments(simplifyColinear(findPath(spec, groupLive)));
+        if (pathIsClear(astarPath, clear)) placed = astarPath;
+      }
+
       if (placed) {
         routes.set(spec.id, placed);
         processed.add(spec.id);
+        groupLive.push(...traceKeepouts(placed, spec.id, TRACE_CLEARANCE));
       }
     }
   };
@@ -982,35 +1010,51 @@ function bundleFanInRoutes(
 }
 
 /**
- * Pick the best route among several handle-side candidates (each input/output has a left and
- * right "nipple"). Prefer facing ports, short clear paths, no node hits, no self-curls.
+ * Pick the best L/R × L/R handle pair. Scoring is geometric (cheap) so opening a dense stage
+ * never runs N×4 full routers. Actual geometry is produced later by `computeRoutes`.
  */
 export function findBestPath(candidates: EdgeRouteSpec[], obstacles: RectObstacle[]): { path: Point[]; spec: EdgeRouteSpec } {
   if (candidates.length === 0) {
     return { path: [], spec: { id: '', sourceNodeId: '', targetNodeId: '', start: { x: 0, y: 0 }, end: { x: 0, y: 0 } } };
   }
-  let best = candidates[0];
-  let bestPath = findPath(best, obstacles);
-  let bestScore = scorePath(bestPath, makeSegmentClear(best, obstacles));
 
-  for (let i = 1; i < candidates.length; i++) {
-    const spec = candidates[i];
-    const path = findPath(spec, obstacles);
-    const clear = makeSegmentClear(spec, obstacles);
-    let score = scorePath(path, clear);
-    // Prefer exits that face each other (right→left when source is left of target, etc.).
+  const scoreCandidate = (spec: EdgeRouteSpec): number => {
     const sDir = spec.sourceDir ?? 'right';
     const tDir = spec.targetDir ?? 'left';
     const dx = spec.end.x - spec.start.x;
+    const dy = spec.end.y - spec.start.y;
+    // Manhattan lower bound + mild bend preference for non-aligned ports.
+    let score = Math.abs(dx) + Math.abs(dy) + (Math.abs(dy) > 0.5 && Math.abs(dx) > 0.5 ? 40 : 0);
+    // Prefer exits that face each other.
     if (dx > 40 && sDir === 'right' && tDir === 'left') score -= 600;
     if (dx < -40 && sDir === 'left' && tDir === 'right') score -= 600;
-    if (score < bestScore) {
-      bestScore = score;
-      bestPath = path;
-      best = spec;
+    // Mild penalty when both ports face the same way (forced U-turn).
+    if (sDir === tDir) score += 200;
+    // Tiny penalty if the straight corridor would immediately enter a foreign card (rough).
+    const midX = (spec.start.x + spec.end.x) / 2;
+    const midY = (spec.start.y + spec.end.y) / 2;
+    for (const o of obstacles) {
+      if (o.id === spec.sourceNodeId || o.id === spec.targetNodeId) continue;
+      if (midX > o.x && midX < o.x + o.width && midY > o.y && midY < o.y + o.height) {
+        score += 300;
+        break;
+      }
+    }
+    return score;
+  };
+
+  let best = candidates[0];
+  let bestScore = scoreCandidate(best);
+  for (let i = 1; i < candidates.length; i++) {
+    const s = scoreCandidate(candidates[i]);
+    if (s < bestScore) {
+      bestScore = s;
+      best = candidates[i];
     }
   }
-  return { path: bestPath, spec: best };
+  // No routing here — path is filled later by computeRoutes / the worker. Callers that need a
+  // preview can call findPath(spec) themselves (fast local A*, not libavoid).
+  return { path: [], spec: best };
 }
 
 interface SegmentRef {
@@ -1362,100 +1406,266 @@ function addCosmeticCurve(
   return points;
 }
 
-/** Runs stages for a full graph: pathfind, fan-in bundling (spaced corridors), lane separation,
- *  adapter keep-outs, cosmetic dips. Every path is stub-first off the port nipples. */
-export function computeRoutes(obstacles: RectObstacle[], edges: EdgeRouteSpec[]): Map<string, Point[]> {
-  const routes = new Map<string, Point[]>();
-  const ordered = [...edges].sort((a, b) => a.id.localeCompare(b.id));
-  const specById = new Map(ordered.map((s) => [s.id, s] as const));
-
-  // Pass 1: independent pathfinding (always exits the nipple horizontally first).
-  for (const spec of ordered) {
-    routes.set(spec.id, dropMicroSegments(simplifyColinear(findPath(spec, obstacles))));
+/**
+ * Inflate a finished trace into keep-out rectangles (copper clearance on a 1-layer PCB).
+ * Later nets must not enter these — that's how we prevent shorts and crossings.
+ */
+export function traceKeepouts(path: Point[], edgeId: string, clearance = TRACE_CLEARANCE): RectObstacle[] {
+  const rects: RectObstacle[] = [];
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    if (len < 2) continue;
+    if (Math.abs(a.y - b.y) < 0.5) {
+      const lo = Math.min(a.x, b.x);
+      const hi = Math.max(a.x, b.x);
+      rects.push({
+        id: `trace:${edgeId}:${i}`,
+        x: lo - clearance,
+        y: a.y - clearance,
+        width: hi - lo + clearance * 2,
+        height: clearance * 2,
+      });
+    } else if (Math.abs(a.x - b.x) < 0.5) {
+      const lo = Math.min(a.y, b.y);
+      const hi = Math.max(a.y, b.y);
+      rects.push({
+        id: `trace:${edgeId}:${i}`,
+        x: a.x - clearance,
+        y: lo - clearance,
+        width: clearance * 2,
+        height: hi - lo + clearance * 2,
+      });
+    }
   }
-  // Pass 1b: rebuild multi-cable fans onto evenly spaced corridors (MOTU→stagebox etc.).
-  bundleFanInRoutes(routes, ordered, obstacles);
-  const pass1Routes = resolveOverlaps(routes, obstacles, ordered);
+  return rects;
+}
 
-  // Pass 2: Identify adapter micro-node card obstacles
-  const adapterObstacles: RectObstacle[] = [];
-  for (const spec of ordered) {
-    if (!spec.isPowerAdapter) continue;
-    const pts = pass1Routes.get(spec.id);
-    if (!pts || pts.length < 2) continue;
+/** True if two paths short (collinear overlap) or cross (H/V intersection). */
+export function pathsViolateDrc(a: Point[], b: Point[]): boolean {
+  for (let i = 0; i < a.length - 1; i++) {
+    for (let j = 0; j < b.length - 1; j++) {
+      if (segmentsCross(a[i], a[i + 1], b[j], b[j + 1])) return true;
+    }
+  }
+  return false;
+}
 
-    // Find midpoint of longest straight interior segment
-    let maxDist = -1;
-    let bestMid = { x: (pts[0].x + pts[pts.length - 1].x) / 2, y: (pts[0].y + pts[pts.length - 1].y) / 2 };
-    const startIdx = pts.length >= 4 ? 1 : 0;
-    const endIdx = pts.length >= 4 ? pts.length - 2 : pts.length - 1;
-
-    for (let i = startIdx; i < endIdx; i++) {
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      if (dist > maxDist) {
-        maxDist = dist;
-        bestMid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+/**
+ * Label anchor for adapter badges / edge labels: midpoint of the longest interior segment
+ * whose center is outside every device card (label is copper silkscreen — not on a chip).
+ */
+export function findLabelPoint(
+  points: Point[],
+  nodeObstacles: RectObstacle[],
+  fallback: Point,
+): Point {
+  if (points.length < 2) return fallback;
+  const startIdx = points.length >= 4 ? 1 : 0;
+  const endIdx = points.length >= 4 ? points.length - 2 : points.length - 1;
+  let best = fallback;
+  let bestScore = -1;
+  for (let i = startIdx; i < endIdx; i++) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    if (len < 40) continue;
+    // Sample a few points along the segment; pick the one furthest from chip interiors.
+    for (const t of [0.35, 0.5, 0.65]) {
+      const mid = { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t };
+      let minDist = Infinity;
+      let inside = false;
+      for (const o of nodeObstacles) {
+        if (o.id.startsWith('trace:') || o.id.startsWith('adapter-card-')) continue;
+        const cx = Math.max(o.x, Math.min(mid.x, o.x + o.width));
+        const cy = Math.max(o.y, Math.min(mid.y, o.y + o.height));
+        const d = Math.hypot(mid.x - cx, mid.y - cy);
+        if (d < 1) inside = true;
+        minDist = Math.min(minDist, d);
+      }
+      if (inside) continue;
+      const score = len + minDist * 4;
+      if (score > bestScore) {
+        bestScore = score;
+        best = mid;
       }
     }
+  }
+  return best;
+}
 
-    // Register a 130x36px obstacle for this micro-node card
+/**
+ * Sync full-netlist routing for unit tests and main-thread fallback.
+ * Uses the bounded legacy pipeline only (no libavoid on this module's import graph).
+ *
+ * Production UI: `routeInWorker` → `finalizeRoutes`.
+ */
+export function computeRoutes(obstacles: RectObstacle[], edges: EdgeRouteSpec[]): Map<string, Point[]> {
+  return finalizeRoutes(obstacles, edges, computeRoutesLegacy(obstacles, edges));
+}
+
+/**
+ * Post-process paths from the worker (or any raw router): adapter-card clearance + cosmetic dips.
+ * Cheap enough for the main thread.
+ */
+export function finalizeRoutes(
+  obstacles: RectObstacle[],
+  edges: EdgeRouteSpec[],
+  raw: Map<string, Point[]>,
+): Map<string, Point[]> {
+  const specById = new Map(edges.map((s) => [s.id, s] as const));
+  let routes = raw;
+
+  const adapterObstacles: RectObstacle[] = [];
+  for (const spec of edges) {
+    if (!spec.isPowerAdapter) continue;
+    const pts = routes.get(spec.id);
+    if (!pts || pts.length < 2) continue;
+    const label = findLabelPoint(pts, obstacles, {
+      x: (pts[0].x + pts[pts.length - 1].x) / 2,
+      y: (pts[0].y + pts[pts.length - 1].y) / 2,
+    });
     adapterObstacles.push({
       id: `adapter-card-${spec.id}`,
-      x: bestMid.x - 65,
-      y: bestMid.y - 18,
+      x: label.x - 65,
+      y: label.y - 18,
       width: 130,
       height: 36,
     });
   }
 
-  // Pass 3: If we have micro-node card obstacles, re-route non-adapter cables around them
-  let finalRoutes = pass1Routes;
-  let finalObstacles = obstacles;
   if (adapterObstacles.length > 0) {
-    const combinedObstacles = [...obstacles, ...adapterObstacles];
-    const pass2Routes = new Map<string, Point[]>();
-    for (const spec of ordered) {
+    const live2: RectObstacle[] = [...obstacles, ...adapterObstacles];
+    const routes2 = new Map<string, Point[]>();
+    for (const spec of edges) {
+      const prev = routes.get(spec.id);
+      if (!prev) continue;
       if (spec.isPowerAdapter) {
-        pass2Routes.set(spec.id, pass1Routes.get(spec.id)!);
-      } else {
-        pass2Routes.set(spec.id, findPath(spec, combinedObstacles));
+        routes2.set(spec.id, prev);
+        live2.push(...traceKeepouts(prev, spec.id, TRACE_CLEARANCE));
+        continue;
       }
+      const hitsAdapter = adapterObstacles.some((card) =>
+        prev.slice(0, -1).some((p, i) => segmentCrossesRect(p, prev[i + 1], card, 2)),
+      );
+      const path = hitsAdapter
+        ? dropMicroSegments(simplifyColinear(findPath(spec, live2)))
+        : prev;
+      routes2.set(spec.id, path);
+      live2.push(...traceKeepouts(path, spec.id, TRACE_CLEARANCE));
     }
-    bundleFanInRoutes(pass2Routes, ordered, combinedObstacles);
-    finalRoutes = resolveOverlaps(pass2Routes, combinedObstacles, ordered);
-    finalObstacles = combinedObstacles;
+    routes = routes2;
   }
 
-  // Re-assert stubs after lane nudges (offsets can collapse a stub into a vertical-on-port).
-  for (const spec of ordered) {
-    const pts = finalRoutes.get(spec.id);
-    if (!pts) continue;
-    const sSign = spec.sourceDir === 'left' ? -1 : 1;
-    const tSign = spec.targetDir === 'right' ? 1 : -1;
-    const own = new Set([spec.sourceNodeId, spec.targetNodeId]);
-    const sStub = exitStubLen(spec.start, sSign, finalObstacles, own);
-    const stubbed = enforceExitStubs(pts, spec.start, spec.end, sSign, tSign, sStub);
-    const clear = makeSegmentClear(spec, finalObstacles);
-    finalRoutes.set(spec.id, pathIsClear(stubbed, clear) ? stubbed : pts);
-  }
-
-  // Flattened per-edge segment lists, computed once so each cable's cosmetic dip can be checked
-  // against every *other* cable's actual path, not just device boxes (see addCosmeticCurve).
   const segmentsByEdge = new Map<string, [Point, Point][]>();
-  for (const [id, pts] of finalRoutes) {
+  for (const [id, pts] of routes) {
     const segs: [Point, Point][] = [];
     for (let i = 0; i < pts.length - 1; i++) segs.push([pts[i], pts[i + 1]]);
     segmentsByEdge.set(id, segs);
   }
 
   const curvedRoutes = new Map<string, Point[]>();
-  for (const [id, pts] of finalRoutes) {
+  for (const [id, pts] of routes) {
     const otherSegments = Array.from(segmentsByEdge, ([otherId, segs]) => (otherId === id ? [] : segs)).flat();
-    curvedRoutes.set(id, addCosmeticCurve(id, pts, specById.get(id), finalObstacles, otherSegments));
+    const bent = addCosmeticCurve(id, pts, specById.get(id), obstacles, otherSegments);
+    let ok = true;
+    for (const [otherId, otherPts] of routes) {
+      if (otherId === id) continue;
+      if (pathsViolateDrc(bent, otherPts)) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) {
+      const spec = specById.get(id);
+      for (const o of obstacles) {
+        if (spec && (o.id === spec.sourceNodeId || o.id === spec.targetNodeId)) continue;
+        if (o.id.startsWith('trace:') || o.id.startsWith('adapter-card-')) continue;
+        if (bent.slice(0, -1).some((p, i) => segmentCrossesRect(p, bent[i + 1], o, OBSTACLE_PADDING))) {
+          ok = false;
+          break;
+        }
+      }
+    }
+    curvedRoutes.set(id, ok ? bent : pts);
   }
   return curvedRoutes;
+}
+
+/** Instant orthogonal stubs so cables appear before the worker answers (never blocks). */
+export function stubRoutes(edges: EdgeRouteSpec[]): Map<string, Point[]> {
+  const out = new Map<string, Point[]>();
+  for (const spec of edges) {
+    const sSign = spec.sourceDir === 'left' ? -1 : 1;
+    const tSign = spec.targetDir === 'right' ? 1 : -1;
+    const stub = 28;
+    const a: Point = { x: spec.start.x + sSign * stub, y: spec.start.y };
+    const b: Point = { x: spec.end.x + tSign * stub, y: spec.end.y };
+    const midX = Math.round((a.x + b.x) / 2);
+    out.set(
+      spec.id,
+      dropMicroSegments(
+        simplifyColinear([
+          { ...spec.start },
+          a,
+          { x: midX, y: a.y },
+          { x: midX, y: b.y },
+          b,
+          { ...spec.end },
+        ]),
+      ),
+    );
+  }
+  return out;
+}
+
+/**
+ * Legacy sequential fan-in + short-first A* (bounded). Used as UI fallback when the libavoid
+ * worker times out — never starts a second unbounded processTransaction on the main thread.
+ */
+export function computeRoutesLegacy(obstacles: RectObstacle[], edges: EdgeRouteSpec[]): Map<string, Point[]> {
+  const routes = new Map<string, Point[]>();
+  const live: RectObstacle[] = obstacles.map((o) => ({ ...o }));
+
+  bundleFanInRoutes(routes, edges, obstacles);
+  for (const [id, pts] of routes) {
+    live.push(...traceKeepouts(pts, id, TRACE_CLEARANCE));
+  }
+
+  const remaining = edges
+    .filter((e) => !routes.has(e.id))
+    .sort((a, b) => {
+      const la = Math.hypot(a.end.x - a.start.x, a.end.y - a.start.y);
+      const lb = Math.hypot(b.end.x - b.start.x, b.end.y - b.start.y);
+      return la - lb || a.id.localeCompare(b.id);
+    });
+
+  for (const spec of remaining) {
+    let path = dropMicroSegments(simplifyColinear(findPath(spec, live)));
+
+    const violates = () => {
+      if (!pathIsClear(path, makeSegmentClear(spec, live))) return true;
+      for (const [, otherPath] of routes) {
+        if (pathsViolateDrc(path, otherPath)) return true;
+      }
+      return false;
+    };
+
+    if (violates()) {
+      const boosted = live.map((o) =>
+        o.id.startsWith('trace:')
+          ? { ...o, x: o.x - 6, y: o.y - 6, width: o.width + 12, height: o.height + 12 }
+          : o,
+      );
+      path = dropMicroSegments(simplifyColinear(findPath(spec, boosted)));
+    }
+
+    routes.set(spec.id, path);
+    live.push(...traceKeepouts(path, spec.id, TRACE_CLEARANCE));
+  }
+
+  return routes;
 }
 
 /** Same corner-rounding technique `smoothstep` uses internally: cut each straight run short by

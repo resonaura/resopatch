@@ -36,11 +36,10 @@ body,
   overflow: hidden;
 }
 
-/* Patch bay: cables must paint above device cards. React Flow's default stacks nodes over
- * edges, which hid any route that clipped a card corner or ran in the keep-out margin.
- * Handles stay above edges so ports remain clickable for new connections. */
+/* Edges may sit above nodes for visibility of keep-out routes; geometry must not
+ * tunnel through cards. Handles stay topmost for connections. */
 .react-flow__edges {
-  z-index: 5 !important;
+  z-index: 4 !important;
 }
 .react-flow__nodes {
   z-index: 3 !important;
@@ -49,5 +48,5 @@ body,
   z-index: 3;
 }
 .react-flow__handle {
-  z-index: 6;
+  z-index: 6 !important;
 }

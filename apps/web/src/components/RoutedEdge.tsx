@@ -1,5 +1,5 @@
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from '@xyflow/react';
-import { roundedPathFromPoints, sampleAlongPath, type Point } from '../lib/edgeRouting';
+import { findLabelPoint, roundedPathFromPoints, sampleAlongPath, type Point } from '../lib/edgeRouting';
 import { useI18n } from '../lib/i18n';
 
 export interface RoutedEdgeData {
@@ -116,27 +116,14 @@ function CableTexture({
 }
 
 function findBestMidpoint(points?: Point[], sourceX?: number, sourceY?: number, targetX?: number, targetY?: number): Point {
-  if (!points || points.length < 2) {
-    return { x: ((sourceX ?? 0) + (targetX ?? 0)) / 2, y: ((sourceY ?? 0) + (targetY ?? 0)) / 2 };
-  }
-
-  let maxDist = -1;
-  let bestMid = { x: (points[0].x + points[points.length - 1].x) / 2, y: (points[0].y + points[points.length - 1].y) / 2 };
-
-  const startIdx = points.length >= 4 ? 1 : 0;
-  const endIdx = points.length >= 4 ? points.length - 2 : points.length - 1;
-
-  for (let i = startIdx; i < endIdx; i++) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-    if (dist > maxDist) {
-      maxDist = dist;
-      bestMid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-    }
-  }
-
-  return bestMid;
+  const fallback = {
+    x: ((sourceX ?? 0) + (targetX ?? 0)) / 2,
+    y: ((sourceY ?? 0) + (targetY ?? 0)) / 2,
+  };
+  if (!points || points.length < 2) return fallback;
+  // Prefer the longest free run (PCB silkscreen: not on a pad exit). Node keep-out for labels
+  // is applied when routing stores a preferred anchor; here we at least avoid stub tips.
+  return findLabelPoint(points, [], fallback);
 }
 
 /** Renders whatever path `CableRouter` (in Constructor.tsx) computed for this edge and cached

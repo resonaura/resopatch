@@ -1,0 +1,428 @@
+diff --git a/dist/actioninfo.js b/dist/actioninfo.js
+index 71e3b30c17ca6e9fc5534dd5b568518ca779a12b..b5a7f048d2003fde212332159a2de95ec102cae2 100644
+--- a/dist/actioninfo.js
++++ b/dist/actioninfo.js
+@@ -6,8 +6,8 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { ShapeMove, ShapeAdd, ShapeRemove, JunctionMove, JunctionAdd, JunctionRemove, ConnChange, ConnectionPinChange, } from './core/constants';
+-import { Polygon, Point } from './core/geomtypes';
++import { ShapeMove, ShapeAdd, ShapeRemove, JunctionMove, JunctionAdd, JunctionRemove, ConnChange, ConnectionPinChange, } from './core/constants.js';
++import { Polygon, Point } from './core/geomtypes.js';
+ /**
+  * ActionInfo -- tracks actions performed on objects during router transactions.
+  *
+diff --git a/dist/connectors/connectionpin.js b/dist/connectors/connectionpin.js
+index 37b2dff10727650e4b47995be77e3299c62451e5..5943b9fc76e04ff55aad6d7a75bd3c8b05aae228 100644
+--- a/dist/connectors/connectionpin.js
++++ b/dist/connectors/connectionpin.js
+@@ -6,9 +6,9 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { Point, Polygon } from '../core/geomtypes';
+-import { ConnDirNone, ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnDirAll, ATTACH_POS_TOP, ATTACH_POS_BOTTOM, ATTACH_POS_LEFT, ATTACH_POS_RIGHT, kShapeConnectionPin, PROP_ConnPoint, PROP_ConnectionPin, } from '../core/constants';
+-import { VertInf, VertID } from '../graph/vertices';
++import { Point, Polygon } from '../core/geomtypes.js';
++import { ConnDirNone, ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnDirAll, ATTACH_POS_TOP, ATTACH_POS_BOTTOM, ATTACH_POS_LEFT, ATTACH_POS_RIGHT, kShapeConnectionPin, PROP_ConnPoint, PROP_ConnectionPin, } from '../core/constants.js';
++import { VertInf, VertID } from '../graph/vertices.js';
+ /**
+  * Sentinel value indicating no pin class has been set.
+  */
+diff --git a/dist/connectors/connector.js b/dist/connectors/connector.js
+index dd31f87c1193c768486475e37aa00059065018d1..bddc4e46ae3cb02dc3daa7e60d7acb30432d2941 100644
+--- a/dist/connectors/connector.js
++++ b/dist/connectors/connector.js
+@@ -6,11 +6,11 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { ConnDirAll, ConnDirNone, ConnType_PolyLine, ConnType_Orthogonal, kUnassignedVertexNumber, PROP_ConnPoint, PROP_ConnCheckpoint, PROP_DummyPinHelper, VertID_src, VertID_tar, CROSSING_NONE, CROSSING_SHARES_PATH, CROSSING_SHARES_PATH_AT_END, CROSSING_SHARES_FIXED_SEGMENT, DO_INTERSECT, } from '../core/constants';
+-import { Point, Polygon } from '../core/geomtypes';
+-import { vecDir, euclideanDist, manhattanDist, pointOnLine, cornerSide, segmentIntersectPoint, } from '../core/geometry';
+-import { VertInf, VertID } from '../graph/vertices';
+-import { EdgeInf } from '../graph/graph';
++import { ConnDirAll, ConnDirNone, ConnType_PolyLine, ConnType_Orthogonal, kUnassignedVertexNumber, PROP_ConnPoint, PROP_ConnCheckpoint, PROP_DummyPinHelper, VertID_src, VertID_tar, CROSSING_NONE, CROSSING_SHARES_PATH, CROSSING_SHARES_PATH_AT_END, CROSSING_SHARES_FIXED_SEGMENT, DO_INTERSECT, } from '../core/constants.js';
++import { Point, Polygon } from '../core/geomtypes.js';
++import { vecDir, euclideanDist, manhattanDist, pointOnLine, cornerSide, segmentIntersectPoint, } from '../core/geometry.js';
++import { VertInf, VertID } from '../graph/vertices.js';
++import { EdgeInf } from '../graph/graph.js';
+ // ---- Crossing flag not currently in constants.js ----
+ export const CROSSING_TOUCHES = 1;
+ // ---- Connector types (re-exported for convenience) ----
+diff --git a/dist/connectors/connend.js b/dist/connectors/connend.js
+index 745ab248c15de48a1d950f9c5c2bfb191852a9e0..7e39654ade0e750073f8f5689bd041f1a42f9d28 100644
+--- a/dist/connectors/connend.js
++++ b/dist/connectors/connend.js
+@@ -6,12 +6,12 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { Point } from '../core/geomtypes';
+-import { ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnDirAll, ConnEndPoint, ConnEndShapePin, ConnEndJunction, ConnEndEmpty, kUnassignedVertexNumber, PROP_ConnPoint, portDirectionPenalty, VertID_src, VertID_tar, } from '../core/constants';
+-import { rotationalAngle, euclideanDist, manhattanDist } from '../core/geometry';
+-import { CONNECTIONPIN_UNSET, CONNECTIONPIN_CENTRE } from './connectionpin';
+-import { VertInf, VertID } from '../graph/vertices';
+-import { EdgeInf } from '../graph/graph';
++import { Point } from '../core/geomtypes.js';
++import { ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnDirAll, ConnEndPoint, ConnEndShapePin, ConnEndJunction, ConnEndEmpty, kUnassignedVertexNumber, PROP_ConnPoint, portDirectionPenalty, VertID_src, VertID_tar, } from '../core/constants.js';
++import { rotationalAngle, euclideanDist, manhattanDist } from '../core/geometry.js';
++import { CONNECTIONPIN_UNSET, CONNECTIONPIN_CENTRE } from './connectionpin.js';
++import { VertInf, VertID } from '../graph/vertices.js';
++import { EdgeInf } from '../graph/graph.js';
+ /**
+  * ConnEnd — represents a connector endpoint.
+  *
+diff --git a/dist/core/geometry.js b/dist/core/geometry.js
+index 205ad7bb99ea2a8b09852a387a8f6203cc05015d..3f973adbf8fbd8dd1879d80e2a4257bbeec932f2 100644
+--- a/dist/core/geometry.js
++++ b/dist/core/geometry.js
+@@ -5,8 +5,8 @@
+  * Based on "Computational Geometry in C" (Second Edition) by Joseph O'Rourke
+  * Segment intersection from Franklin Antonio, Graphics Gems III
+  */
+-import { Point, Polygon } from './geomtypes';
+-import { DONT_INTERSECT, DO_INTERSECT, PARALLEL } from './constants';
++import { Point, Polygon } from './geomtypes.js';
++import { DONT_INTERSECT, DO_INTERSECT, PARALLEL } from './constants.js';
+ // Direction from vector.
+ // Returns: 1 (counterclockwise), 0 (collinear), -1 (clockwise)
+ export function vecDir(a, b, c, maybeZero = 0) {
+diff --git a/dist/core/geomtypes.js b/dist/core/geomtypes.js
+index fcaf4ec19c9df18af7936a8932b3b8b2d1c16b0f..4b61eb96a3927a5d762498f0f1fabe2343bc10d4 100644
+--- a/dist/core/geomtypes.js
++++ b/dist/core/geomtypes.js
+@@ -3,7 +3,7 @@
+  * Original: Copyright (C) 2004-2014 Monash University
+  * Author: Michael Wybrow
+  */
+-import { XDIM, YDIM, kUnassignedVertexNumber } from './constants';
++import { XDIM, YDIM, kUnassignedVertexNumber } from './constants.js';
+ export class Point {
+     constructor(xv = 0, yv = 0) {
+         this.x = xv;
+diff --git a/dist/graph/graph.js b/dist/graph/graph.js
+index 886fc8e1a197ebf501f273e71a3adccae273aed2..67d90cf01184539c3d835ed95b8883f550315c0a 100644
+--- a/dist/graph/graph.js
++++ b/dist/graph/graph.js
+@@ -6,9 +6,9 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { Point } from '../core/geomtypes';
+-import { vecDir, euclideanDist, inValidRegion, segmentShapeIntersect, } from '../core/geometry';
+-import { dummyOrthogID } from './vertices';
++import { Point } from '../core/geomtypes.js';
++import { vecDir, euclideanDist, inValidRegion, segmentShapeIntersect, } from '../core/geometry.js';
++import { dummyOrthogID } from './vertices.js';
+ // ---------------------------------------------------------------------------
+ // Helper: orthogTurnOrder
+ // ---------------------------------------------------------------------------
+diff --git a/dist/graph/vertices.js b/dist/graph/vertices.js
+index 448c04c4e26f7be025d9505f9d8b53d07485e520..7c7d41fe08b1db54606ccd948214f30cd776d203 100644
+--- a/dist/graph/vertices.js
++++ b/dist/graph/vertices.js
+@@ -6,8 +6,8 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { kUnassignedVertexNumber, ConnDirNone, ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnDirAll, } from '../core/constants';
+-import { segmentIntersect } from '../core/geometry';
++import { kUnassignedVertexNumber, ConnDirNone, ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnDirAll, } from '../core/constants.js';
++import { segmentIntersect } from '../core/geometry.js';
+ // ---------------------------------------------------------------------------
+ // VertID
+ // ---------------------------------------------------------------------------
+diff --git a/dist/graph/visibility.js b/dist/graph/visibility.js
+index f8d05fa1a9e0f9983d6129e7c98b16c3497aaee2..2bc53dbb549a964d341e2c505c2f8870cd7a2c1a 100644
+--- a/dist/graph/visibility.js
++++ b/dist/graph/visibility.js
+@@ -11,10 +11,10 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { AHEAD, BEHIND, DO_INTERSECT } from '../core/constants';
+-import { Point } from '../core/geomtypes';
+-import { rotationalAngle, euclideanDist, vecDir, segmentIntersect, pointOnLine, inValidRegion, rayIntersectPoint, } from '../core/geometry';
+-import { EdgeInf } from './graph';
++import { AHEAD, BEHIND, DO_INTERSECT } from '../core/constants.js';
++import { Point } from '../core/geomtypes.js';
++import { rotationalAngle, euclideanDist, vecDir, segmentIntersect, pointOnLine, inValidRegion, rayIntersectPoint, } from '../core/geometry.js';
++import { EdgeInf } from './graph.js';
+ // ---------------------------------------------------------------------------
+ //  PointPair -- wraps a vertex together with its angle/distance from a center.
+ //  Used as elements in the sorted sweep vertex set.
+diff --git a/dist/hyperedge/hyperedge.js b/dist/hyperedge/hyperedge.js
+index b8304db9d22c9d67b5fdd13cb20ff097d74f247f..323c499a9460c7817d67af1be5c8c7a8516bf70a 100644
+--- a/dist/hyperedge/hyperedge.js
++++ b/dist/hyperedge/hyperedge.js
+@@ -6,7 +6,7 @@
+  * Port of hyperedge.h / hyperedge.cpp
+  * Contains the HyperedgeRerouter class and HyperedgeNewAndDeletedObjectLists.
+  */
+-import { JunctionRef } from './junction';
++import { JunctionRef } from './junction.js';
+ // ---------------------------------------------------------------------------
+ //  HyperedgeNewAndDeletedObjectLists
+ // ---------------------------------------------------------------------------
+diff --git a/dist/hyperedge/hyperedgeimprover.js b/dist/hyperedge/hyperedgeimprover.js
+index 4922959e8860f030a6a536e393ec7158e6870c9d..eadb85b0024eeeba4a720a2c2fb19ce00e335a5c 100644
+--- a/dist/hyperedge/hyperedgeimprover.js
++++ b/dist/hyperedge/hyperedgeimprover.js
+@@ -8,11 +8,11 @@
+  * nudging shift-segments, removing zero-length edges, and moving
+  * junctions along common edges.
+  */
+-import { CHANNEL_MAX } from '../core/constants';
+-import { pointOnLine } from '../core/geometry';
+-import { HyperedgeTreeNode, HyperedgeTreeEdge, OrderedHENodeSet, } from './hyperedgetree';
+-import { HyperedgeNewAndDeletedObjectLists } from './hyperedge';
+-import { JunctionRef } from './junction';
++import { CHANNEL_MAX } from '../core/constants.js';
++import { pointOnLine } from '../core/geometry.js';
++import { HyperedgeTreeNode, HyperedgeTreeEdge, OrderedHENodeSet, } from './hyperedgetree.js';
++import { HyperedgeNewAndDeletedObjectLists } from './hyperedge.js';
++import { JunctionRef } from './junction.js';
+ // ---------------------------------------------------------------------------
+ //  HyperedgeShiftSegment
+ // ---------------------------------------------------------------------------
+diff --git a/dist/hyperedge/hyperedgetree.js b/dist/hyperedge/hyperedgetree.js
+index 6e9eaca6803cd4495594a4168d6583aa2fe245f3..2755a3ef21fc297cf9cad1a5b2e458bf9a3ae839 100644
+--- a/dist/hyperedge/hyperedgetree.js
++++ b/dist/hyperedge/hyperedgetree.js
+@@ -7,7 +7,7 @@
+  * Classes representing a hyperedge as a tree that certain transformations
+  * can be performed on to improve hyperedge routing.
+  */
+-import { Point } from '../core/geomtypes';
++import { Point } from '../core/geomtypes.js';
+ // ---------------------------------------------------------------------------
+ //  Forward-reference helper: travellingForwardOnConnector
+ // ---------------------------------------------------------------------------
+diff --git a/dist/hyperedge/junction.js b/dist/hyperedge/junction.js
+index 03f4df335af4b8f63b851f85abc864d32a2d6980..a532595933258ab7265c8efcc45a3982d441a59f 100644
+--- a/dist/hyperedge/junction.js
++++ b/dist/hyperedge/junction.js
+@@ -7,9 +7,9 @@
+  * The JunctionRef class represents a fixed or free-floating point
+  * that connectors can be attached to.
+  */
+-import { XDIM, YDIM, idealNudgingDistance, ConnDirLeft, ConnDirRight, ConnDirUp, ConnDirDown, } from '../core/constants';
+-import { Point, Rectangle } from '../core/geomtypes';
+-import { Obstacle } from '../obstacles/obstacle';
++import { XDIM, YDIM, idealNudgingDistance, ConnDirLeft, ConnDirRight, ConnDirUp, ConnDirDown, } from '../core/constants.js';
++import { Point, Rectangle } from '../core/geomtypes.js';
++import { Obstacle } from '../obstacles/obstacle.js';
+ /**
+  * JunctionRef - Represents a junction between multiple connectors, or an
+  * intermediate point that a single connector must route through.
+diff --git a/dist/index.js b/dist/index.js
+index 001de276ddb2fbea65b39a427b32b609f13e4f23..b28787d93dabeb69d3c8811b4455abce45c87105 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -7,34 +7,34 @@
+  * Licensed under LGPL 2.1
+  */
+ // === Core ===
+-export { XDIM, YDIM, kUnassignedVertexNumber, kShapeConnectionPin, VertID_src, VertID_tar, PROP_ConnPoint, PROP_OrthShapeEdge, PROP_ConnectionPin, PROP_ConnCheckpoint, PROP_DummyPinHelper, ConnDirNone, ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnDirAll, ConnEndPoint, ConnEndShapePin, ConnEndJunction, ConnEndEmpty, ConnType_PolyLine, ConnType_Orthogonal, PolyLineRouting, OrthogonalRouting, segmentPenalty, anglePenalty, crossingPenalty, clusterCrossingPenalty, fixedSharedPathPenalty, portDirectionPenalty, shapeBufferDistance, idealNudgingDistance, reverseDirectionPenalty, nudgeOrthogonalSegmentsConnectedToShapes, improveHyperedgeRoutesMovingJunctions, penaliseOrthogonalSharedPathsAtConnEnds, nudgeOrthogonalTouchingColinearSegments, performUnifyingNudgingPreprocessingStep, improveHyperedgeRoutesMovingAddingAndDeletingJunctions, nudgeSharedPathsWithCommonEndPoint, TransactionPhaseRouteSearch, TransactionPhaseOrthogonalNudgingX, TransactionPhaseOrthogonalNudgingY, TransactionPhaseCompleted, TransformationType_CW90, TransformationType_CW180, TransformationType_CW270, TransformationType_FlipX, TransformationType_FlipY, ATTACH_POS_TOP, ATTACH_POS_LEFT, ATTACH_POS_CENTRE, ATTACH_POS_BOTTOM, ATTACH_POS_RIGHT, } from './core/constants';
+-export { Point, Box, Edge, Polygon, Rectangle, ReferencingPolygon } from './core/geomtypes';
+-export { vecDir, projection, euclideanDist, manhattanDist, totalLength, angle, inBetween, colinear, pointOnLine, segmentIntersect, segmentShapeIntersect, inValidRegion, cornerSide, inPoly, inPolyGen, segmentIntersectPoint, rayIntersectPoint, rotationalAngle, } from './core/geometry';
++export { XDIM, YDIM, kUnassignedVertexNumber, kShapeConnectionPin, VertID_src, VertID_tar, PROP_ConnPoint, PROP_OrthShapeEdge, PROP_ConnectionPin, PROP_ConnCheckpoint, PROP_DummyPinHelper, ConnDirNone, ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnDirAll, ConnEndPoint, ConnEndShapePin, ConnEndJunction, ConnEndEmpty, ConnType_PolyLine, ConnType_Orthogonal, PolyLineRouting, OrthogonalRouting, segmentPenalty, anglePenalty, crossingPenalty, clusterCrossingPenalty, fixedSharedPathPenalty, portDirectionPenalty, shapeBufferDistance, idealNudgingDistance, reverseDirectionPenalty, nudgeOrthogonalSegmentsConnectedToShapes, improveHyperedgeRoutesMovingJunctions, penaliseOrthogonalSharedPathsAtConnEnds, nudgeOrthogonalTouchingColinearSegments, performUnifyingNudgingPreprocessingStep, improveHyperedgeRoutesMovingAddingAndDeletingJunctions, nudgeSharedPathsWithCommonEndPoint, TransactionPhaseRouteSearch, TransactionPhaseOrthogonalNudgingX, TransactionPhaseOrthogonalNudgingY, TransactionPhaseCompleted, TransformationType_CW90, TransformationType_CW180, TransformationType_CW270, TransformationType_FlipX, TransformationType_FlipY, ATTACH_POS_TOP, ATTACH_POS_LEFT, ATTACH_POS_CENTRE, ATTACH_POS_BOTTOM, ATTACH_POS_RIGHT, } from './core/constants.js';
++export { Point, Box, Edge, Polygon, Rectangle, ReferencingPolygon } from './core/geomtypes.js';
++export { vecDir, projection, euclideanDist, manhattanDist, totalLength, angle, inBetween, colinear, pointOnLine, segmentIntersect, segmentShapeIntersect, inValidRegion, cornerSide, inPoly, inPolyGen, segmentIntersectPoint, rayIntersectPoint, rotationalAngle, } from './core/geometry.js';
+ // === Graph ===
+-export { VertID, VertInf, VertInfList } from './graph/vertices';
+-export { EdgeInf, EdgeList } from './graph/graph';
+-export { vertexVisibility } from './graph/visibility';
++export { VertID, VertInf, VertInfList } from './graph/vertices.js';
++export { EdgeInf, EdgeList } from './graph/graph.js';
++export { vertexVisibility } from './graph/visibility.js';
+ // === Obstacles ===
+-export { Obstacle } from './obstacles/obstacle';
+-export { ShapeRef } from './obstacles/shape';
+-export { ClusterRef } from './obstacles/viscluster';
++export { Obstacle } from './obstacles/obstacle.js';
++export { ShapeRef } from './obstacles/shape.js';
++export { ClusterRef } from './obstacles/viscluster.js';
+ // === Connectors ===
+-export { ConnEnd } from './connectors/connend';
+-export { ShapeConnectionPin } from './connectors/connectionpin';
+-export { ConnRef, Checkpoint, ConnectorCrossings } from './connectors/connector';
++export { ConnEnd } from './connectors/connend.js';
++export { ShapeConnectionPin } from './connectors/connectionpin.js';
++export { ConnRef, Checkpoint, ConnectorCrossings } from './connectors/connector.js';
+ // === Routing ===
+-export { AStarPath } from './routing/makepath';
+-export { ShiftSegment } from './routing/scanline';
+-export { generateStaticOrthogonalVisGraph, improveOrthogonalRoutes } from './routing/orthogonal';
++export { AStarPath } from './routing/makepath.js';
++export { ShiftSegment } from './routing/scanline.js';
++export { generateStaticOrthogonalVisGraph, improveOrthogonalRoutes } from './routing/orthogonal.js';
+ // === Hyperedge ===
+-export { JunctionRef } from './hyperedge/junction';
+-export { HyperedgeRerouter } from './hyperedge/hyperedge';
+-export { HyperedgeTreeNode, HyperedgeTreeEdge } from './hyperedge/hyperedgetree';
+-export { HyperedgeImprover } from './hyperedge/hyperedgeimprover';
++export { JunctionRef } from './hyperedge/junction.js';
++export { HyperedgeRerouter } from './hyperedge/hyperedge.js';
++export { HyperedgeTreeNode, HyperedgeTreeEdge } from './hyperedge/hyperedgetree.js';
++export { HyperedgeImprover } from './hyperedge/hyperedgeimprover.js';
+ // === Solver ===
+-export { Variable, Constraint, IncSolver } from './solver/vpsc';
+-export { MinimumTerminalSpanningTree } from './solver/mtst';
++export { Variable, Constraint, IncSolver } from './solver/vpsc.js';
++export { MinimumTerminalSpanningTree } from './solver/mtst.js';
+ // === Router (main entry point) ===
+-export { ActionInfo } from './actioninfo';
+-export { Router, ConnRerouteFlagDelegate, TopologyAddonInterface } from './router';
++export { ActionInfo } from './actioninfo.js';
++export { Router, ConnRerouteFlagDelegate, TopologyAddonInterface } from './router.js';
+ //# sourceMappingURL=index.js.map
+\ No newline at end of file
+diff --git a/dist/obstacles/obstacle.js b/dist/obstacles/obstacle.js
+index 1db8cc99cf0cdb2ca2fffe572971f048877a7e89..86bded2f91220a8a5dc820c57960ed559656ddbf 100644
+--- a/dist/obstacles/obstacle.js
++++ b/dist/obstacles/obstacle.js
+@@ -6,8 +6,8 @@
+  * The Obstacle class is the superclass for ShapeRef and JunctionRef.
+  * It represents an obstacle that connectors must be routed around.
+  */
+-import { shapeBufferDistance } from '../core/constants';
+-import { Point } from '../core/geomtypes';
++import { shapeBufferDistance } from '../core/constants.js';
++import { Point } from '../core/geomtypes.js';
+ /**
+  * VertID - Identifier for a vertex, combining an object ID and vertex number.
+  * This is a minimal port needed by Obstacle. The full version will live in vertices.js.
+diff --git a/dist/obstacles/shape.js b/dist/obstacles/shape.js
+index 0c3587e736e31b1784a3d82e278e545481da94cb..f80e2b7a1bb001e7fa19a64c510eea9ee1074aa6 100644
+--- a/dist/obstacles/shape.js
++++ b/dist/obstacles/shape.js
+@@ -6,11 +6,11 @@
+  * The ShapeRef class represents a shape object (an obstacle that connectors
+  * must be routed around). Extends Obstacle.
+  */
+-import { XDIM, YDIM, ConnDirNone, ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnDirAll, TransformationType_CW90, TransformationType_CW180, TransformationType_CW270, TransformationType_FlipX, TransformationType_FlipY, } from '../core/constants';
+-import { Point } from '../core/geomtypes';
+-import { Obstacle } from './obstacle';
+-// TODO: Import from './connectionpin' once ported.
+-// import { ShapeConnectionPin } from './connectionpin';
++import { XDIM, YDIM, ConnDirNone, ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnDirAll, TransformationType_CW90, TransformationType_CW180, TransformationType_CW270, TransformationType_FlipX, TransformationType_FlipY, } from '../core/constants.js';
++import { Point } from '../core/geomtypes.js';
++import { Obstacle } from './obstacle.js';
++// TODO: Import from './connectionpin.js' once ported.
++// import { ShapeConnectionPin } from './connectionpin.js';
+ // Connection pin attachment position constants (from connectionpin.h)
+ const ATTACH_POS_MIN_OFFSET = 0;
+ const ATTACH_POS_MAX_OFFSET = -1;
+diff --git a/dist/obstacles/viscluster.js b/dist/obstacles/viscluster.js
+index 4757fc3bb891e75fa4c78c110c3db2338c5f8984..386ba260159b0e1fe24e8f1de2a70ebda5800186 100644
+--- a/dist/obstacles/viscluster.js
++++ b/dist/obstacles/viscluster.js
+@@ -6,7 +6,7 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { ReferencingPolygon } from '../core/geomtypes';
++import { ReferencingPolygon } from '../core/geomtypes.js';
+ /**
+  * The ClusterRef class represents a cluster object.
+  *
+diff --git a/dist/router.js b/dist/router.js
+index 237c655bd4b6c33ee8e8fc8781f1ef64aca3c8d3..17df85ef6ac486a7bf2ed4fc7e222ab016fbdf44 100644
+--- a/dist/router.js
++++ b/dist/router.js
+@@ -6,12 +6,12 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { PolyLineRouting, OrthogonalRouting, ConnType_PolyLine, ConnType_Orthogonal, segmentPenalty, anglePenalty, crossingPenalty, clusterCrossingPenalty, fixedSharedPathPenalty, portDirectionPenalty, idealNudgingDistance, lastRoutingParameterMarker, nudgeOrthogonalSegmentsConnectedToShapes, improveHyperedgeRoutesMovingJunctions, penaliseOrthogonalSharedPathsAtConnEnds, nudgeOrthogonalTouchingColinearSegments, performUnifyingNudgingPreprocessingStep, improveHyperedgeRoutesMovingAddingAndDeletingJunctions, nudgeSharedPathsWithCommonEndPoint, lastRoutingOptionMarker, ShapeMove, ShapeAdd, ShapeRemove, JunctionMove, JunctionAdd, JunctionRemove, ConnChange, ConnectionPinChange, TransactionPhaseRouteSearch, TransactionPhaseCompleted, runningTo, runningFrom, CROSSING_SHARES_PATH, CROSSING_SHARES_FIXED_SEGMENT, CROSSING_SHARES_PATH_AT_END, CROSSING_TOUCHES, } from './core/constants';
+-import { Point, Polygon } from './core/geomtypes';
+-import { inPoly, inPolyGen, euclideanDist, manhattanDist, segmentShapeIntersect } from './core/geometry';
+-import { VertInfList, dummyOrthogID } from './graph/vertices';
+-import { EdgeList, EdgeInf } from './graph/graph';
+-import { ActionInfo } from './actioninfo';
++import { PolyLineRouting, OrthogonalRouting, ConnType_PolyLine, ConnType_Orthogonal, segmentPenalty, anglePenalty, crossingPenalty, clusterCrossingPenalty, fixedSharedPathPenalty, portDirectionPenalty, idealNudgingDistance, lastRoutingParameterMarker, nudgeOrthogonalSegmentsConnectedToShapes, improveHyperedgeRoutesMovingJunctions, penaliseOrthogonalSharedPathsAtConnEnds, nudgeOrthogonalTouchingColinearSegments, performUnifyingNudgingPreprocessingStep, improveHyperedgeRoutesMovingAddingAndDeletingJunctions, nudgeSharedPathsWithCommonEndPoint, lastRoutingOptionMarker, ShapeMove, ShapeAdd, ShapeRemove, JunctionMove, JunctionAdd, JunctionRemove, ConnChange, ConnectionPinChange, TransactionPhaseRouteSearch, TransactionPhaseCompleted, runningTo, runningFrom, CROSSING_SHARES_PATH, CROSSING_SHARES_FIXED_SEGMENT, CROSSING_SHARES_PATH_AT_END, CROSSING_TOUCHES, } from './core/constants.js';
++import { Point, Polygon } from './core/geomtypes.js';
++import { inPoly, inPolyGen, euclideanDist, manhattanDist, segmentShapeIntersect } from './core/geometry.js';
++import { VertInfList, dummyOrthogID } from './graph/vertices.js';
++import { EdgeList, EdgeInf } from './graph/graph.js';
++import { ActionInfo } from './actioninfo.js';
+ // Sentinel value for ConnType: no connector type
+ const ConnType_None = 0;
+ // ---------------------------------------------------------------------------
+diff --git a/dist/routing/makepath.js b/dist/routing/makepath.js
+index 169a71beeaad1514de6a00b8e213f0db39949fa3..1b54f3197d2bad4ea91c31014da7a56d8167d245 100644
+--- a/dist/routing/makepath.js
++++ b/dist/routing/makepath.js
+@@ -8,10 +8,10 @@
+  *
+  * Core A* pathfinding algorithm for connector routing.
+  */
+-import { ConnType_Orthogonal, ConnType_PolyLine, anglePenalty, segmentPenalty, clusterCrossingPenalty, crossingPenalty, fixedSharedPathPenalty, reverseDirectionPenalty, penaliseOrthogonalSharedPathsAtConnEnds, CostDirectionN, CostDirectionE, CostDirectionS, CostDirectionW, XDIM, YDIM, XL_EDGE, XH_EDGE, YL_EDGE, YH_EDGE, CROSSING_SHARES_PATH, CROSSING_SHARES_FIXED_SEGMENT, CROSSING_SHARES_PATH_AT_END, PROP_ConnPoint, } from '../core/constants';
+-import { Point, Polygon } from '../core/geomtypes';
+-import { vecDir, euclideanDist, manhattanDist } from '../core/geometry';
+-import { ConnectorCrossings } from '../connectors/connector';
++import { ConnType_Orthogonal, ConnType_PolyLine, anglePenalty, segmentPenalty, clusterCrossingPenalty, crossingPenalty, fixedSharedPathPenalty, reverseDirectionPenalty, penaliseOrthogonalSharedPathsAtConnEnds, CostDirectionN, CostDirectionE, CostDirectionS, CostDirectionW, XDIM, YDIM, XL_EDGE, XH_EDGE, YL_EDGE, YH_EDGE, CROSSING_SHARES_PATH, CROSSING_SHARES_FIXED_SEGMENT, CROSSING_SHARES_PATH_AT_END, PROP_ConnPoint, } from '../core/constants.js';
++import { Point, Polygon } from '../core/geomtypes.js';
++import { vecDir, euclideanDist, manhattanDist } from '../core/geometry.js';
++import { ConnectorCrossings } from '../connectors/connector.js';
+ // ---------------------------------------------------------------------------
+ // ANode: A* search node
+ // ---------------------------------------------------------------------------
+diff --git a/dist/routing/orthogonal.js b/dist/routing/orthogonal.js
+index cfc14a17ca66704ae7fff939ff0d666b4d65c12f..364eeaa2e4eaa0d03bfccfb7d3bfda23ca750e92 100644
+--- a/dist/routing/orthogonal.js
++++ b/dist/routing/orthogonal.js
+@@ -6,12 +6,12 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { XDIM, YDIM, CHANNEL_MAX, Open, ConnPoint, Close, ConnDirNone, ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnType_Orthogonal, segmentPenalty, fixedSharedPathPenalty, idealNudgingDistance, nudgeOrthogonalSegmentsConnectedToShapes, nudgeOrthogonalTouchingColinearSegments, performUnifyingNudgingPreprocessingStep, nudgeSharedPathsWithCommonEndPoint, TransactionPhaseOrthogonalNudgingX, TransactionPhaseOrthogonalNudgingY, XL_EDGE, XL_CONN, XH_EDGE, XH_CONN, YL_EDGE, YL_CONN, YH_EDGE, YH_CONN, CROSSING_SHARES_PATH_AT_END, } from '../core/constants';
+-import { Point } from '../core/geomtypes';
+-import { VertInf, dummyOrthogID, dummyOrthogShapeID } from '../graph/vertices';
+-import { EdgeInf } from '../graph/graph';
+-import { Variable, Constraint, IncSolver } from '../solver/vpsc';
+-import { ShiftSegment, Node, Event, compareEvents, buildOrthogonalChannelInfo, buildConnectorRouteCheckpointCache, clearConnectorRouteCheckpointCache, } from './scanline';
++import { XDIM, YDIM, CHANNEL_MAX, Open, ConnPoint, Close, ConnDirNone, ConnDirUp, ConnDirDown, ConnDirLeft, ConnDirRight, ConnType_Orthogonal, segmentPenalty, fixedSharedPathPenalty, idealNudgingDistance, nudgeOrthogonalSegmentsConnectedToShapes, nudgeOrthogonalTouchingColinearSegments, performUnifyingNudgingPreprocessingStep, nudgeSharedPathsWithCommonEndPoint, TransactionPhaseOrthogonalNudgingX, TransactionPhaseOrthogonalNudgingY, XL_EDGE, XL_CONN, XH_EDGE, XH_CONN, YL_EDGE, YL_CONN, YH_EDGE, YH_CONN, CROSSING_SHARES_PATH_AT_END, } from '../core/constants.js';
++import { Point } from '../core/geomtypes.js';
++import { VertInf, dummyOrthogID, dummyOrthogShapeID } from '../graph/vertices.js';
++import { EdgeInf } from '../graph/graph.js';
++import { Variable, Constraint, IncSolver } from '../solver/vpsc.js';
++import { ShiftSegment, Node, Event, compareEvents, buildOrthogonalChannelInfo, buildConnectorRouteCheckpointCache, clearConnectorRouteCheckpointCache, } from './scanline.js';
+ // ===========================================================================
+ // Constants (file-local)
+ // ===========================================================================
+diff --git a/dist/routing/scanline.js b/dist/routing/scanline.js
+index b4f943b82c73c3cbf06846f6df4a3273300de0c2..86d7e3ed27427a6c506dd9ae416003d0d741cd72 100644
+--- a/dist/routing/scanline.js
++++ b/dist/routing/scanline.js
+@@ -6,8 +6,8 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { XDIM, YDIM, CHANNEL_MAX, Open, SegOpen, SegClose, Close, ConnType_Orthogonal, } from '../core/constants';
+-import { pointOnLine } from '../core/geometry';
++import { XDIM, YDIM, CHANNEL_MAX, Open, SegOpen, SegClose, Close, ConnType_Orthogonal, } from '../core/constants.js';
++import { pointOnLine } from '../core/geometry.js';
+ // ===========================================================================
+ // ShiftSegment (abstract base class)
+ // ===========================================================================
+diff --git a/dist/solver/mtst.js b/dist/solver/mtst.js
+index f8ea40a80919a9d4e9e002ceb44088f5897b5440..810dfec876b271684f85cf8c27a785a1cd1fd6da 100644
+--- a/dist/solver/mtst.js
++++ b/dist/solver/mtst.js
+@@ -13,9 +13,9 @@
+  *
+  * Licensed under LGPL 2.1
+  */
+-import { VertID, VertInf } from '../graph/vertices';
+-import { colinear } from '../core/geometry';
+-import { EdgeInf } from '../graph/graph';
++import { VertID, VertInf } from '../graph/vertices.js';
++import { colinear } from '../core/geometry.js';
++import { EdgeInf } from '../graph/graph.js';
+ // ---------------------------------------------------------------------------
+ // Heap comparison: vertex heap for extended Dijkstra's algorithm.
+ // ---------------------------------------------------------------------------

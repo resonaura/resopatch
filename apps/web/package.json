@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/copy-libavoid-wasm.mjs",
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/copy-libavoid-wasm.mjs && tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run"
   },
@@ -17,10 +18,14 @@
     "@resopatch/shared": "workspace:*",
     "@tanstack/react-query": "^5.101.2",
     "@xyflow/react": "^12.11.2",
+    "avoid-nodes-edge": "^0.3.2",
+    "libavoid-js": "0.4.5",
     "lucide-react": "^1.25.0",
+    "obstacle-router": "0.1.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@iconify-json/fad": "^1.2.1",

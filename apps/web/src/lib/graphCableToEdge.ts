@@ -107,8 +107,8 @@ export function graphCableToEdge(
       strokeDasharray: dash,
     },
     animated: cable.cableType === CableType.CONTROL_LINK,
-    // Keep cables above device cards so routes never visually "disappear under" a node.
-    // Selected edges still win so the active cable is easy to grab.
-    zIndex: isSelected ? 1002 : 1000,
+    // Default under cards (CSS .react-flow__edges < .react-flow__nodes).
+    // Only the selected cable rises above nodes so it remains easy to grab.
+    zIndex: isSelected ? 1001 : 0,
   };
 }

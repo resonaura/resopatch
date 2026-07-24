@@ -59,13 +59,21 @@ function nameIncludes(device: LayoutDevice, substr: string): boolean {
 
 const FALLBACK_WIDTH = 260;
 const FALLBACK_HEIGHT = 240;
-const COLUMN_GAP = 180;
-const ROW_GAP = 160;
-const CHAIN_GAP_X = 220;
-const ZONE_GAP_X = 520;
-const ZONE_GAP_Y = 480;
-const PIN_GAP = 60;
-const OVERLAP_GAP = 48;
+/**
+ * Default spacing for Arrange / first auto-layout.
+ * Wide corridors leave room for orthogonal cables (avoid-nodes) without stacking cards.
+ * Bump LAYOUT_REVISION in Constructor when these change so existing setups re-arrange once.
+ */
+const COLUMN_GAP = 260;
+const ROW_GAP = 220;
+const CHAIN_GAP_X = 320;
+const ZONE_GAP_X = 720;
+const ZONE_GAP_Y = 640;
+const PIN_GAP = 96;
+const OVERLAP_GAP = 72;
+
+/** Bump when default gaps / zone packing change — triggers one client re-layout for old saves. */
+export const LAYOUT_REVISION = '3-wide-corridors';
 
 type ZoneName = 'andrii' | 'drummer' | 'vox' | 'service' | 'inactive';
 
@@ -161,7 +169,9 @@ function layoutZone(
 
   const ids = new Set(zoneDevices.map((d) => d.id));
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: 'TB', nodesep: 1, ranksep: 1, marginx: 0, marginy: 0 });
+  // Real nodesep/ranksep only affect dagre's internal ranking; we re-place by densified ranks.
+  // Slight separation still improves rank assignment for crossing-heavy zones.
+  g.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 80, marginx: 0, marginy: 0 });
   g.setDefaultEdgeLabel(() => ({}));
   for (const d of zoneDevices) {
     const { width, height } = sizeOf(d.id);
@@ -373,9 +383,11 @@ export function computeAutoLayout(
     [groups.drummer.map((d) => d.id), drummer],
     [groups.service.map((d) => d.id), service],
   ];
+  // More swap passes → fewer straight-line crossings inside each role zone before
+  // orthogonal routing; zones themselves stay fixed (ownership preserved).
   for (const [zoneIds] of zoneGroups) {
     if (zoneIds.length < 2) continue;
-    greedySwapMinimize(zoneIds, allEdges, positions, sizeMap);
+    greedySwapMinimize(zoneIds, allEdges, positions, sizeMap, 16);
   }
 
   // Prefer amp mic next to Danya-vocal's guitar combo.
