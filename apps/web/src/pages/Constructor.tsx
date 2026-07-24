@@ -239,11 +239,15 @@ export default function Constructor({
     [mainGraph.externalCables, portToDevice, portById, deviceByPortId, selection],
   );
 
-  const movePosition = useMutation({
-    mutationFn: (vars: { id: string; position: { x: number; y: number } }) =>
-      api.updateDevice(vars.id, { position: vars.position }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["graph", setupId] }),
-  });
+  /**
+   * Epoch bumped on every Arrange. In-flight drag saves that started before
+   * Arrange must not overwrite the arranged positions (classic race:
+   * drag-stop PUT lands after auto-layout PUT → canvas snaps back).
+   */
+  const arrangeEpochRef = useRef(0);
+  const lastArrangePositionsRef = useRef<Record<string, { x: number; y: number }> | null>(null);
+  /** Bumps so PatchCanvas forces a position sync even if RF held local drag state. */
+  const [layoutSyncKey, setLayoutSyncKey] = useState(0);
 
   const getMeasuredSizesRef = useRef<
     (() => Record<string, { width: number; height: number }>) | null
@@ -262,14 +266,53 @@ export default function Constructor({
         };
       });
     },
-    [qc, setupId, graph],
+    [qc, setupId],
   );
 
+  const movePosition = useMutation({
+    mutationFn: async (vars: { id: string; position: { x: number; y: number }; epoch: number }) => {
+      // Drop the write if Arrange already started after this drag was queued.
+      if (vars.epoch !== arrangeEpochRef.current) {
+        return { ignored: true as const, id: vars.id };
+      }
+      await api.updateDevice(vars.id, { position: vars.position });
+      // If Arrange finished while we were in flight, re-assert arranged coords.
+      if (vars.epoch !== arrangeEpochRef.current) {
+        const arranged = lastArrangePositionsRef.current?.[vars.id];
+        if (arranged) {
+          await api.updateDevice(vars.id, { position: arranged });
+        }
+        return { ignored: true as const, id: vars.id };
+      }
+      return { ignored: false as const, id: vars.id, position: vars.position };
+    },
+    onMutate: async (vars) => {
+      // Optimistic local move; don't await a full graph refetch on every drag.
+      if (vars.epoch !== arrangeEpochRef.current) return;
+      applyPositionsToCache({ [vars.id]: vars.position });
+    },
+    onSuccess: (data) => {
+      if (data.ignored) return;
+      // Quiet background reconcile — skip if Arrange superseded us.
+      void qc.invalidateQueries({ queryKey: ["graph", setupId] });
+    },
+  });
+
   /** Layout is computed entirely in the browser; the API only stores the result.
-   *  Arrange always recomputes with default wide-gap packing and overwrites drags. */
+   *  Arrange always recomputes with default packing and overwrites manual drags. */
   const autoLayout = useMutation({
     mutationFn: async () => {
-      if (!graph) return { updated: 0, positions: {} as Record<string, { x: number; y: number }> };
+      // Invalidate any in-flight drag saves even if graph is missing.
+      arrangeEpochRef.current += 1;
+      const epoch = arrangeEpochRef.current;
+
+      if (!graph) {
+        return {
+          updated: 0,
+          positions: {} as Record<string, { x: number; y: number }>,
+          epoch,
+        };
+      }
 
       // Prefer live measured sizes; if canvas not ready, wait one frame and retry once.
       let sizes = getMeasuredSizesRef.current ? getMeasuredSizesRef.current() : {};
@@ -280,11 +323,17 @@ export default function Constructor({
 
       const { positions } = computeAutoLayout(graph.devices, graph.cables, sizes);
       const record = positionsToRecord(positions);
+      lastArrangePositionsRef.current = record;
 
       // Always paint defaults immediately (this is what "Arrange = reset" means).
       applyPositionsToCache(record);
+      setLayoutSyncKey((k) => k + 1);
 
       const result = await api.autoLayout(setupId, record);
+      // If a newer Arrange started, don't stamp older results.
+      if (epoch !== arrangeEpochRef.current) {
+        return { ...result, positions: lastArrangePositionsRef.current ?? record, epoch };
+      }
       try {
         localStorage.setItem(
           `resopatch_layout_topo_${setupId}`,
@@ -294,13 +343,17 @@ export default function Constructor({
       } catch {
         // ignore
       }
-      return { ...result, positions: record };
+      return { ...result, positions: record, epoch };
     },
     onSuccess: async (data) => {
+      if (data.epoch !== arrangeEpochRef.current) return;
       // Re-apply after refetch so a stale server response cannot undo Arrange.
       applyPositionsToCache(data.positions);
+      setLayoutSyncKey((k) => k + 1);
       await qc.invalidateQueries({ queryKey: ["graph", setupId] });
+      if (data.epoch !== arrangeEpochRef.current) return;
       applyPositionsToCache(data.positions);
+      setLayoutSyncKey((k) => k + 1);
     },
   });
 
@@ -520,13 +573,19 @@ export default function Constructor({
             <PatchCanvas
               nodes={initialNodes}
               edges={initialEdges}
+              layoutSyncKey={layoutSyncKey}
               onNodeClick={(id) => selectItem({ kind: "device", id })}
               onEdgeClick={(id) => selectItem({ kind: "cable", id })}
               onPaneClick={() => setSelection(null)}
               onConnect={onConnect}
-              onNodeMoved={(id, position) =>
-                movePosition.mutate({ id, position })
-              }
+              onNodeMoved={(id, position) => {
+                if (autoLayout.isPending) return;
+                movePosition.mutate({
+                  id,
+                  position,
+                  epoch: arrangeEpochRef.current,
+                });
+              }}
               onGetMeasuredSizes={(getter) => {
                 getMeasuredSizesRef.current = getter;
               }}
@@ -615,7 +674,9 @@ export default function Constructor({
             setShowNewDevice(true);
           }}
           onConnect={onConnect}
-          onNodeMoved={(id, position) => movePosition.mutate({ id, position })}
+          onNodeMoved={(id, position) =>
+            movePosition.mutate({ id, position, epoch: arrangeEpochRef.current })
+          }
           onRunAutoLayout={runAutoLayout}
           isAutoLayoutPending={autoLayout.isPending}
         />

@@ -1,12 +1,12 @@
 /**
  * Dual-nipple routing:
- *  1) Fat virtual body-block between L/R faces (worker obstacles).
- *  2) Score every L/R × L/R nipple combo after WASM — pick the one that does not
- *     tunnel through the card (user idea: try both sides, keep the clear path).
+ *  Score all L/R × L/R combos by real path quality (length, bends, body hits).
+ *  Facing sides are a soft preference, never a hard lock that forces a detour.
+ *  WASM only when no simple clear path exists for any combo.
  */
 
 import type { Edge, Node } from '@xyflow/react';
-import { pathHitsNodeBodies, type NodeBox } from './pathAvoidNodes';
+import { pathHitsNodeBodies, simplifyClearPath, type NodeBox } from './pathAvoidNodes';
 import {
     basePortId,
     snapPathToNipples,
@@ -15,6 +15,7 @@ import {
     type Point,
     type Side,
 } from './portHandles';
+import { buildSimpleOrthoPath } from './simpleOrtho';
 
 export const NIPPLE_WALL_PREFIX = '__nipple_wall__';
 
@@ -22,14 +23,34 @@ export function isNippleWallId(id: string): boolean {
   return id.startsWith(NIPPLE_WALL_PREFIX);
 }
 
+/** Inline PSU cards (virtual nodes) — obstacles only, no dual nipples / walls. */
+export function isPsuObstacleId(id: string): boolean {
+  return id.startsWith('__psu_card__');
+}
+
 /**
  * Each device → real card + fat interior obstacle (almost full body).
  * Only ~12px gutters on L/R remain free so pads can still attach.
+ * PSU adapter cards pass through as plain obstacles.
  */
 export function toRoutingNodesWithNippleWalls(nodes: Node[]): Node[] {
   const out: Node[] = [];
   for (const n of nodes) {
     if (isNippleWallId(n.id)) continue;
+    if (isPsuObstacleId(n.id)) {
+      const w = Number(n.measured?.width ?? n.width ?? 148);
+      const h = Number(n.measured?.height ?? n.height ?? 52);
+      out.push({
+        id: n.id,
+        type: n.type,
+        position: { ...n.position },
+        width: w,
+        height: h,
+        measured: { width: w, height: h },
+        data: {},
+      });
+      continue;
+    }
     const w = Number(n.measured?.width ?? n.width ?? 240);
     const h = Number(n.measured?.height ?? n.height ?? 100);
     const x = n.position.x;
@@ -79,6 +100,14 @@ export function toRoutingEdges(edges: Edge[]): Edge[] {
 
 type HandleHit = { id: string; side: Side; point: Point };
 
+/** Side from handle id (authoritative) — RF position can lie after transforms. */
+function sideFromHandleId(id: string, kind: 'source' | 'target'): Side {
+  if (kind === 'source') {
+    return id.endsWith('-src-left') ? 'left' : 'right';
+  }
+  return id.endsWith('-tgt-right') ? 'right' : 'left';
+}
+
 function listHandles(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   internalNode: any,
@@ -96,9 +125,10 @@ function listHandles(
   const out: HandleHit[] = [];
   for (const h of list) {
     if (!h.id) continue;
+    const side = sideFromHandleId(h.id, kind);
     out.push({
       id: h.id,
-      side: h.position === 'left' ? 'left' : 'right',
+      side,
       point: { x: abs.x + h.x + h.width / 2, y: abs.y + h.y + h.height / 2 },
     });
   }
@@ -114,8 +144,70 @@ function pathLength(pts: Point[]): number {
 }
 
 /**
- * Try left & right nipples on BOTH ends (up to 4 combos). Keep the path that
- * does not cross card bodies; among clear ones, shortest.
+ * Which face of `box` is closer (in X) to the other card's center.
+ * This is the geometric "nearest nipple" rule — independent of path length.
+ */
+export function closerFace(box: { x: number; width: number }, otherCenterX: number): Side {
+  const leftX = box.x;
+  const rightX = box.x + box.width;
+  return Math.abs(leftX - otherCenterX) <= Math.abs(rightX - otherCenterX) ? 'left' : 'right';
+}
+
+/**
+ * Geometric facing sides: each card uses the face closer to the other card.
+ * Stacked cards (similar X) share the freer outer face.
+ */
+export function preferredSides(
+  sCx: number,
+  tCx: number,
+  sCy: number,
+  tCy: number,
+  sourceBox?: { x: number; width: number } | null,
+  targetBox?: { x: number; width: number } | null,
+): { source: Side; target: Side } {
+  const dx = tCx - sCx;
+  const dy = Math.abs(tCy - sCy);
+  // Stacked cards: same outer face so the vertical corridor sits outside both.
+  if (Math.abs(dx) < 120 && dy > 40) {
+    const side: Side = (sCx + tCx) / 2 < 2000 ? 'left' : 'right';
+    return { source: side, target: side };
+  }
+  if (sourceBox && targetBox) {
+    return {
+      source: closerFace(sourceBox, tCx),
+      target: closerFace(targetBox, sCx),
+    };
+  }
+  if (dx >= 0) return { source: 'right', target: 'left' };
+  return { source: 'left', target: 'right' };
+}
+
+/** Free-air Manhattan via exterior stubs — pure geometric closeness of a nipple pair. */
+function nippleAirLength(s: HandleHit, t: HandleHit, stub = 28): number {
+  const sOut = s.side === 'right' ? s.point.x + stub : s.point.x - stub;
+  const tOut = t.side === 'right' ? t.point.x + stub : t.point.x - stub;
+  return Math.abs(sOut - tOut) + Math.abs(s.point.y - t.point.y) + stub * 2;
+}
+
+type Candidate = {
+  path: Point[];
+  sourceHandle: string;
+  targetHandle: string;
+  sourceSide: Side;
+  targetSide: Side;
+  score: number;
+  nearest: boolean;
+  simple: boolean;
+};
+
+/**
+ * Pick L/R nipples + path.
+ *
+ * Rule (hard):
+ *  1. Each card's closer face to the other card is the default ("nearest nipples").
+ *  2. If that combo has a clear simple ortho path → always use it.
+ *  3. Only if nearest is blocked by foreign cards do we try other L/R combos,
+ *     picking the shortest clear path among those.
  */
 export function pickBestNipplePath(
   wasmPath: Point[],
@@ -132,60 +224,196 @@ export function pickBestNipplePath(
 
   const srcWanted = new Set(sourceHandleOptions(srcBase).map((o) => o.id));
   const tgtWanted = new Set(targetHandleOptions(tgtBase).map((o) => o.id));
-  const srcOpts = listHandles(sourceNode, 'source').filter((h) => srcWanted.has(h.id));
-  const tgtOpts = listHandles(targetNode, 'target').filter((h) => tgtWanted.has(h.id));
-  if (srcOpts.length === 0 || tgtOpts.length === 0) return null;
+  let srcOpts = listHandles(sourceNode, 'source').filter((h) => srcWanted.has(h.id));
+  let tgtOpts = listHandles(targetNode, 'target').filter((h) => tgtWanted.has(h.id));
 
   const sourceBox = boxes.find((b) => b.id === sourceNode.id) ?? null;
   const targetBox = boxes.find((b) => b.id === targetNode.id) ?? null;
+  const ownIds = new Set<string>([sourceNode.id as string, targetNode.id as string]);
+  // Never treat own cards as obstacles for nipple scoring — stubs attach to their faces.
+  const foreignBoxes = boxes.filter((b) => !ownIds.has(b.id));
 
-  let best: {
-    path: Point[];
-    sourceHandle: string;
-    targetHandle: string;
-    sourceSide: Side;
-    targetSide: Side;
-    score: number;
-  } | null = null;
+  const portYFrom = (
+    opts: HandleHit[],
+    box: NodeBox | null,
+    node: { internals?: { positionAbsolute?: { y: number } } },
+  ) => {
+    if (opts.length > 0) return opts[0].point.y;
+    if (box) return (node.internals?.positionAbsolute?.y ?? box.y) + box.height / 2;
+    return 0;
+  };
 
+  // Always ensure both L and R options exist (RF may only measure the currently connected side).
+  if (sourceBox) {
+    const y = portYFrom(srcOpts, sourceBox, sourceNode);
+    const have = new Set(srcOpts.map((h) => h.side));
+    for (const o of sourceHandleOptions(srcBase)) {
+      if (have.has(o.side)) continue;
+      srcOpts.push({
+        id: o.id,
+        side: o.side,
+        point: {
+          x: o.side === 'right' ? sourceBox.x + sourceBox.width : sourceBox.x,
+          y,
+        },
+      });
+    }
+  }
+  if (targetBox) {
+    const y = portYFrom(tgtOpts, targetBox, targetNode);
+    const have = new Set(tgtOpts.map((h) => h.side));
+    for (const o of targetHandleOptions(tgtBase)) {
+      if (have.has(o.side)) continue;
+      tgtOpts.push({
+        id: o.id,
+        side: o.side,
+        point: {
+          x: o.side === 'right' ? targetBox.x + targetBox.width : targetBox.x,
+          y,
+        },
+      });
+    }
+  }
+
+  // Prefer real measured handle coords when both sides exist; keep synthesized for missing.
+  // Deduplicate by side (measured wins over synthesized if we re-listed).
+  const dedupeBySide = (opts: HandleHit[]): HandleHit[] => {
+    const bySide = new Map<Side, HandleHit>();
+    for (const h of opts) {
+      const prev = bySide.get(h.side);
+      // Keep first (measured listHandles comes first).
+      if (!prev) bySide.set(h.side, h);
+    }
+    return [...bySide.values()];
+  };
+  srcOpts = dedupeBySide(srcOpts);
+  tgtOpts = dedupeBySide(tgtOpts);
+
+  if (srcOpts.length === 0 || tgtOpts.length === 0) return null;
+
+  const sCx = (sourceBox?.x ?? 0) + (sourceBox?.width ?? 0) / 2;
+  const tCx = (targetBox?.x ?? 0) + (targetBox?.width ?? 0) / 2;
+  const sCy = (sourceBox?.y ?? 0) + (sourceBox?.height ?? 0) / 2;
+  const tCy = (targetBox?.y ?? 0) + (targetBox?.height ?? 0) / 2;
+  const prefer = preferredSides(sCx, tCx, sCy, tCy, sourceBox, targetBox);
+
+  const trySimple = (s: HandleHit, t: HandleHit): Point[] | null => {
+    const path = buildSimpleOrthoPath(
+      s.point,
+      t.point,
+      s.side,
+      t.side,
+      sourceBox,
+      targetBox,
+      boxes,
+      sourceNode.id as string,
+      targetNode.id as string,
+      28,
+      4,
+    );
+    if (!path) return null;
+    // Only foreign cards block — own faces are legal attach points.
+    if (pathHitsNodeBodies(path, foreignBoxes, 2)) return null;
+    return path;
+  };
+
+  const toResult = (c: Candidate) => ({
+    path: c.path,
+    sourceHandle: c.sourceHandle,
+    targetHandle: c.targetHandle,
+    sourceSide: c.sourceSide,
+    targetSide: c.targetSide,
+  });
+
+  // --- 1) Nearest nipples first: if clear, done. No scoring contest. ---
+  const nearestS = srcOpts.find((h) => h.side === prefer.source) ?? srcOpts[0];
+  const nearestT = tgtOpts.find((h) => h.side === prefer.target) ?? tgtOpts[0];
+  const nearestPath = trySimple(nearestS, nearestT);
+  if (nearestPath) {
+    return {
+      path: nearestPath,
+      sourceHandle: nearestS.id,
+      targetHandle: nearestT.id,
+      sourceSide: nearestS.side,
+      targetSide: nearestT.side,
+    };
+  }
+
+  // --- 2) Other simple combos: only when nearest is blocked. Min path length wins. ---
+  let bestSimple: Candidate | null = null;
   for (const s of srcOpts) {
     for (const t of tgtOpts) {
-      const snapped = snapPathToNipples(
-        wasmPath,
-        s.point,
-        t.point,
-        s.side,
-        t.side,
-        sourceBox,
-        targetBox,
-        32,
-      );
-      const hitsBody = pathHitsNodeBodies(snapped, boxes, 6);
-      // Prefer clear paths; among equals, shorter + facing L/R pair.
-      const facing =
-        (s.side === 'right' && t.side === 'left') || (s.side === 'left' && t.side === 'right') ? 0 : 80;
-      const score = (hitsBody ? 1e9 : 0) + pathLength(snapped) + facing;
-
-      if (!best || score < best.score) {
-        best = {
-          path: snapped,
+      if (s.side === nearestS.side && t.side === nearestT.side) continue;
+      const path = trySimple(s, t);
+      if (!path) continue;
+      // Geometric closeness of the nipple pair is primary; path length breaks ties.
+      const score = nippleAirLength(s, t) * 2 + pathLength(path) + Math.max(0, path.length - 2) * 40;
+      if (!bestSimple || score < bestSimple.score) {
+        bestSimple = {
+          path,
           sourceHandle: s.id,
           targetHandle: t.id,
           sourceSide: s.side,
           targetSide: t.side,
           score,
+          nearest: false,
+          simple: true,
         };
       }
     }
   }
+  if (bestSimple) return toResult(bestSimple);
 
-  return best
-    ? {
-        path: best.path,
-        sourceHandle: best.sourceHandle,
-        targetHandle: best.targetHandle,
-        sourceSide: best.sourceSide,
-        targetSide: best.targetSide,
-      }
-    : null;
+  // --- 3) WASM snap: prefer nearest sides, then shortest clear among all. ---
+  let bestWasm: Candidate | null = null;
+  const wasmCombos: { s: HandleHit; t: HandleHit; nearest: boolean }[] = [];
+  for (const s of srcOpts) {
+    for (const t of tgtOpts) {
+      wasmCombos.push({
+        s,
+        t,
+        nearest: s.side === nearestS.side && t.side === nearestT.side,
+      });
+    }
+  }
+  // Nearest first so we take it if tied / clear.
+  wasmCombos.sort((a, b) => Number(b.nearest) - Number(a.nearest) || nippleAirLength(a.s, a.t) - nippleAirLength(b.s, b.t));
+
+  for (const { s, t, nearest } of wasmCombos) {
+    const snapped = snapPathToNipples(
+      wasmPath,
+      s.point,
+      t.point,
+      s.side,
+      t.side,
+      sourceBox,
+      targetBox,
+      28,
+    );
+    const path = simplifyClearPath(snapped, foreignBoxes, 4, ownIds);
+    if (pathHitsNodeBodies(path, foreignBoxes, 2)) continue;
+    // Huge penalty for non-nearest so WASM only flips sides when nearest is truly blocked.
+    const score =
+      (nearest ? 0 : 50_000) +
+      nippleAirLength(s, t) * 2 +
+      pathLength(path) +
+      Math.max(0, path.length - 2) * 40;
+    if (!bestWasm || score < bestWasm.score) {
+      bestWasm = {
+        path,
+        sourceHandle: s.id,
+        targetHandle: t.id,
+        sourceSide: s.side,
+        targetSide: t.side,
+        score,
+        nearest,
+        simple: false,
+      };
+    }
+    // If nearest WASM path is clear, stop — don't even look at far sides.
+    if (nearest && bestWasm) break;
+  }
+
+  if (!bestWasm) return null;
+  return toResult(bestWasm);
 }

@@ -36,16 +36,29 @@ body,
   overflow: hidden;
 }
 
-/* Edges may sit above nodes for visibility of keep-out routes; geometry must not
- * tunnel through cards. Handles stay topmost for connections. */
+/*
+ * Stacking (bottom → top):
+ *   edges (copper) → device nodes → PSU cards → handles / edge labels
+ *
+ * Previously edges were forced above the whole nodes layer, so PSU badges
+ * (real nodes) always sank under cables no matter their zIndex.
+ */
 .react-flow__edges {
-  z-index: 4 !important;
+  z-index: 1 !important;
 }
 .react-flow__nodes {
-  z-index: 3 !important;
+  z-index: 2 !important;
 }
+/* Let React Flow apply per-node zIndex (do not flatten all nodes to 3). */
 .react-flow__node {
-  z-index: 3;
+  z-index: auto;
+}
+/* Inline PSU / wall-wart cards — always above copper. */
+.react-flow__node-powerAdapter {
+  z-index: 2147483647 !important;
+}
+.react-flow__edgelabel-renderer {
+  z-index: 5 !important;
 }
 .react-flow__handle {
   z-index: 6 !important;

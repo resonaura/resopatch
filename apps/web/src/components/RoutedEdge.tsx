@@ -133,7 +133,12 @@ export default function RoutedEdge({ id, data, style, markerEnd, label, sourceX,
   const { t } = useI18n();
   const edgeData = data as RoutedEdgeData | undefined;
   const points = edgeData?.points;
-  const powerConverter = edgeData?.powerConverter;
+  // Inline PSU badges are real RF nodes now (`powerAdapter`) so cables route around them.
+  // Keep rendering a label only if the host explicitly asks (legacy / no node yet).
+  const powerConverter =
+    edgeData?.powerConverter && !(edgeData as { psuAsNode?: boolean }).psuAsNode
+      ? edgeData.powerConverter
+      : null;
   const texture = edgeData?.texture;
 
   // Any decorative dip/jog for a dead-straight cable is already baked into `points` by

@@ -1,8 +1,8 @@
-import { memo, useState, useMemo } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Chip } from '@heroui/react';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Layers } from 'lucide-react';
 import { DeviceType, InventoryStatus } from '@resopatch/shared';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Layers } from 'lucide-react';
+import { memo, useMemo, useState } from 'react';
 import type { GraphDevice } from '../api/client';
 import { DeviceTypeIcon } from '../lib/deviceIcons';
 import { getDisplayName } from '../lib/deviceNaming';
@@ -10,9 +10,9 @@ import { useI18n } from '../lib/i18n';
 import { formatI18nText } from '../lib/i18nText';
 import { FALLBACK_ICON_CLASS } from '../lib/iconDefaults';
 import { ProgressiveImage } from '../lib/img';
+import { formatOwnerRole } from '../lib/ownerRole';
 import { portChannelColor } from '../lib/portChannel';
 import { PortTypeIcon } from '../lib/portIcons';
-import { formatOwnerRole } from '../lib/ownerRole';
 
 /** `imageUrl` doubles as either a relative path into the api's optimized image storage
  *  (see apps/api/src/images) or a raw `data:`/pasted URL from ImagePicker's upload flow —
@@ -293,7 +293,6 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
   const portedChildren = children.filter((c) => c.ports.length > 0);
   const plainChildren = children.filter((c) => c.ports.length === 0);
   const isContainer = portedChildren.length > 0;
-  const [boundaryOpen, setBoundaryOpen] = useState(false);
 
   return (
     <div
@@ -327,20 +326,16 @@ function DeviceNodeImpl({ data, selected }: NodeProps) {
       {ports.length > 0 && <PortsSection ports={ports} connectedPortIds={(data.connectedPortIds as Set<string> | undefined) ?? new Set()} />}
       {isContainer && (
         <>
+          {/* Always show external boundary ports — foldable hid Handles so cables
+              could not attach / were invisible on the main canvas. */}
           {boundaryPorts.length > 0 && (
             <div className="border-t border-default-200">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setBoundaryOpen((v) => !v);
-                }}
-                className="flex w-full items-center justify-center gap-1 py-1 text-[9.5px] font-medium text-default-500 hover:bg-white/5 hover:text-foreground transition-colors"
-              >
-                {boundaryOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              <div className="px-2.5 py-1 text-[9px] font-medium uppercase tracking-wide text-default-500">
                 {t('deviceNode.externalConnections').replace('{count}', String(boundaryPorts.length))}
-              </button>
-              {boundaryOpen &&
-                boundaryPorts.map((b) => <PortRow key={b.port.id} port={b.port} subtitle={b.deviceName} />)}
+              </div>
+              {boundaryPorts.map((b) => (
+                <PortRow key={b.port.id} port={b.port} subtitle={b.deviceName} />
+              ))}
             </div>
           )}
           <div className="border-t border-default-200 p-1.5">

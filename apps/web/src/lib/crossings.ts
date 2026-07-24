@@ -154,16 +154,17 @@ export function greedySwapMinimize(
 }
 
 /**
- * Separates overlapping axis-aligned boxes by pushing them apart along the
- * smaller penetration axis. Runs until stable or maxPasses. Essential after
- * greedy swaps and special-case pinning which can stack nodes on top of each other.
+ * Separates overlapping AABB boxes.
+ *
+ * Only the more bottom-right node moves (down or right) — never shove both
+ * halves into a dense cluster. That was packing satellites into populated areas.
  */
 export function resolveNodeOverlaps(
   nodeIds: readonly string[],
   positions: Map<string, Pt>,
   sizes: ReadonlyMap<string, { width: number; height: number }>,
   gap = 48,
-  maxPasses = 24,
+  maxPasses = 32,
   fallbackSize: { width: number; height: number } = { width: 260, height: 240 },
 ): void {
   if (nodeIds.length < 2) return;
@@ -192,35 +193,101 @@ export function resolveNodeOverlaps(
         const overlapY = Math.min(aBottom, bBottom) - Math.max(a.y, b.y);
         if (overlapX <= 0 || overlapY <= 0) continue;
 
-        // Push the lower-right node away so stacking tends downward/rightward
-        // (matches zone flow) rather than scattering upward off-canvas.
-        const aCx = a.x + sa.width / 2;
-        const aCy = a.y + sa.height / 2;
-        const bCx = b.x + sb.width / 2;
-        const bCy = b.y + sb.height / 2;
+        // Movable = further bottom-right; anchor stays put.
+        const scoreA = a.x + a.y + sa.width * 0.01;
+        const scoreB = b.x + b.y + sb.width * 0.01;
+        const moveId = scoreA >= scoreB ? idA : idB;
+        const otherId = moveId === idA ? idB : idA;
+        const m = positions.get(moveId)!;
+        const o = positions.get(otherId)!;
+        const sm = sizes.get(moveId) ?? fallbackSize;
+        const so = sizes.get(otherId) ?? fallbackSize;
 
-        if (overlapX < overlapY) {
-          const push = overlapX / 2 + 1;
-          if (aCx <= bCx) {
-            positions.set(idA, { x: a.x - push, y: a.y });
-            positions.set(idB, { x: b.x + push, y: b.y });
-          } else {
-            positions.set(idA, { x: a.x + push, y: a.y });
-            positions.set(idB, { x: b.x - push, y: b.y });
-          }
+        // Prefer the smaller push that lands fully outside the anchor's keep-out.
+        if (overlapX <= overlapY) {
+          positions.set(moveId, { x: o.x + so.width + gap, y: m.y });
         } else {
-          const push = overlapY / 2 + 1;
-          if (aCy <= bCy) {
-            positions.set(idA, { x: a.x, y: a.y - push });
-            positions.set(idB, { x: b.x, y: b.y + push });
-          } else {
-            positions.set(idA, { x: a.x, y: a.y + push });
-            positions.set(idB, { x: b.x, y: b.y - push });
-          }
+          positions.set(moveId, { x: m.x, y: o.y + so.height + gap });
+        }
+        // If still overlapping (rare after axis choice), push both ways from anchor.
+        const m2 = positions.get(moveId)!;
+        const stillX =
+          m2.x < o.x + so.width + gap && m2.x + sm.width + gap > o.x;
+        const stillY =
+          m2.y < o.y + so.height + gap && m2.y + sm.height + gap > o.y;
+        if (stillX && stillY) {
+          positions.set(moveId, {
+            x: o.x + so.width + gap,
+            y: o.y + so.height + gap,
+          });
         }
         moved = true;
       }
     }
     if (!moved) break;
   }
+}
+
+/** True if rect at `pos` with `size` overlaps any other node (with gap). */
+export function rectHitsAny(
+  id: string,
+  pos: Pt,
+  size: { width: number; height: number },
+  nodeIds: readonly string[],
+  positions: ReadonlyMap<string, Pt>,
+  sizes: ReadonlyMap<string, { width: number; height: number }>,
+  gap: number,
+  fallbackSize: { width: number; height: number } = { width: 260, height: 240 },
+): boolean {
+  const aRight = pos.x + size.width + gap;
+  const aBottom = pos.y + size.height + gap;
+  for (const other of nodeIds) {
+    if (other === id) continue;
+    const b = positions.get(other);
+    if (!b) continue;
+    const sb = sizes.get(other) ?? fallbackSize;
+    if (pos.x >= b.x + sb.width + gap || b.x >= aRight) continue;
+    if (pos.y >= b.y + sb.height + gap || b.y >= aBottom) continue;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Find a free top-left near `preferred` that does not overlap any other node.
+ * Tries a spiral of right/below offsets so pins never land in a dense cluster.
+ */
+export function findFreeSlot(
+  id: string,
+  preferred: Pt,
+  size: { width: number; height: number },
+  nodeIds: readonly string[],
+  positions: ReadonlyMap<string, Pt>,
+  sizes: ReadonlyMap<string, { width: number; height: number }>,
+  gap: number,
+): Pt {
+  if (!rectHitsAny(id, preferred, size, nodeIds, positions, sizes, gap)) {
+    return preferred;
+  }
+  const steps = [0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 16];
+  for (const sy of steps) {
+    for (const sx of steps) {
+      if (sx === 0 && sy === 0) continue;
+      const cand = {
+        x: preferred.x + sx * (size.width * 0.35 + gap),
+        y: preferred.y + sy * (size.height * 0.35 + gap),
+      };
+      if (!rectHitsAny(id, cand, size, nodeIds, positions, sizes, gap)) return cand;
+    }
+  }
+  // Last resort: far below the bounding box of all others.
+  let maxBottom = preferred.y;
+  for (const other of nodeIds) {
+    if (other === id) continue;
+    const b = positions.get(other);
+    if (!b) continue;
+    const sb = sizes.get(other) ?? { width: 260, height: 240 };
+    maxBottom = Math.max(maxBottom, b.y + sb.height);
+  }
+  return { x: preferred.x, y: maxBottom + gap };
 }

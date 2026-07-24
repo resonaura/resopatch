@@ -38,16 +38,23 @@ export function targetHandleOptions(portId: string): { id: string; side: Side }[
   ];
 }
 
+/**
+ * Pick the source nipple on the face closer to the target (right when target is to the right).
+ */
 export function pickNearestSourceHandle(
   portId: string,
   sourceCenterX: number,
   targetCenterX: number,
 ): { id: string; side: Side } {
   const opts = sourceHandleOptions(portId);
+  // Face toward the other device — never the far side by default.
   const prefer: Side = targetCenterX >= sourceCenterX ? 'right' : 'left';
   return opts.find((o) => o.side === prefer) ?? opts[0];
 }
 
+/**
+ * Pick the target nipple on the face closer to the source (left when source is to the left).
+ */
 export function pickNearestTargetHandle(
   portId: string,
   sourceCenterX: number,
@@ -168,9 +175,24 @@ export function snapPathToNipples(
       pts.push(hop);
     }
 
-    // Remaining mid (skip first if already pushed)
-    for (let i = Math.abs(first.x - stubS.x) > 0.5 || Math.abs(first.y - stubS.y) > 0.5 ? 1 : 0; i < mid.length; i++) {
-      pts.push(mid[i]);
+    // Remaining mid — always axis-aligned joins (never diagonal between WASM corners).
+    const startI =
+      Math.abs(first.x - stubS.x) > 0.5 || Math.abs(first.y - stubS.y) > 0.5 ? 1 : 0;
+    for (let i = startI; i < mid.length; i++) {
+      const prev = pts[pts.length - 1];
+      const curr = mid[i];
+      if (Math.abs(prev.x - curr.x) < 0.5 || Math.abs(prev.y - curr.y) < 0.5) {
+        pts.push(curr);
+      } else {
+        // Prefer continuing previous axis when inserting a 90° corner.
+        const before = pts.length >= 2 ? pts[pts.length - 2] : prev;
+        const wasV = Math.abs(before.x - prev.x) < 0.5;
+        if (wasV) {
+          pts.push({ x: prev.x, y: curr.y }, curr);
+        } else {
+          pts.push({ x: curr.x, y: prev.y }, curr);
+        }
+      }
     }
 
     const last = pts[pts.length - 1];
