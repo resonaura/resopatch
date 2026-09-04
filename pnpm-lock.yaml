@@ -4,11 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  obstacle-router@0.1.2:
-    hash: 6a2dc938444025a8a1d62ab8500eb8a56f48fd9f03c7bdf9e9c7e1526fc7637d
-    path: patches/obstacle-router@0.1.2.patch
-
 importers:
 
   .:
@@ -172,7 +167,7 @@ importers:
         version: 1.25.0(react@19.2.7)
       obstacle-router:
         specifier: 0.1.2
-        version: 0.1.2(patch_hash=6a2dc938444025a8a1d62ab8500eb8a56f48fd9f03c7bdf9e9c7e1526fc7637d)
+        version: 0.1.2
       react:
         specifier: ^19.2.7
         version: 19.2.7
@@ -8453,7 +8448,7 @@ snapshots:
   object-inspect@1.13.4:
     optional: true
 
-  obstacle-router@0.1.2(patch_hash=6a2dc938444025a8a1d62ab8500eb8a56f48fd9f03c7bdf9e9c7e1526fc7637d): {}
+  obstacle-router@0.1.2: {}
 
   obug@2.1.4: {}
 
