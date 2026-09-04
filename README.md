@@ -10,6 +10,7 @@ Interactive stage routing graph, audio patchbay coordinator, and automated techn
 [![React Flow](https://img.shields.io/badge/Graph-XYFlow%2012-FF0072.svg?style=flat-square)](#)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38B2AC.svg?style=flat-square&logo=tailwindcss&logoColor=white)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](#)
+
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/resonaura)
 
 <p align="center">
