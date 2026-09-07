@@ -9,12 +9,15 @@ Interactive stage routing graph, audio patchbay coordinator, and automated techn
 [![WebAssembly](https://img.shields.io/badge/Routing-libavoid%20(WASM)-654FF0.svg?style=flat-square&logo=webassembly&logoColor=white)](#)
 [![React Flow](https://img.shields.io/badge/Graph-XYFlow%2012-FF0072.svg?style=flat-square)](#)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38B2AC.svg?style=flat-square&logo=tailwindcss&logoColor=white)](#)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor%20on%20GitHub-EA4AAA?logo=github-sponsors&logoColor=white)](https://github.com/sponsors/resonaura)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/resonaura)
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/resonaura)
 
 <p align="center">
-  <img src="media/resopatch.png" width="800" alt="ResoPatch Stage Routing Canvas" />
+  <img src="https://raw.githubusercontent.com/resonaura/resopatch/main/media/resopatch.png" width="800" alt="ResoPatch Stage Routing Canvas" />
 </p>
 
 ResoPatch translates messy stage cabling, pedalboards, audio interfaces, and power distribution setups into a validated visual node graph. It calculates orthogonal cable runs in WebAssembly, validates signal compatibility across audio and electrical boundaries, and compiles the entire live setup into an exportable venue technical rider.
@@ -53,7 +56,7 @@ Connections in ResoPatch enforce real-world audio engineering constraints before
 Live venues require structured paperwork rather than node diagrams. The API inspects graph topology and compiles real-time documentation:
 
 <p align="center">
-  <img src="media/resopatch-stagebox.png" width="800" alt="ResoPatch Stage Box FOH Channels" />
+  <img src="https://raw.githubusercontent.com/resonaura/resopatch/main/media/resopatch-stagebox.png" width="800" alt="ResoPatch Stage Box FOH Channels" />
 </p>
 
 - **Stage Input List**: Derives sequential FOH channel assignments from stage box patch bays, including source instrument, pickup type, line level, connector standard, and phantom power (+48V) requirements.
