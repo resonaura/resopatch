@@ -2,17 +2,17 @@ import { Spinner, Toast } from '@heroui/react';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, api } from './api/client';
 import { I18nProvider, useI18n } from './lib/i18n';
-import { formatI18nText } from './lib/i18nText';
-import { useCloudSync } from './lib/sync';
-import Constructor from './pages/Constructor';
-import Login from './pages/Login';
+import { formatI18nText } from './lib/i18n/text';
+import { useCloudSync } from './lib/realtime/sync';
+import Constructor from './pages/constructor';
+import Login from './pages/login';
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
 });
 
 function CenterScreen({ children }: { children: React.ReactNode }) {
-  return <div className="flex h-full items-center justify-center text-default-500">{children}</div>;
+  return <div className="text-default-500 flex h-full items-center justify-center">{children}</div>;
 }
 
 function Gate() {
@@ -29,7 +29,8 @@ function Gate() {
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
 
-  const needsLogin = setups.isError && setups.error instanceof ApiError && setups.error.status === 401;
+  const needsLogin =
+    setups.isError && setups.error instanceof ApiError && setups.error.status === 401;
 
   if (needsLogin) {
     return <Login onSuccess={() => qc.invalidateQueries({ queryKey: ['setups'] })} />;
@@ -48,12 +49,7 @@ function Gate() {
     return <CenterScreen>{t('app.noSetup')}</CenterScreen>;
   }
 
-  return (
-    <Constructor
-      setupId={list[0].id}
-      setupName={formatI18nText(list[0].name, language)}
-    />
-  );
+  return <Constructor setupId={list[0].id} setupName={formatI18nText(list[0].name, language)} />;
 }
 
 export default function App() {

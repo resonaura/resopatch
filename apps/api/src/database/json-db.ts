@@ -3,13 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { HostUsbType, InventoryStatus, PowerSourceType } from '@resopatch/shared';
-import { Setup } from './entities/setup.entity.js';
-import { Device } from './entities/device.entity.js';
-import { Port } from './entities/port.entity.js';
-import { Adapter } from './entities/adapter.entity.js';
-import { Cable } from './entities/cable.entity.js';
-import { Furniture } from './entities/furniture.entity.js';
-import { AuthCredential } from './entities/auth-credential.entity.js';
+import { Setup } from './entities/setup.js';
+import { Device } from './entities/device.js';
+import { Port } from './entities/port.js';
+import { Adapter } from './entities/adapter.js';
+import { Cable } from './entities/cable.js';
+import { Furniture } from './entities/furniture.js';
+import { AuthCredential } from './entities/auth-credential.js';
 
 interface DbShape {
   setups: Setup[];
@@ -22,7 +22,15 @@ interface DbShape {
 }
 
 function emptyDb(): DbShape {
-  return { setups: [], devices: [], ports: [], adapters: [], cables: [], furniture: [], authCredentials: [] };
+  return {
+    setups: [],
+    devices: [],
+    ports: [],
+    adapters: [],
+    cables: [],
+    furniture: [],
+    authCredentials: [],
+  };
 }
 
 export const jsonDbPath = process.env.JSON_DB_PATH
@@ -105,12 +113,26 @@ export class JsonRepository<T extends { id: string }> {
    *  persisted until passed to `save()`. */
   create(partial: Partial<T> = {}): T {
     const now = new Date().toISOString();
-    return { id: uuidv4(), createdAt: now, updatedAt: now, ...this.defaults(), ...partial } as unknown as T;
+    return {
+      id: uuidv4(),
+      createdAt: now,
+      updatedAt: now,
+      ...this.defaults(),
+      ...partial,
+    } as unknown as T;
   }
 
-  async find(options: { where?: WhereClause<T>; order?: Partial<Record<keyof T, 'ASC' | 'DESC'>>; take?: number } = {}): Promise<T[]> {
+  async find(
+    options: {
+      where?: WhereClause<T>;
+      order?: Partial<Record<keyof T, 'ASC' | 'DESC'>>;
+      take?: number;
+    } = {},
+  ): Promise<T[]> {
     let rows = this.rows().filter((r) => matches(r, options.where));
-    const orderEntry = options.order ? (Object.entries(options.order)[0] as [keyof T, 'ASC' | 'DESC'] | undefined) : undefined;
+    const orderEntry = options.order
+      ? (Object.entries(options.order)[0] as [keyof T, 'ASC' | 'DESC'] | undefined)
+      : undefined;
     if (orderEntry) {
       const [key, dir] = orderEntry;
       rows = [...rows].sort((a, b) => {
@@ -135,7 +157,8 @@ export class JsonRepository<T extends { id: string }> {
     const list = Array.isArray(entityOrEntities) ? entityOrEntities : [entityOrEntities];
     const rows = this.rows();
     for (const entity of list) {
-      if ('updatedAt' in (entity as Record<string, unknown>)) (entity as Record<string, unknown>).updatedAt = new Date().toISOString();
+      if ('updatedAt' in (entity as Record<string, unknown>))
+        (entity as Record<string, unknown>).updatedAt = new Date().toISOString();
       const idx = rows.findIndex((r) => r.id === entity.id);
       if (idx >= 0) rows[idx] = { ...entity };
       else rows.push({ ...entity });
@@ -154,7 +177,10 @@ export class JsonRepository<T extends { id: string }> {
   }
 }
 
-export const setupsRepo = new JsonRepository<Setup>('setups', () => ({ description: null, checklistState: null }) as Partial<Setup>);
+export const setupsRepo = new JsonRepository<Setup>(
+  'setups',
+  () => ({ description: null, checklistState: null }) as Partial<Setup>,
+);
 
 export const devicesRepo = new JsonRepository<Device>(
   'devices',
@@ -201,7 +227,10 @@ export const portsRepo = new JsonRepository<Port>(
     }) as Partial<Port>,
 );
 
-export const adaptersRepo = new JsonRepository<Adapter>('adapters', () => ({ isActive: false, invertsPolarity: false }) as Partial<Adapter>);
+export const adaptersRepo = new JsonRepository<Adapter>(
+  'adapters',
+  () => ({ isActive: false, invertsPolarity: false }) as Partial<Adapter>,
+);
 
 export const cablesRepo = new JsonRepository<Cable>(
   'cables',
@@ -219,6 +248,12 @@ export const cablesRepo = new JsonRepository<Cable>(
     }) as Partial<Cable>,
 );
 
-export const furnitureRepo = new JsonRepository<Furniture>('furniture', () => ({ isVenueProvided: false }) as Partial<Furniture>);
+export const furnitureRepo = new JsonRepository<Furniture>(
+  'furniture',
+  () => ({ isVenueProvided: false }) as Partial<Furniture>,
+);
 
-export const authRepo = new JsonRepository<AuthCredential>('authCredentials', () => ({ role: 'admin' }) as Partial<AuthCredential>);
+export const authRepo = new JsonRepository<AuthCredential>(
+  'authCredentials',
+  () => ({ role: 'admin' }) as Partial<AuthCredential>,
+);

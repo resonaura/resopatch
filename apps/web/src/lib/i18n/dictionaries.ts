@@ -1,6 +1,6 @@
 /** Flat translation dictionaries for the app's UI chrome (header, sidebar, checklist, cable
  *  tab, generic item-type fallback labels). Domain/gear data entered by the user (device names,
- *  notes, seed data) is formatted via i18nText / dictionaries. */
+ *  notes, seed data) is formatted via the i18n text helpers and dictionaries. */
 export const dictionaries = {
   en: {
     'header.setupMode.noKeys': 'No keys',
@@ -104,10 +104,10 @@ export const dictionaries = {
     'newCableModal.connect': 'Connect',
     'newCableModal.cancel': 'Cancel',
     'newCableModal.createError': 'Failed to create cable',
-    'meter': 'm',
-    'powerSupply': 'PSU',
+    meter: 'm',
+    powerSupply: 'PSU',
     'app.noSetup': 'No setups found. Run `pnpm seed` in apps/api.',
-    'milliamp': 'mA',
+    milliamp: 'mA',
     'riderSpec.title': 'Spec Sheet',
     'riderSpec.portsSection': 'Inputs / Outputs ({count})',
     'riderSpec.powerSection': 'Power',
@@ -253,7 +253,8 @@ export const dictionaries = {
     'inspector.addPort': 'Add Port',
     'inspector.kitSection': 'Kit / Accessories ({count})',
     'inspector.addChild': 'Add to kit',
-    'inspector.kitNotice': 'Accessories (tuners, straps, velcro, gigbags) are listed on the main card.',
+    'inspector.kitNotice':
+      'Accessories (tuners, straps, velcro, gigbags) are listed on the main card.',
     'inspector.notesSection': 'Notes & Extra Fields',
     'inspector.notes': 'Notes',
     'inspector.customAttrs': 'Custom attributes (JSON)',
@@ -289,7 +290,8 @@ export const dictionaries = {
     'newDeviceModal.cancel': 'Cancel',
 
     'containerModal.title': 'Internal Diagram',
-    'containerModal.subtitle': 'Board components ({devices} devices), external connections ({ports} ports)',
+    'containerModal.subtitle':
+      'Board components ({devices} devices), external connections ({ports} ports)',
     'containerModal.addPedal': 'Add pedal',
     'containerModal.addDevice': 'Add device',
     'containerModal.empty': 'No devices in this pedalboard yet.',
@@ -398,10 +400,10 @@ export const dictionaries = {
     'newCableModal.connect': 'Соединить',
     'newCableModal.cancel': 'Отмена',
     'newCableModal.createError': 'Не удалось создать кабель',
-    'meter': 'м',
-    'powerSupply': 'Блок питания',
+    meter: 'м',
+    powerSupply: 'Блок питания',
     'app.noSetup': 'Нет ни одного сетапа. Запусти `pnpm seed` в apps/api.',
-    'milliamp': 'мА',
+    milliamp: 'мА',
     'riderSpec.title': 'Технический паспорт',
     'riderSpec.portsSection': 'Входы / выходы ({count})',
     'riderSpec.powerSection': 'Питание',
@@ -547,7 +549,8 @@ export const dictionaries = {
     'inspector.addPort': 'Добавить порт',
     'inspector.kitSection': 'Комплект / аксессуары ({count})',
     'inspector.addChild': 'Добавить в комплект',
-    'inspector.kitNotice': 'Тюнер, ремень, липучки, чехлы, педали на этом устройстве — показываются списком прямо на карточке.',
+    'inspector.kitNotice':
+      'Тюнер, ремень, липучки, чехлы, педали на этом устройстве — показываются списком прямо на карточке.',
     'inspector.notesSection': 'Заметки и доп. поля',
     'inspector.notes': 'Заметки',
     'inspector.customAttrs': 'Произвольные атрибуты (JSON)',
@@ -583,7 +586,8 @@ export const dictionaries = {
     'newDeviceModal.cancel': 'Отмена',
 
     'containerModal.title': 'Внутренняя схема',
-    'containerModal.subtitle': 'Компоненты борда ({devices} устройств), внешние подключения ({ports} разъёмов)',
+    'containerModal.subtitle':
+      'Компоненты борда ({devices} устройств), внешние подключения ({ports} разъёмов)',
     'containerModal.addPedal': 'Добавить педаль',
     'containerModal.addDevice': 'Добавить устройство',
     'containerModal.empty': 'В этом педалборде пока нет устройств.',

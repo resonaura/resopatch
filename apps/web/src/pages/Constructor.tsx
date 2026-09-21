@@ -1,55 +1,51 @@
-import { Button, Spinner, Table, Tabs } from "@heroui/react";
-import { type PortDto, type RiderRow } from "@resopatch/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Edge, Node } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
+import { Button, Spinner, Table, Tabs } from '@heroui/react';
+import { type PortDto, type RiderRow } from '@resopatch/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { Edge, Node } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import {
-    Armchair,
-    Briefcase,
-    Cable,
-    CheckSquare,
-    ChevronLeft,
-    ChevronRight,
-    ClipboardList,
-    Guitar,
-    Keyboard,
-    LayoutGrid,
-    ListMusic,
-    LogOut,
-    Mic2,
-    Package,
-    Plug,
-    Settings,
-    Wand2,
-    type LucideIcon,
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, type GraphCable, type GraphDevice } from "../api/client";
+  Armchair,
+  Briefcase,
+  Cable,
+  CheckSquare,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Guitar,
+  Keyboard,
+  LayoutGrid,
+  ListMusic,
+  LogOut,
+  Mic2,
+  Package,
+  Plug,
+  Settings,
+  Wand2,
+  type LucideIcon,
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { api, type GraphCable, type GraphDevice } from '../api/client';
 import CableCanvasFilters, {
-    cablePassesFilters,
-    zoneOfCable,
-    type CableCategory,
-} from "../components/CableCanvasFilters";
-import ContainerInsideModal from "../components/ContainerInsideModal";
-import type { DeviceNodeData } from "../components/DeviceNode";
-import Inspector, { type Selection } from "../components/Inspector";
-import PatchCanvas from "../components/PatchCanvas";
-import SettingsModal from "../components/SettingsModal";
-import StaffChecklist from "../components/StaffChecklist";
-import {
-    computeAutoLayout,
-    graphTopologyKey,
-    LAYOUT_REVISION,
-    positionsToRecord,
-} from "../lib/autoLayout";
-import { splitMainCanvasGraph } from "../lib/containerGraph";
-import { DeviceTypeIcon } from "../lib/deviceIcons";
-import { formatRiderRowName, portTypeLabel } from "../lib/enumLabels";
-import { graphCableToEdge } from "../lib/graphCableToEdge";
-import { useI18n } from "../lib/i18n";
-import type { TranslationKey } from "../lib/i18n/dictionaries";
-import { formatI18nText } from "../lib/i18nText";
-import { formatOwnerRole } from "../lib/ownerRole";
+  cablePassesFilters,
+  zoneOfCable,
+  type CableCategory,
+} from '../components/cables/canvas-filters';
+import ContainerInsideModal from '../components/container/inside-modal';
+import type { DeviceNodeData } from '../components/devices/node';
+import Inspector, { type Selection } from '../components/setup/inspector';
+import PatchCanvas from '../components/canvas/patch-canvas';
+import SettingsModal from '../components/settings/modal';
+import StaffChecklist from '../components/setup/staff-checklist';
+import { computeAutoLayout, LAYOUT_REVISION, positionsToRecord } from '../lib/layout/auto-layout';
+import { graphTopologyKey } from '../lib/layout/topology';
+import { splitMainCanvasGraph } from '../lib/graph/container';
+import { DeviceTypeIcon } from '../lib/devices/icons';
+import { formatRiderRowName, portTypeLabel } from '../lib/i18n/enum-labels';
+import { graphCableToEdge } from '../lib/routing/adapters/graph-cable-to-edge';
+import { useI18n } from '../lib/i18n';
+import type { TranslationKey } from '../lib/i18n/dictionaries';
+import { formatI18nText } from '../lib/i18n/text';
+import { formatOwnerRole } from '../lib/devices/owner-role';
 
 /** Simple furniture table (not Lucide Table2 — that's a spreadsheet/grid glyph). */
 function FurnitureTableIcon({ className }: { className?: string }) {
@@ -77,15 +73,15 @@ function FurnitureTableIcon({ className }: { className?: string }) {
 
 function RiderIconBox({ children }: { children: ReactNode }) {
   return (
-    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-default-200 bg-black/20 text-default-500">
+    <span className="border-default-200 text-default-500 flex h-8 w-8 shrink-0 items-center justify-center rounded border bg-black/20">
       {children}
     </span>
   );
 }
 
 /** Furniture kinds → icon (do NOT reuse device photo matching for these rows). */
-function furnitureIcon(kind: string, className = "h-4 w-4"): ReactNode {
-  if (kind === "TABLE" || kind === "LAPTOP_STAND") {
+function furnitureIcon(kind: string, className = 'h-4 w-4'): ReactNode {
+  if (kind === 'TABLE' || kind === 'LAPTOP_STAND') {
     return <FurnitureTableIcon className={className} />;
   }
   const map: Record<string, LucideIcon> = {
@@ -102,7 +98,7 @@ function furnitureIcon(kind: string, className = "h-4 w-4"): ReactNode {
 function findDeviceByDisplayName(
   needle: string,
   devices: GraphDevice[] | undefined,
-  language: "en" | "ru",
+  language: 'en' | 'ru',
 ): GraphDevice | undefined {
   const n = needle.trim();
   if (n.length < 2 || !devices?.length) return undefined;
@@ -126,7 +122,7 @@ export default function Constructor({
   const { t, language } = useI18n();
   const qc = useQueryClient();
   const graphQuery = useQuery({
-    queryKey: ["graph", setupId],
+    queryKey: ['graph', setupId],
     queryFn: () => api.getGraph(setupId),
     // Keep retrying indefinitely on connectivity failures during initial load, instead of
     // surfacing a raw "Failed to fetch" — see graphQuery.isLoading/!graph branch below.
@@ -137,18 +133,21 @@ export default function Constructor({
 
   const [selection, setSelection] = useState<Selection>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [view, setView] = useState<"canvas" | "input-list" | "rider" | "checklist">("canvas");
+  const [view, setView] = useState<'canvas' | 'input-list' | 'rider' | 'checklist'>('canvas');
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [insideContainerId, setInsideContainerId] = useState<string | null>(null);
 
   // Cable visibility filters (live on canvas — replaces the old Cables page).
-  const [cableCategory, setCableCategory] = useState<CableCategory>("all");
+  const [cableCategory, setCableCategory] = useState<CableCategory>('all');
   const [hiddenConnectors, setHiddenConnectors] = useState<Set<string>>(() => new Set());
   const [hiddenCableZones, setHiddenCableZones] = useState<Set<string>>(() => new Set());
 
   const [setupMode, setSetupMode] = useState<'no-keys' | 'with-keys'>(() => {
     try {
-      return (localStorage.getItem(`resopatch_setup_mode_${setupId}`) as 'no-keys' | 'with-keys') || 'no-keys';
+      return (
+        (localStorage.getItem(`resopatch_setup_mode_${setupId}`) as 'no-keys' | 'with-keys') ||
+        'no-keys'
+      );
     } catch {
       return 'no-keys';
     }
@@ -234,7 +233,10 @@ export default function Constructor({
     if (sel) setInspectorOpen(true);
   }, []);
 
-  const onSelectChild = useCallback((id: string) => selectItem({ kind: "device", id }), [selectItem]);
+  const onSelectChild = useCallback(
+    (id: string) => selectItem({ kind: 'device', id }),
+    [selectItem],
+  );
 
   const connectedPortIds = useMemo(() => {
     const set = new Set<string>();
@@ -250,18 +252,17 @@ export default function Constructor({
       (activeGraph?.devices ?? [])
         .filter((device) => !device.parentDeviceId)
         .map((device) => {
-          const boundaryPortDtos =
-            mainGraph.boundaryPortsByContainer.get(device.id) ?? [];
+          const boundaryPortDtos = mainGraph.boundaryPortsByContainer.get(device.id) ?? [];
           const boundaryPorts = boundaryPortDtos.map((port: PortDto) => {
             const owner = deviceByPortId.get(port.id);
             return {
               port,
-              deviceName: owner ? formatI18nText(owner.name, language) : "",
+              deviceName: owner ? formatI18nText(owner.name, language) : '',
             };
           });
           return {
             id: device.id,
-            type: "device",
+            type: 'device',
             position: device.position,
             data: {
               device,
@@ -271,8 +272,7 @@ export default function Constructor({
               onSelectChild,
               onOpenInside: (id: string) => setInsideContainerId(id),
             } satisfies DeviceNodeData,
-            selected:
-              selection?.kind === "device" && selection.id === device.id,
+            selected: selection?.kind === 'device' && selection.id === device.id,
           };
         }),
     [
@@ -315,7 +315,7 @@ export default function Constructor({
   }, [activeGraph]);
 
   const initialEdges: Edge[] = useMemo(() => {
-    const noZone = t("cables.noZone");
+    const noZone = t('cables.noZone');
     const filters = {
       category: cableCategory,
       hiddenConnectors,
@@ -326,7 +326,7 @@ export default function Constructor({
         cablePassesFilters(cable, zoneOfCable(cable, deviceByPortId, noZone), filters, portById),
       )
       .map((cable) => {
-        const isSelected = selection?.kind === "cable" && selection.id === cable.id;
+        const isSelected = selection?.kind === 'cable' && selection.id === cable.id;
         return graphCableToEdge(cable, portById, deviceByPortId, portToDevice, {
           selected: isSelected,
         });
@@ -359,7 +359,7 @@ export default function Constructor({
 
   const applyPositionsToCache = useCallback(
     (record: Record<string, { x: number; y: number }>) => {
-      qc.setQueryData(["graph", setupId], (old: typeof graph) => {
+      qc.setQueryData(['graph', setupId], (old: typeof graph) => {
         if (!old) return old;
         return {
           ...old,
@@ -398,7 +398,7 @@ export default function Constructor({
     onSuccess: (data) => {
       if (data.ignored) return;
       // Quiet background reconcile — skip if Arrange superseded us.
-      void qc.invalidateQueries({ queryKey: ["graph", setupId] });
+      void qc.invalidateQueries({ queryKey: ['graph', setupId] });
     },
   });
 
@@ -446,10 +446,7 @@ export default function Constructor({
         return { ...result, positions: lastArrangePositionsRef.current ?? record, epoch };
       }
       try {
-        localStorage.setItem(
-          `resopatch_layout_topo_${setupId}`,
-          graphTopologyKey(devices, cables),
-        );
+        localStorage.setItem(`resopatch_layout_topo_${setupId}`, graphTopologyKey(devices, cables));
         localStorage.setItem(`resopatch_layout_rev_${setupId}`, LAYOUT_REVISION);
       } catch {
         // ignore
@@ -461,7 +458,7 @@ export default function Constructor({
       // Re-apply after refetch so a stale server response cannot undo Arrange.
       applyPositionsToCache(data.positions);
       setLayoutSyncKey((k) => k + 1);
-      await qc.invalidateQueries({ queryKey: ["graph", setupId] });
+      await qc.invalidateQueries({ queryKey: ['graph', setupId] });
       if (data.epoch !== arrangeEpochRef.current) return;
       applyPositionsToCache(data.positions);
       setLayoutSyncKey((k) => k + 1);
@@ -548,18 +545,22 @@ export default function Constructor({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-default-200 bg-surface px-4 py-2 select-none">
-        <div className="flex items-center gap-3 shrink-0">
+      <header className="border-default-200 bg-surface flex select-none flex-wrap items-center justify-between gap-3 border-b px-4 py-2">
+        <div className="flex shrink-0 items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <span className="font-bold tracking-tight text-foreground text-base">Resopatch</span>
-            <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">PRO</span>
+            <span className="text-foreground text-base font-bold tracking-tight">Resopatch</span>
+            <span className="bg-accent/15 text-accent rounded px-1.5 py-0.5 text-[10px] font-medium">
+              PRO
+            </span>
           </div>
-          <div className="h-4 w-px bg-default-200" />
-          <span className="text-xs font-medium text-default-500 max-w-[200px] truncate">{setupName}</span>
+          <div className="bg-default-200 h-4 w-px" />
+          <span className="text-default-500 max-w-[200px] truncate text-xs font-medium">
+            {setupName}
+          </span>
         </div>
 
         {/* Setup Mode Switcher */}
-        <div className="flex items-center rounded-lg border border-default-200 bg-surface-secondary/80 p-0.5 shrink-0">
+        <div className="border-default-200 bg-surface-secondary/80 flex shrink-0 items-center rounded-lg border p-0.5">
           <button
             type="button"
             onClick={() => handleSetupModeChange('no-keys')}
@@ -585,7 +586,7 @@ export default function Constructor({
         </div>
 
         {/* Navigation & Action Controls */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
           <Tabs
             selectedKey={view}
             onSelectionChange={(key) => setView(key as typeof view)}
@@ -594,19 +595,27 @@ export default function Constructor({
             <Tabs.ListContainer>
               <Tabs.List aria-label={t('header.tab.canvas')}>
                 <Tabs.Tab id="canvas" aria-label={t('header.tab.canvas')}>
-                  <span title={t('header.tab.canvas')}><LayoutGrid className="h-3.5 w-3.5" /></span>
+                  <span title={t('header.tab.canvas')}>
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                  </span>
                 </Tabs.Tab>
                 <Tabs.Tab id="input-list" aria-label={t('header.tab.inputList')}>
                   <Tabs.Separator />
-                  <span title={t('header.tab.inputList')}><ListMusic className="h-3.5 w-3.5" /></span>
+                  <span title={t('header.tab.inputList')}>
+                    <ListMusic className="h-3.5 w-3.5" />
+                  </span>
                 </Tabs.Tab>
                 <Tabs.Tab id="rider" aria-label={t('header.tab.rider')}>
                   <Tabs.Separator />
-                  <span title={t('header.tab.rider')}><ClipboardList className="h-3.5 w-3.5" /></span>
+                  <span title={t('header.tab.rider')}>
+                    <ClipboardList className="h-3.5 w-3.5" />
+                  </span>
                 </Tabs.Tab>
                 <Tabs.Tab id="checklist" aria-label={t('header.tab.checklist')}>
                   <Tabs.Separator />
-                  <span title={t('header.tab.checklist')}><CheckSquare className="h-3.5 w-3.5" /></span>
+                  <span title={t('header.tab.checklist')}>
+                    <CheckSquare className="h-3.5 w-3.5" />
+                  </span>
                 </Tabs.Tab>
               </Tabs.List>
             </Tabs.ListContainer>
@@ -638,13 +647,13 @@ export default function Constructor({
             global route store — two PatchCanvas instances fight over it and leave the main
             scheme with broken paths after the modal closes.
           */}
-          {view === "canvas" && !insideContainerId && (
+          {view === 'canvas' && !insideContainerId && (
             <PatchCanvas
               nodes={initialNodes}
               edges={initialEdges}
               layoutSyncKey={layoutSyncKey}
-              onNodeClick={(id) => selectItem({ kind: "device", id })}
-              onEdgeClick={(id) => selectItem({ kind: "cable", id })}
+              onNodeClick={(id) => selectItem({ kind: 'device', id })}
+              onEdgeClick={(id) => selectItem({ kind: 'cable', id })}
               onPaneClick={() => setSelection(null)}
               onConnect={() => {}}
               onNodeMoved={(id, position) => {
@@ -660,7 +669,7 @@ export default function Constructor({
               }}
             />
           )}
-          {view === "canvas" && !insideContainerId && (
+          {view === 'canvas' && !insideContainerId && (
             <>
               <div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[calc(100%-8.5rem)]">
                 <CableCanvasFilters
@@ -687,7 +696,7 @@ export default function Constructor({
                     })
                   }
                   onReset={() => {
-                    setCableCategory("all");
+                    setCableCategory('all');
                     setHiddenConnectors(new Set());
                     setHiddenCableZones(new Set());
                   }}
@@ -705,14 +714,26 @@ export default function Constructor({
               </Button>
             </>
           )}
-          {view === "input-list" && (
-            <InputListTable setupId={setupId} devices={activeGraph.devices} hasKeys={setupMode === "with-keys"} />
+          {view === 'input-list' && (
+            <InputListTable
+              setupId={setupId}
+              devices={activeGraph.devices}
+              hasKeys={setupMode === 'with-keys'}
+            />
           )}
-          {view === "rider" && (
-            <RiderTable setupId={setupId} devices={activeGraph.devices} hasKeys={setupMode === "with-keys"} />
+          {view === 'rider' && (
+            <RiderTable
+              setupId={setupId}
+              devices={activeGraph.devices}
+              hasKeys={setupMode === 'with-keys'}
+            />
           )}
-          {view === "checklist" && (
-            <StaffChecklist devices={activeGraph.devices} cables={activeGraph.cables} setupId={setupId} />
+          {view === 'checklist' && (
+            <StaffChecklist
+              devices={activeGraph.devices}
+              cables={activeGraph.cables}
+              setupId={setupId}
+            />
           )}
         </div>
 
@@ -720,7 +741,7 @@ export default function Constructor({
           type="button"
           onClick={() => setInspectorOpen((v) => !v)}
           title={inspectorOpen ? t('constructor.hideInspector') : t('constructor.showInspector')}
-          className="flex w-5 flex-none items-center justify-center border-l border-default-200 bg-surface text-default-500 hover:bg-surface-secondary hover:text-foreground"
+          className="border-default-200 bg-surface text-default-500 hover:bg-surface-secondary hover:text-foreground flex w-5 flex-none items-center justify-center border-l"
         >
           {inspectorOpen ? (
             <ChevronRight className="h-3.5 w-3.5" />
@@ -737,28 +758,26 @@ export default function Constructor({
         <div
           className={`min-h-0 flex-none overflow-hidden transition-[width] duration-150 ${
             inspectorOpen
-              ? "absolute inset-y-0 right-0 z-30 w-[85vw] max-w-[320px] shadow-2xl sm:static sm:z-auto sm:w-[320px] sm:max-w-none sm:shadow-none"
-              : "w-0"
+              ? 'absolute inset-y-0 right-0 z-30 w-[85vw] max-w-[320px] shadow-2xl sm:static sm:z-auto sm:w-[320px] sm:max-w-none sm:shadow-none'
+              : 'w-0'
           }`}
         >
           <Inspector
             graph={graph}
             selection={selection}
             setupId={setupId}
-            onSelectDevice={(id) => selectItem({ kind: "device", id })}
+            onSelectDevice={(id) => selectItem({ kind: 'device', id })}
           />
         </div>
       </div>
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {insideContainerId && graph && (
         <ContainerInsideModal
-          containerDevice={
-            graph.devices.find((d) => d.id === insideContainerId)!
-          }
+          containerDevice={graph.devices.find((d) => d.id === insideContainerId)!}
           allDevices={graph.devices}
           allCables={graph.cables}
           onClose={() => setInsideContainerId(null)}
-          onSelectChild={(id) => selectItem({ kind: "device", id })}
+          onSelectChild={(id) => selectItem({ kind: 'device', id })}
           onNodeMoved={(id, position) =>
             movePosition.mutate({ id, position, epoch: arrangeEpochRef.current })
           }
@@ -787,14 +806,14 @@ function DevicePhotoCell({
   const needle = (matchName ?? name).trim();
   const match = findDeviceByDisplayName(needle, devices, language);
   if (match?.imageUrl) {
-    const isStorage = !match.imageUrl.startsWith("data:") && !/^https?:\/\//i.test(match.imageUrl);
+    const isStorage = !match.imageUrl.startsWith('data:') && !/^https?:\/\//i.test(match.imageUrl);
     const src = isStorage ? `/img/${match.imageUrl}?w=128` : match.imageUrl;
     return (
       <div className="flex items-center gap-2">
         <img
           src={src}
           alt=""
-          className="h-8 w-8 shrink-0 rounded object-contain bg-black/20 p-0.5 border border-default-200"
+          className="border-default-200 h-8 w-8 shrink-0 rounded border bg-black/20 object-contain p-0.5"
         />
         <span className="font-medium">{name}</span>
       </div>
@@ -804,7 +823,12 @@ function DevicePhotoCell({
     return (
       <div className="flex items-center gap-2">
         <RiderIconBox>
-          {fallbackIcon ?? (match ? <DeviceTypeIcon type={match.type} className="h-4 w-4" /> : <Package className="h-4 w-4" />)}
+          {fallbackIcon ??
+            (match ? (
+              <DeviceTypeIcon type={match.type} className="h-4 w-4" />
+            ) : (
+              <Package className="h-4 w-4" />
+            ))}
         </RiderIconBox>
         <span className="font-medium">{name}</span>
       </div>
@@ -819,7 +843,7 @@ function RiderNameCell({
   displayName,
   devices,
 }: {
-  category: RiderRow["category"];
+  category: RiderRow['category'];
   /** API raw name (enum for furniture/cables, i18n blob for equipment). */
   rawName: string;
   displayName: string;
@@ -827,7 +851,7 @@ function RiderNameCell({
 }) {
   const { language } = useI18n();
 
-  if (category === "FURNITURE") {
+  if (category === 'FURNITURE') {
     return (
       <div className="flex items-center gap-2">
         <RiderIconBox>{furnitureIcon(rawName)}</RiderIconBox>
@@ -835,7 +859,7 @@ function RiderNameCell({
       </div>
     );
   }
-  if (category === "CABLE") {
+  if (category === 'CABLE') {
     return (
       <div className="flex items-center gap-2">
         <RiderIconBox>
@@ -845,7 +869,7 @@ function RiderNameCell({
       </div>
     );
   }
-  if (category === "POWER") {
+  if (category === 'POWER') {
     return (
       <div className="flex items-center gap-2">
         <RiderIconBox>
@@ -855,7 +879,7 @@ function RiderNameCell({
       </div>
     );
   }
-  if (category === "ADAPTER") {
+  if (category === 'ADAPTER') {
     return (
       <div className="flex items-center gap-2">
         <RiderIconBox>
@@ -873,26 +897,32 @@ function RiderNameCell({
   ) : (
     <Package className="h-4 w-4" strokeWidth={2} />
   );
-  return (
-    <DevicePhotoCell name={displayName} devices={devices} fallbackIcon={typeIcon} />
-  );
+  return <DevicePhotoCell name={displayName} devices={devices} fallbackIcon={typeIcon} />;
 }
 
-function InputListTable({ setupId, devices, hasKeys }: { setupId: string; devices?: GraphDevice[]; hasKeys: boolean }) {
+function InputListTable({
+  setupId,
+  devices,
+  hasKeys,
+}: {
+  setupId: string;
+  devices?: GraphDevice[];
+  hasKeys: boolean;
+}) {
   const { t, language } = useI18n();
   const query = useQuery({
-    queryKey: ["input-list", setupId, hasKeys],
+    queryKey: ['input-list', setupId, hasKeys],
     queryFn: () => api.getInputList(setupId, hasKeys),
   });
   if (query.isLoading)
     return (
-      <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
+      <div className="text-default-500 h-full min-h-0 overflow-auto p-4 text-sm">
         {t('constructor.loading')}
       </div>
     );
   if (query.isError || !query.data)
     return (
-      <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
+      <div className="text-default-500 h-full min-h-0 overflow-auto p-4 text-sm">
         {t('constructor.errorLoading')}
       </div>
     );
@@ -916,13 +946,20 @@ function InputListTable({ setupId, devices, hasKeys }: { setupId: string; device
                 const portName = formatI18nText(r.sourcePortName, language);
                 const sourceLabel = portName ? `${deviceName} — ${portName}` : deviceName;
                 const routing = r.adapterName
-                  ? t('constructor.routing.adapter').replace('{adapter}', formatI18nText(r.adapterName, language))
+                  ? t('constructor.routing.adapter').replace(
+                      '{adapter}',
+                      formatI18nText(r.adapterName, language),
+                    )
                   : t('constructor.routing.direct').replace('{source}', deviceName);
                 return (
                   <Table.Row key={r.channel}>
                     <Table.Cell>{r.channel}</Table.Cell>
                     <Table.Cell>
-                      <DevicePhotoCell name={sourceLabel} matchName={deviceName} devices={devices} />
+                      <DevicePhotoCell
+                        name={sourceLabel}
+                        matchName={deviceName}
+                        devices={devices}
+                      />
                     </Table.Cell>
                     <Table.Cell>{portTypeLabel(String(r.connector ?? ''), t)}</Table.Cell>
                     <Table.Cell>{routing}</Table.Cell>
@@ -951,21 +988,29 @@ function InputListTable({ setupId, devices, hasKeys }: { setupId: string; device
   );
 }
 
-function RiderTable({ setupId, devices, hasKeys }: { setupId: string; devices?: GraphDevice[]; hasKeys: boolean }) {
+function RiderTable({
+  setupId,
+  devices,
+  hasKeys,
+}: {
+  setupId: string;
+  devices?: GraphDevice[];
+  hasKeys: boolean;
+}) {
   const { t, language } = useI18n();
   const query = useQuery({
-    queryKey: ["rider", setupId, hasKeys],
+    queryKey: ['rider', setupId, hasKeys],
     queryFn: () => api.getRider(setupId, hasKeys),
   });
   if (query.isLoading)
     return (
-      <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
+      <div className="text-default-500 h-full min-h-0 overflow-auto p-4 text-sm">
         {t('constructor.loading')}
       </div>
     );
   if (query.isError || !query.data)
     return (
-      <div className="h-full min-h-0 overflow-auto p-4 text-sm text-default-500">
+      <div className="text-default-500 h-full min-h-0 overflow-auto p-4 text-sm">
         {t('constructor.errorLoading')}
       </div>
     );
@@ -999,7 +1044,7 @@ function RiderTable({ setupId, devices, hasKeys }: { setupId: string; devices?: 
                       />
                     </Table.Cell>
                     <Table.Cell>{r.quantity}</Table.Cell>
-                    <Table.Cell>{formatI18nText(r.note ?? "", language)}</Table.Cell>
+                    <Table.Cell>{formatI18nText(r.note ?? '', language)}</Table.Cell>
                   </Table.Row>
                 );
               })}

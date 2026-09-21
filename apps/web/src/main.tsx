@@ -2,8 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { addCollection } from '@iconify/react';
 import fontaudioIcons from '@iconify-json/fad/icons.json';
-import App from './App';
-import { ImgManifestProvider } from './lib/img';
+import App from './app';
+import { ImgManifestProvider } from './lib/images';
 import './styles.css';
 
 // Registered locally so device icons render without a call out to the Iconify API — this needs

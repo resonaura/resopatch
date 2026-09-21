@@ -63,3 +63,21 @@ body,
 .react-flow__handle {
   z-index: 6 !important;
 }
+@keyframes resopatch-route-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.resopatch-route-enter {
+  animation: resopatch-route-fade-in 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resopatch-route-enter {
+    animation: none;
+  }
+}

@@ -24,7 +24,15 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // Feature modules intentionally colocate small typed helpers with their component.
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+
+  {
+    files: ['**/*.mjs'],
+    languageOptions: {
+      globals: { console: 'readonly', process: 'readonly' },
     },
   },
 

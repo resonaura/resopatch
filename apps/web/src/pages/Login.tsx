@@ -34,9 +34,13 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
           <Card.Content className="flex flex-col gap-3">
             <TextField autoFocus isRequired>
               <Label>{t('login.password')}</Label>
-              <Input type="password" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} />
+              <Input
+                type="password"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+              />
             </TextField>
-            {error && <p className="text-sm text-danger">{error}</p>}
+            {error && <p className="text-danger text-sm">{error}</p>}
           </Card.Content>
           <Card.Footer>
             <Button type="submit" fullWidth isDisabled={busy || !passphrase} isPending={busy}>

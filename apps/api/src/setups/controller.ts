@@ -1,0 +1,70 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+  UsePipes,
+} from '@nestjs/common';
+import { autoLayoutSchema, createSetupSchema, updateSetupSchema } from '@resopatch/shared';
+import { AuthGuard } from '../auth/guard.js';
+import { ZodValidationPipe } from '../common/zod-validation.js';
+import { SetupsService } from './service.js';
+
+@UseGuards(AuthGuard)
+@Controller('setups')
+export class SetupsController {
+  constructor(private readonly setupsService: SetupsService) {}
+
+  @Get()
+  findAll() {
+    return this.setupsService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.setupsService.findOne(id);
+  }
+
+  @Get(':id/graph')
+  getGraph(@Param('id') id: string) {
+    return this.setupsService.getGraph(id);
+  }
+
+  @Get(':id/input-list')
+  getInputList(@Param('id') id: string, @Query('hasKeys') hasKeys?: string) {
+    return this.setupsService.getInputList(id, hasKeys !== 'false');
+  }
+
+  @Get(':id/rider')
+  getRider(@Param('id') id: string, @Query('hasKeys') hasKeys?: string) {
+    return this.setupsService.getRider(id, hasKeys !== 'false');
+  }
+
+  @Post(':id/auto-layout')
+  @UsePipes(new ZodValidationPipe(autoLayoutSchema))
+  autoLayout(@Param('id') id: string, @Body() body: ReturnType<typeof autoLayoutSchema.parse>) {
+    return this.setupsService.autoLayout(id, body);
+  }
+
+  @Post()
+  @UsePipes(new ZodValidationPipe(createSetupSchema))
+  create(@Body() body: ReturnType<typeof createSetupSchema.parse>) {
+    return this.setupsService.create(body);
+  }
+
+  @Patch(':id')
+  @UsePipes(new ZodValidationPipe(updateSetupSchema))
+  update(@Param('id') id: string, @Body() body: ReturnType<typeof updateSetupSchema.parse>) {
+    return this.setupsService.update(id, body);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.setupsService.remove(id);
+  }
+}

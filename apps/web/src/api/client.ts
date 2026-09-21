@@ -1,24 +1,24 @@
 import type {
-    AdapterDto,
-    CableDto,
-    ChangePasswordDto,
-    CreateAdapterDto,
-    CreateCableDto,
-    CreateDeviceDto,
-    CreateFurnitureDto,
-    CreatePortDto,
-    CreateSetupDto,
-    DeviceDto,
-    FurnitureDto,
-    InputListRow,
-    PortDto,
-    PowerBudgetResult,
-    RiderRow,
-    SetupDto,
-    UpdateCableDto,
-    UpdateDeviceDto,
-    UpdatePortDto,
-    UpdateSetupDto,
+  AdapterDto,
+  CableDto,
+  ChangePasswordDto,
+  CreateAdapterDto,
+  CreateCableDto,
+  CreateDeviceDto,
+  CreateFurnitureDto,
+  CreatePortDto,
+  CreateSetupDto,
+  DeviceDto,
+  FurnitureDto,
+  InputListRow,
+  PortDto,
+  PowerBudgetResult,
+  RiderRow,
+  SetupDto,
+  UpdateCableDto,
+  UpdateDeviceDto,
+  UpdatePortDto,
+  UpdateSetupDto,
 } from '@resopatch/shared';
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http://localhost:3001';
@@ -71,41 +71,59 @@ export interface GraphResponse {
 }
 
 export const api = {
-  login: (passphrase: string) => request<{ ok: true }>('/auth/login', { method: 'POST', body: JSON.stringify({ passphrase }) }),
+  login: (passphrase: string) =>
+    request<{ ok: true }>('/auth/login', { method: 'POST', body: JSON.stringify({ passphrase }) }),
   logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
-  changePassword: (dto: ChangePasswordDto) => request<{ ok: true }>('/auth/password', { method: 'PATCH', body: JSON.stringify(dto) }),
+  changePassword: (dto: ChangePasswordDto) =>
+    request<{ ok: true }>('/auth/password', { method: 'PATCH', body: JSON.stringify(dto) }),
 
   listSetups: () => request<SetupDto[]>('/setups'),
   getSetup: (setupId: string) => request<SetupDto>(`/setups/${setupId}`),
-  createSetup: (dto: CreateSetupDto) => request<SetupDto>('/setups', { method: 'POST', body: JSON.stringify(dto) }),
+  createSetup: (dto: CreateSetupDto) =>
+    request<SetupDto>('/setups', { method: 'POST', body: JSON.stringify(dto) }),
   updateSetup: (setupId: string, dto: UpdateSetupDto) =>
     request<SetupDto>(`/setups/${setupId}`, { method: 'PATCH', body: JSON.stringify(dto) }),
   getGraph: (setupId: string) => request<GraphResponse>(`/setups/${setupId}/graph`),
   getInputList: (setupId: string, hasKeys = true) =>
     request<InputListRow[]>(`/setups/${setupId}/input-list?hasKeys=${hasKeys}`),
-  getRider: (setupId: string, hasKeys = true) => request<RiderRow[]>(`/setups/${setupId}/rider?hasKeys=${hasKeys}`),
+  getRider: (setupId: string, hasKeys = true) =>
+    request<RiderRow[]>(`/setups/${setupId}/rider?hasKeys=${hasKeys}`),
   autoLayout: (setupId: string, positions: Record<string, { x: number; y: number }>) =>
-    request<{ updated: number }>(`/setups/${setupId}/auto-layout`, { method: 'POST', body: JSON.stringify({ positions }) }),
+    request<{ updated: number }>(`/setups/${setupId}/auto-layout`, {
+      method: 'POST',
+      body: JSON.stringify({ positions }),
+    }),
 
-  createDevice: (dto: CreateDeviceDto) => request<DeviceDto>('/devices', { method: 'POST', body: JSON.stringify(dto) }),
-  updateDevice: (id: string, dto: UpdateDeviceDto) => request<DeviceDto>(`/devices/${id}`, { method: 'PATCH', body: JSON.stringify(dto) }),
+  createDevice: (dto: CreateDeviceDto) =>
+    request<DeviceDto>('/devices', { method: 'POST', body: JSON.stringify(dto) }),
+  updateDevice: (id: string, dto: UpdateDeviceDto) =>
+    request<DeviceDto>(`/devices/${id}`, { method: 'PATCH', body: JSON.stringify(dto) }),
   deleteDevice: (id: string) => request<void>(`/devices/${id}`, { method: 'DELETE' }),
   getPowerBudget: (id: string) => request<PowerBudgetResult>(`/devices/${id}/power-budget`),
 
-  createPort: (dto: CreatePortDto) => request<PortDto>('/ports', { method: 'POST', body: JSON.stringify(dto) }),
-  updatePort: (id: string, dto: UpdatePortDto) => request<PortDto>(`/ports/${id}`, { method: 'PATCH', body: JSON.stringify(dto) }),
+  createPort: (dto: CreatePortDto) =>
+    request<PortDto>('/ports', { method: 'POST', body: JSON.stringify(dto) }),
+  updatePort: (id: string, dto: UpdatePortDto) =>
+    request<PortDto>(`/ports/${id}`, { method: 'PATCH', body: JSON.stringify(dto) }),
   deletePort: (id: string) => request<void>(`/ports/${id}`, { method: 'DELETE' }),
 
   listAdapters: () => request<AdapterDto[]>('/adapters'),
-  createAdapter: (dto: CreateAdapterDto) => request<AdapterDto>('/adapters', { method: 'POST', body: JSON.stringify(dto) }),
+  createAdapter: (dto: CreateAdapterDto) =>
+    request<AdapterDto>('/adapters', { method: 'POST', body: JSON.stringify(dto) }),
 
-  createCable: (dto: CreateCableDto) => request<CableDto>('/cables', { method: 'POST', body: JSON.stringify(dto) }),
-  updateCable: (id: string, dto: UpdateCableDto) => request<CableDto>(`/cables/${id}`, { method: 'PATCH', body: JSON.stringify(dto) }),
+  createCable: (dto: CreateCableDto) =>
+    request<CableDto>('/cables', { method: 'POST', body: JSON.stringify(dto) }),
+  updateCable: (id: string, dto: UpdateCableDto) =>
+    request<CableDto>(`/cables/${id}`, { method: 'PATCH', body: JSON.stringify(dto) }),
   deleteCable: (id: string) => request<void>(`/cables/${id}`, { method: 'DELETE' }),
 
-  createFurniture: (dto: CreateFurnitureDto) => request<FurnitureDto>('/furniture', { method: 'POST', body: JSON.stringify(dto) }),
+  createFurniture: (dto: CreateFurnitureDto) =>
+    request<FurnitureDto>('/furniture', { method: 'POST', body: JSON.stringify(dto) }),
   deleteFurniture: (id: string) => request<void>(`/furniture/${id}`, { method: 'DELETE' }),
 
   uploadImage: (dataUrl: string, fileName?: string) =>
-    request<{ url: string }>('/img/upload', { method: 'POST', body: JSON.stringify({ dataUrl, fileName }) }),
+    request<{ url: string }>('/img/upload', {
+      method: 'POST',
+      body: JSON.stringify({ dataUrl, fileName }),
+    }),
 };

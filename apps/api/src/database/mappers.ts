@@ -17,15 +17,20 @@ import {
   UpdateFurnitureDto,
   UpdatePortDto,
 } from '@resopatch/shared';
-import { Setup } from './entities/setup.entity.js';
-import { Device } from './entities/device.entity.js';
-import { Port } from './entities/port.entity.js';
-import { Adapter } from './entities/adapter.entity.js';
-import { Cable } from './entities/cable.entity.js';
-import { Furniture } from './entities/furniture.entity.js';
+import { Setup } from './entities/setup.js';
+import { Device } from './entities/device.js';
+import { Port } from './entities/port.js';
+import { Adapter } from './entities/adapter.js';
+import { Cable } from './entities/cable.js';
+import { Furniture } from './entities/furniture.js';
 
 export function toSetupDto(s: Setup): SetupDto {
-  return { id: s.id, name: s.name, description: s.description, checklistState: s.checklistState ?? null };
+  return {
+    id: s.id,
+    name: s.name,
+    description: s.description,
+    checklistState: s.checklistState ?? null,
+  };
 }
 
 export function toDeviceDto(d: Device): DeviceDto {
@@ -69,7 +74,10 @@ export function toDeviceDto(d: Device): DeviceDto {
 
 /** Mutates `entity` in place from a create/update DTO. Every field is applied only if present,
  *  so a partial UpdateDeviceDto never clobbers columns the caller didn't send. */
-export function applyDeviceDto(entity: Device, dto: Partial<CreateDeviceDto> & Partial<UpdateDeviceDto>): Device {
+export function applyDeviceDto(
+  entity: Device,
+  dto: Partial<CreateDeviceDto> & Partial<UpdateDeviceDto>,
+): Device {
   if (dto.setupId !== undefined) entity.setupId = dto.setupId;
   if (dto.name !== undefined) entity.name = dto.name;
   if (dto.type !== undefined) entity.type = dto.type;
@@ -125,7 +133,10 @@ export function toPortDto(p: Port): PortDto {
   };
 }
 
-export function applyPortDto(entity: Port, dto: Partial<CreatePortDto> & Partial<UpdatePortDto>): Port {
+export function applyPortDto(
+  entity: Port,
+  dto: Partial<CreatePortDto> & Partial<UpdatePortDto>,
+): Port {
   if (dto.deviceId !== undefined) entity.deviceId = dto.deviceId;
   if (dto.name !== undefined) entity.name = dto.name;
   if (dto.portType !== undefined) entity.portType = dto.portType;
@@ -153,7 +164,10 @@ export function toAdapterDto(a: Adapter): AdapterDto {
   };
 }
 
-export function applyAdapterDto(entity: Adapter, dto: Partial<CreateAdapterDto> & Partial<UpdateAdapterDto>): Adapter {
+export function applyAdapterDto(
+  entity: Adapter,
+  dto: Partial<CreateAdapterDto> & Partial<UpdateAdapterDto>,
+): Adapter {
   if (dto.name !== undefined) entity.name = dto.name;
   if (dto.inputType !== undefined) entity.inputType = dto.inputType;
   if (dto.outputType !== undefined) entity.outputType = dto.outputType;
@@ -181,7 +195,10 @@ export function toCableDto(c: Cable): CableDto {
   };
 }
 
-export function applyCableDto(entity: Cable, dto: Partial<CreateCableDto> & Partial<UpdateCableDto>): Cable {
+export function applyCableDto(
+  entity: Cable,
+  dto: Partial<CreateCableDto> & Partial<UpdateCableDto>,
+): Cable {
   if (dto.sourcePortId !== undefined) entity.sourcePortId = dto.sourcePortId;
   if (dto.targetPortId !== undefined) entity.targetPortId = dto.targetPortId;
   if (dto.cableType !== undefined) entity.cableType = dto.cableType;
@@ -202,7 +219,10 @@ export function toFurnitureDto(f: Furniture): FurnitureDto {
   return { id: f.id, deviceId: f.deviceId, kind: f.kind, isVenueProvided: f.isVenueProvided };
 }
 
-export function applyFurnitureDto(entity: Furniture, dto: Partial<CreateFurnitureDto> & Partial<UpdateFurnitureDto>): Furniture {
+export function applyFurnitureDto(
+  entity: Furniture,
+  dto: Partial<CreateFurnitureDto> & Partial<UpdateFurnitureDto>,
+): Furniture {
   if (dto.deviceId !== undefined) entity.deviceId = dto.deviceId;
   if (dto.kind !== undefined) entity.kind = dto.kind;
   if (dto.isVenueProvided !== undefined) entity.isVenueProvided = dto.isVenueProvided;

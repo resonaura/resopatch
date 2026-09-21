@@ -1,6 +1,7 @@
 {
   "name": "resopatch",
   "private": true,
+  "type": "module",
   "version": "0.1.0",
   "scripts": {
     "build": "pnpm -r --filter=./packages/* --filter=./apps/* run build",
@@ -27,16 +28,8 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
     "prettier": "^3.9.6",
+    "prettier-plugin-tailwindcss": "^0.8.1",
     "puppeteer": "^25.3.0",
     "typescript-eslint": "^8.65.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "sharp"
-    ],
-    "patchedDependencies": {
-      "obstacle-router@0.1.2": "patches/obstacle-router@0.1.2.patch"
-    }
   }
 }

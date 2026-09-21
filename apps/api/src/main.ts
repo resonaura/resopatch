@@ -4,7 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import fastifyCookie from '@fastify/cookie';
-import { AppModule } from './app.module.js';
+import { AppModule } from './app/module.js';
 
 import { seedDatabase } from './database/seed.js';
 
@@ -17,7 +17,7 @@ async function bootstrap() {
   }
 
   const adapter = new FastifyAdapter({
-    // Device photos are client-compressed before upload (see apps/web/src/lib/imageUpload.ts),
+    // Device photos are client-compressed before upload (see apps/web/src/lib/images/upload.ts),
     // but this raises the ceiling generously rather than relying on that alone.
     bodyLimit: 10 * 1024 * 1024,
   });
