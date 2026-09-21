@@ -14,8 +14,6 @@ Interactive stage routing graph, audio patchbay coordinator, and automated techn
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor%20on%20GitHub-EA4AAA?logo=github-sponsors&logoColor=white)](https://github.com/sponsors/resonaura)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/resonaura)
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/resonaura)
-
 <p align="center">
   <img src="https://raw.githubusercontent.com/resonaura/resopatch/main/media/resopatch.png" width="800" alt="ResoPatch Stage Routing Canvas" />
 </p>
